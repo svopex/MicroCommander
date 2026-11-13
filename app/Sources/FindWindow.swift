@@ -332,6 +332,16 @@ final class FlippedView: NSView {
         addSubview(line)
     }
 
+    /// Vodorovná čára přes šířku dialogu (oddělovač oddílů).
+    /// - Parameter y: svislá poloha oddílu, který čára uzavírá
+    /// - Returns: svislá poloha pro další obsah pod čarou
+    func addSeparator(y: CGFloat) -> CGFloat {
+        let line = NSBox(frame: NSRect(x: 12, y: y + 4, width: bounds.width - 24, height: 1))
+        line.boxType = .separator
+        addSubview(line)
+        return y + 18
+    }
+
     /// Přidá prvek s danou polohou.
     func place(_ view: NSView, _ frame: NSRect) {
         view.frame = frame
@@ -1430,7 +1440,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         let selected = selectedRows
         guard let window, !selected.isEmpty, runningState == nil, vfs.writable else { return }
         let what = selected.count == 1
-            ? "\(selected[0].item.isDir ? "adresář" : "soubor") „\(selected[0].item.name)“"
+            ? "\(selected[0].item.kindNoun) „\(selected[0].item.name)“"
             : "\(selected.count) označených položek"
         let alert = NSAlert()
         alert.messageText = "Odstranit"

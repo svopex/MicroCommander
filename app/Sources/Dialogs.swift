@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // Dialogy: průběh operace se zrušením, správa a připojení FTP/SFTP serverů,
-// interní prohlížeč (F3), volby šifrování při balení do ZIP a nabídka disků.
+// interní prohlížeč (F3), volby šifrování při balení do ZIP, nabídka disků
+// a dialog operací (cíl kopírování/přesunu, potvrzení mazání).
 
 import AppKit
 
@@ -1217,4 +1218,150 @@ final class DriveTableView: NSTableView {
 /// Okno bez rámečku, které umí být key (kvůli klávesnici).
 private final class DriveChooserPanel: NSPanel {
     override var canBecomeKey: Bool { true }
+}
+
+/// Dialog operace ve stylu Salamandera (stejný vzhled jako Informace
+/// o jednotce): text dotazu, volitelně ikona a vstupní pole, dole řada
+/// tlačítek. Zobrazuje se jako sheet nad oknem a běží modálně, takže volající
+/// dostane odpověď synchronně. Slouží kopírování, přesunu, mazání a dalším
+/// dotazům hlavního okna.
+final class PromptDialog: NSWindowController {
+    private static let width: CGFloat = 520
+
+    /// Vstupní pole (nil u čistě potvrzovacího dialogu).
+    private var input: NSTextField?
+    /// Označit po otevření jen jméno bez přípony (jinak celý text).
+    private let selectsBaseName: Bool
+    /// Index stisknutého tlačítka; nil = zrušeno.
+    private var result: Int?
+
+    /// Text vstupního pole (prázdný, když dialog pole nemá).
+    var text: String { input?.stringValue ?? "" }
+
+    /// - Parameters:
+    ///   - title: titulek okna
+    ///   - message: text dotazu (zalamuje se, může mít víc řádků)
+    ///   - icon: ikona vlevo od textu (nil = bez ikony)
+    ///   - value: výchozí text vstupního pole; nil = dialog bez pole
+    ///   - selectsBaseName: po otevření označit jen jméno bez přípony
+    ///   - buttons: titulky tlačítek zleva; první je výchozí (Enter),
+    ///     tlačítko Zrušit (Escape) se přidá samo
+    init(title: String, message: String, icon: NSImage? = nil, value: String? = nil,
+         selectsBaseName: Bool = false, buttons: [String]) {
+        self.selectsBaseName = selectsBaseName
+        // Výška je jen výchozí – buildContent ji dopočítá podle obsahu.
+        let window = DialogWindow(contentRect: NSRect(x: 0, y: 0, width: PromptDialog.width, height: 0),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = title
+        super.init(window: window)
+        window.onCancel = { [weak self] in self?.finish(nil) }
+        buildContent(message: message, icon: icon, value: value, buttons: buttons)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Není podporováno")
+    }
+
+    /// Rozvržení: ikona a text dotazu, pod ním vstupní pole, čára a tlačítka
+    /// uprostřed. Výška dialogu se dopočítá podle textu dotazu.
+    private func buildContent(message: String, icon: NSImage?, value: String?, buttons: [String]) {
+        let width = PromptDialog.width
+        let margin: CGFloat = 16
+        let content = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 0))
+        var y: CGFloat = margin
+
+        // S ikonou se text i vstupní pole odsadí doprava (jako u Informací o jednotce).
+        var textX = margin
+        if let icon {
+            content.place(NSImageView(image: icon), NSRect(x: 18, y: y, width: 36, height: 36))
+            textX = 70
+        }
+        let textWidth = width - textX - margin
+
+        // Text dotazu: zalomený, výška podle obsahu.
+        let label = NSTextField(wrappingLabelWithString: message)
+        label.isSelectable = true
+        let labelHeight = ceil(label.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth, height: 10000)).height ?? 17)
+        content.place(label, NSRect(x: textX, y: y, width: textWidth, height: labelHeight))
+        y += labelHeight + 8
+
+        if let value {
+            // Jednořádkové pole: dlouhá cesta se posouvá, nezalamuje se (jinak by se
+            // druhý řádek useknul).
+            let field = NSTextField(string: value)
+            field.usesSingleLineMode = true
+            field.cell?.wraps = false
+            field.cell?.isScrollable = true
+            field.lineBreakMode = .byClipping
+            content.place(field, NSRect(x: textX, y: y, width: textWidth, height: 24))
+            input = field
+            y += 24 + 8
+        }
+        // Bez pole musí text pokrýt aspoň výšku ikony.
+        if icon != nil { y = max(y, margin + 36 + 8) }
+
+        y = content.addSeparator(y: y)
+
+        // Tlačítka: akční zleva (tag = index), nakonec Zrušit; řada je uprostřed.
+        var views: [NSButton] = []
+        for (index, title) in buttons.enumerated() {
+            let button = NSButton(title: title, target: self, action: #selector(buttonClicked(_:)))
+            button.tag = index
+            if index == 0 { button.keyEquivalent = "\r" }
+            views.append(button)
+        }
+        // Escape (i ⌘.) obsluhuje okno (DialogWindow.onCancel), tlačítko zkratku nepotřebuje.
+        views.append(NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:))))
+        // Šířka podle titulku, nejméně 110 (jako tlačítko Zavřít u Informací o jednotce).
+        let gap: CGFloat = 10
+        let widths = views.map { max(110, ceil($0.fittingSize.width) + 12) }
+        var x = (width - widths.reduce(0, +) - gap * CGFloat(views.count - 1)) / 2
+        for (button, buttonWidth) in zip(views, widths) {
+            content.place(button, NSRect(x: x, y: y, width: buttonWidth, height: 28))
+            x += buttonWidth + gap
+        }
+        y += 28 + margin
+
+        content.setFrameSize(NSSize(width: width, height: y))
+        window?.setContentSize(NSSize(width: width, height: y))
+        window?.contentView = content
+        // Fokus do pole; bez pole na výchozí tlačítko.
+        window?.initialFirstResponder = input ?? views.first
+    }
+
+    /// Zobrazí dialog jako sheet nad oknem a čeká na odpověď.
+    /// - Parameter parent: okno, nad kterým se sheet zobrazí (nil = samostatné modální okno)
+    /// - Returns: index stisknutého tlačítka, nil při zrušení
+    func run(over parent: NSWindow?) -> Int? {
+        guard let window else { return nil }
+        parent?.beginSheet(window)
+        // Výběr textu až po zobrazení (field editor vzniká při aktivaci pole).
+        if let input {
+            let wholeName = !selectsBaseName
+            DispatchQueue.main.async {
+                guard let editor = input.currentEditor() else { return }
+                selectBaseName(of: input.stringValue, in: editor, wholeName: wholeName)
+            }
+        }
+        NSApp.runModal(for: window)
+        // Sheet je nutné ukončit přes endSheet na rodiči, jinak rodičovské okno
+        // zůstane v modálním stavu; orderOut ho schová hned (bez čekání na animaci).
+        parent?.endSheet(window)
+        window.orderOut(nil)
+        return result
+    }
+
+    /// Uloží odpověď a ukončí modální smyčku.
+    private func finish(_ index: Int?) {
+        result = index
+        NSApp.stopModal()
+    }
+
+    @objc private func buttonClicked(_ sender: NSButton) {
+        finish(sender.tag)
+    }
+
+    @objc private func cancelClicked(_ sender: Any?) {
+        finish(nil)
+    }
 }

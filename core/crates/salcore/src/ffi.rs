@@ -374,7 +374,8 @@ pub unsafe extern "C" fn sal_vfs_list(
     }
     let path_str = CStr::from_ptr(path).to_string_lossy().into_owned();
     let handle = &*(vfs as *const VfsHandle);
-    let result = catch(|| handle.vfs.list(&path_str));
+    // Výpis pro panel: u odkazů včetně informace, zda míří na adresář.
+    let result = catch(|| handle.vfs.list_for_panel(&path_str));
     match result {
         Ok(items) => {
             let (ptr, count) = items_to_ffi(items);

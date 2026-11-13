@@ -304,6 +304,7 @@ fn stat_to_item(name: &str, stat: &FileStat) -> Option<VfsItem> {
         // Jen pro čtení = právo zápisu nemá vlastník, skupina ani ostatní.
         readonly: mode & 0o222 == 0,
         encrypted: false,
+        link_to_dir: false,
     })
 }
 

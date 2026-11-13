@@ -84,6 +84,7 @@ pub(crate) fn list_dir<T>(
                     hidden: dir_name.starts_with('.'),
                     readonly: true,
                     encrypted: false,
+                    link_to_dir: false,
                 });
             }
             None => {
@@ -146,6 +147,7 @@ mod tests {
             hidden: false,
             readonly: true,
             encrypted: false,
+            link_to_dir: false,
         };
         let root: Vec<(String, VfsItemKind)> =
             list_dir(&index, "/", to_item).into_iter().map(|item| (item.name, item.kind)).collect();

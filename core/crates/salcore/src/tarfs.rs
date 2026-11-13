@@ -672,6 +672,7 @@ impl Vfs for TarFs {
             hidden: name.starts_with('.'),
             readonly: true,
             encrypted: false,
+            link_to_dir: false,
         }))
     }
 

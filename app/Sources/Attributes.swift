@@ -230,7 +230,7 @@ final class AttributesDialog: NSWindowController {
         modifiedPicker.dateValue = values?.contentModificationDate ?? Date()
         createdPicker.dateValue = values?.creationDate ?? Date()
         accessedPicker.dateValue = values?.contentAccessDate ?? Date()
-        recursiveBox.isEnabled = items.contains(where: \.isDir)
+        recursiveBox.isEnabled = items.contains(where: \.isRealDir)
         updateDatePickers()
     }
 

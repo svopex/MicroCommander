@@ -51,6 +51,11 @@ struct Item {
 
     var isDir: Bool { flags & SAL_FLAG_DIR != 0 }
     var isLink: Bool { flags & SAL_FLAG_LINK != 0 }
+    /// Skutečný adresář (ne odkaz na adresář): jen ten má vlastní obsah,
+    /// který se prochází a počítá. `isDir` platí i pro odkaz na adresář.
+    var isRealDir: Bool { isDir && !isLink }
+    /// Slovní druh položky pro dotazy („smazat soubor …“).
+    var kindNoun: String { isLink ? "odkaz" : isDir ? "adresář" : "soubor" }
     var isHidden: Bool { flags & SAL_FLAG_HIDDEN != 0 }
     var isReadonly: Bool { flags & SAL_FLAG_READONLY != 0 }
     var isEncrypted: Bool { flags & SAL_FLAG_ENCRYPTED != 0 }

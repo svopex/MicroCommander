@@ -359,6 +359,7 @@ fn list_item(name: &str, kind: VfsItemKind, size: u64, mtime: i64) -> Option<Vfs
         hidden: name.starts_with('.'),
         readonly: false,
         encrypted: false,
+        link_to_dir: false,
     })
 }
 

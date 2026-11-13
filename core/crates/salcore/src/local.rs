@@ -111,6 +111,7 @@ fn metadata_to_item(name: &str, metadata: &Metadata) -> VfsItem {
         hidden,
         readonly: metadata.permissions().readonly(),
         encrypted: false,
+        link_to_dir: false,
     }
 }
 
@@ -187,6 +188,18 @@ impl Vfs for LocalFs {
                 Ok(metadata) => items.push(metadata_to_item(&file_name, &metadata)),
                 Err(_) => continue,
             }
+        }
+        Ok(items)
+    }
+
+    fn list_for_panel(&self, path: &str) -> SalResult<Vec<VfsItem>> {
+        let disk_path = self.disk_path(path);
+        let mut items = self.list(path)?;
+        // U odkazů zjistíme i typ cíle (is_dir odkaz sleduje): odkaz na adresář
+        // se v panelu chová jako adresář. Odkaz vedoucí nikam nebo na soubor
+        // zůstává obyčejným odkazem.
+        for item in items.iter_mut().filter(|item| item.kind == VfsItemKind::Link) {
+            item.link_to_dir = disk_path.join(&item.name).is_dir();
         }
         Ok(items)
     }
@@ -327,6 +340,35 @@ mod tests {
         assert_eq!(sub.kind, VfsItemKind::Dir);
         let file = items.iter().find(|item| item.name == "a.txt").unwrap();
         assert_eq!(file.size, 7);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn test_list_marks_link_to_dir() {
+        use crate::vfs::{ITEM_FLAG_DIR, ITEM_FLAG_LINK};
+        let dir = prepare_test_dir("linkdir");
+        // Odkaz na adresář, na soubor a odkaz vedoucí nikam.
+        std::os::unix::fs::symlink(dir.join("sub"), dir.join("odkaz-dir")).unwrap();
+        std::os::unix::fs::symlink(dir.join("a.txt"), dir.join("odkaz-soubor")).unwrap();
+        std::os::unix::fs::symlink(dir.join("neexistuje"), dir.join("odkaz-nikam")).unwrap();
+        let fs_impl = LocalFs::new(dir.to_str()).unwrap();
+        // Rekurzivní průchody (list) cíl odkazu nezjišťují, výpis panelu ano.
+        assert!(fs_impl.list("/").unwrap().iter().all(|item| !item.link_to_dir));
+        let items = fs_impl.list_for_panel("/").unwrap();
+        let find = |name: &str| items.iter().find(|item| item.name == name).unwrap();
+        // Odkaz na adresář zůstává druhem Link (operace pracují s odkazem),
+        // ale nese příznaky DIR i LINK; ostatní odkazy příznak DIR nemají.
+        let dir_link = find("odkaz-dir");
+        assert_eq!(dir_link.kind, VfsItemKind::Link);
+        assert_eq!(dir_link.flags() & (ITEM_FLAG_DIR | ITEM_FLAG_LINK), ITEM_FLAG_DIR | ITEM_FLAG_LINK);
+        for name in ["odkaz-soubor", "odkaz-nikam"] {
+            let link = find(name);
+            assert_eq!(link.kind, VfsItemKind::Link);
+            assert_eq!(link.flags() & (ITEM_FLAG_DIR | ITEM_FLAG_LINK), ITEM_FLAG_LINK);
+        }
+        // Smazání odkazu na adresář nesmí sáhnout na jeho cíl.
+        fs_impl.delete("/odkaz-dir", true).unwrap();
+        assert!(dir.join("sub").is_dir());
         fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -233,6 +233,7 @@ impl Vfs for ZipFs {
             hidden: name.starts_with('.'),
             readonly: true,
             encrypted: entry.encrypted,
+            link_to_dir: false,
         }))
     }
 

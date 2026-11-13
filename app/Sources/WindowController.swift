@@ -419,9 +419,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         let marked = panel.markedItems
         if !marked.isEmpty {
-            let dirs = marked.filter(\.isDir).count
+            // Odkaz na adresář se počítá jako soubor (vlastní velikost odkazu).
+            let dirs = marked.filter(\.isRealDir).count
             let files = marked.count - dirs
-            let size = marked.filter { !$0.isDir }.reduce(UInt64(0)) { $0 + $1.size }
+            let size = marked.filter { !$0.isRealDir }.reduce(UInt64(0)) { $0 + $1.size }
             return "Označeno: \(formatExactSize(size)) B v \(files) souborech a \(dirs) adresářích"
         }
         guard let row = panel.currentRow else {
@@ -1210,16 +1211,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     /// Dotaz na konflikt existujících cílů.
     private func askOverwrite() -> OverwriteMode? {
-        let alert = NSAlert()
-        alert.messageText = "Cíl už existuje"
-        alert.informativeText = "Některé položky v cíli už existují. Přepsat je, přeskočit, nebo operaci zrušit?"
-        alert.addButton(withTitle: "Přepsat vše")
-        alert.addButton(withTitle: "Přeskočit existující")
-        alert.addCancelButton()
-        alert.alertStyle = .warning
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .overwrite
-        case .alertSecondButtonReturn: return .skip
+        // Index tlačítka: 0 = přepsat, 1 = přeskočit, nil = zrušeno.
+        switch ask(title: "Cíl už existuje",
+                   text: "Některé položky v cíli už existují. Přepsat je, přeskočit, nebo operaci zrušit?",
+                   buttons: ["Přepsat vše", "Přeskočit existující"]) {
+        case 0: return .overwrite
+        case 1: return .skip
         default: return nil
         }
     }
@@ -1251,7 +1248,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             return
         }
         let what = items.count == 1
-            ? "\(items[0].isDir ? "adresář" : "soubor") „\(items[0].name)“"
+            ? "\(items[0].kindNoun) „\(items[0].name)“"
             : "\(items.count) označených položek"
         guard confirm(title: "Smazat", text: "Opravdu smazat \(what)?\nMazání je trvalé (bez koše).", okTitle: "Smazat") else { return }
 
@@ -1546,7 +1543,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let totals = SizeTotals()
         beginProgress(title: "Počítám velikost", unit: .items) { state in
             for item in items {
-                if item.isDir {
+                // Odkaz na adresář se neprochází – jeho cíl do velikosti nepatří.
+                if item.isRealDir {
                     totals.add(dirs: 1)
                     let collector = FindCollector()
                     try coreFind(vfs: vfs, root: joinPath(dir, item.name), mask: "*", includeDirs: true,
@@ -1862,46 +1860,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         focusActivePanel()
     }
 
-    /// Potvrzovací dotaz (Enter = potvrdit, Escape = zrušit).
-    private func confirm(title: String, text: String, okTitle: String) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = text
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: okTitle)
-        alert.addCancelButton()
-        let result = alert.runModal() == .alertFirstButtonReturn
+    /// Dotaz s výstražnou ikonou ve stylu Salamandera (Enter = první tlačítko,
+    /// Escape = zrušit).
+    /// - Returns: index stisknutého tlačítka, nil při zrušení
+    private func ask(title: String, text: String, buttons: [String]) -> Int? {
+        let dialog = PromptDialog(title: title, message: text, icon: NSImage(named: NSImage.cautionName),
+                                  buttons: buttons)
+        let response = dialog.run(over: window)
         focusActivePanel()
-        return result
+        return response
     }
 
-    /// Textový vstupní dialog; nil = zrušeno. selectBaseName označí jméno bez přípony.
+    /// Potvrzovací dotaz (Enter = potvrdit, Escape = zrušit).
+    private func confirm(title: String, text: String, okTitle: String) -> Bool {
+        ask(title: title, text: text, buttons: [okTitle]) == 0
+    }
+
+    /// Textový vstupní dialog ve stylu Salamandera; nil = zrušeno.
+    /// selectBaseName označí jméno bez přípony.
     func promptText(title: String, message: String, value: String, okTitle: String = "OK",
                     selectBaseName: Bool = false) -> String? {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 420, height: 24))
-        // Jednořádkové pole: dlouhá cesta se posouvá, nezalamuje se (jinak by se
-        // druhý řádek useknul).
-        input.usesSingleLineMode = true
-        input.cell?.wraps = false
-        input.cell?.isScrollable = true
-        input.lineBreakMode = .byClipping
-        input.stringValue = value
-        alert.accessoryView = input
-        alert.addButton(withTitle: okTitle)
-        alert.addCancelButton()
-        alert.window.initialFirstResponder = input
-        // Výběr textu až po zobrazení (field editor vzniká při aktivaci pole).
-        DispatchQueue.main.async {
-            guard let editor = input.currentEditor() else { return }
-            MicroCommander.selectBaseName(of: value, in: editor, wholeName: !selectBaseName)
-        }
-        let response = alert.runModal()
+        let dialog = PromptDialog(title: title, message: message, value: value,
+                                  selectsBaseName: selectBaseName, buttons: [okTitle])
+        let response = dialog.run(over: window)
         focusActivePanel()
-        guard response == .alertFirstButtonReturn else { return nil }
-        let result = input.stringValue.trimmingCharacters(in: .whitespaces)
+        guard response == 0 else { return nil }
+        let result = dialog.text.trimmingCharacters(in: .whitespaces)
         return result.isEmpty ? nil : result
     }
 }

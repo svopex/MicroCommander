@@ -52,6 +52,10 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   sama se odmítne, po chybě nebo zrušení nezůstane v cíli nedokončený soubor.
   Symbolické odkazy se přenášejí jako odkazy tam, kde to cíl umí (lokální
   disk, SFTP; i při rozbalení TAR), jinak se přenese to, na co ukazují.
+  Odkaz na adresář na lokálním disku se v panelu chová jako adresář (řadí se
+  mezi adresáře, má ikonu odkazu a Enter do něj vstoupí); kopie, přesun
+  a mazání dál pracují s odkazem samotným, ne s jeho cílem, a do Obsazeného
+  místa se cíl nepočítá.
   Hledání nad libovolným VFS s maskami ve stylu Salamandera (`*`, `?`, `#`,
   skupiny oddělené `;`, vyloučení za `|`; maska bez `*`, `?` a `.` hledá jména,
   která ji obsahují), volitelně bez podadresářů a s hledáním v obsahu souborů
@@ -117,7 +121,8 @@ app/                        # tenké UI pro macOS
                             #   příkazová řádka, lišta F-kláves
   Sources/WindowController.swift  # hlavní okno, příkazy, směrování kláves
   Sources/Dialogs.swift     # progress, správa FTP/SFTP serverů,
-                            #   interní prohlížeč, nabídka disků
+                            #   interní prohlížeč, nabídka disků, dialog
+                            #   operací (cíl kopie/přesunu, potvrzení mazání)
   Sources/Attributes.swift  # dialog Změnit atributy (⌘F2 / ⌃F2)
   Sources/DriveInfo.swift   # dialog Informace o jednotce (⌘F1 / ⌃F1)
   Sources/FindWindow.swift  # okno Vyhledat soubory a adresáře (⌃F/⌥F7)
@@ -225,7 +230,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **F-klávesy:** F1 nápověda, F2 přejmenovat (přímo v panelu bez dialogu:
   předvybrané jméno bez přípony, Enter potvrdí, Escape zruší, klik jinam
   potvrdí; jméno jiné existující položky se odmítne), F3 prohlížeč, F4 editor, F5
-  kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 smazat,
+  kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 smazat
+  (dotazy na cíl, potvrzení mazání i konflikt existujících cílů jsou dialogy
+  ve stylu Salamandera, stejné jako Informace o jednotce: text, vstupní pole,
+  dole tlačítka; Enter potvrdí, Escape zruší),
   F9 terminál v adresáři, F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
   zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌘F1 / ⌃F1 informace o
   jednotce; **⌘F2 / ⌃F2 změnit atributy**

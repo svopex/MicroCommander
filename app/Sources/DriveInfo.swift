@@ -145,7 +145,8 @@ private final class UsagePieView: NSView {
 }
 
 /// Okno dialogu: Escape (i ⌘.) dialog zavře, i když nemá tlačítko Zrušit.
-private final class DriveInfoWindow: NSWindow {
+/// Sdílí ho Informace o jednotce i dialogy operací (PromptDialog).
+final class DialogWindow: NSWindow {
     var onCancel: (() -> Void)?
 
     override func cancelOperation(_ sender: Any?) {
@@ -169,7 +170,7 @@ final class DriveInfoDialog: NSWindowController {
     /// - Parameter info: údaje o svazku
     init(info: VolumeInfo) {
         // Výška je jen výchozí – buildContent ji dopočítá podle obsahu.
-        let window = DriveInfoWindow(contentRect: NSRect(x: 0, y: 0, width: DriveInfoDialog.width, height: 0),
+        let window = DialogWindow(contentRect: NSRect(x: 0, y: 0, width: DriveInfoDialog.width, height: 0),
                                      styleMask: [.titled], backing: .buffered, defer: false)
         window.title = "Informace o jednotce"
         super.init(window: window)
@@ -216,10 +217,7 @@ final class DriveInfoDialog: NSWindowController {
 
         // Vodorovná čára mezi oddíly.
         func addSeparator() {
-            let line = NSBox(frame: NSRect(x: 12, y: y + 4, width: width - 24, height: 1))
-            line.boxType = .separator
-            content.addSubview(line)
-            y += 18
+            y = content.addSeparator(y: y)
         }
 
         // Svazek: ikona disku vlevo, vedle ní základní údaje.

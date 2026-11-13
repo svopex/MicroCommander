@@ -70,13 +70,20 @@ pub struct VfsItem {
     pub readonly: bool,
     /// Zašifrovaná položka archivu (čtení vyžaduje heslo).
     pub encrypted: bool,
+    /// Symbolický odkaz, jehož cílem je adresář (jen u `kind == Link`).
+    /// Druh zůstává Link, takže operace (kopie, přesun, mazání) dál pracují
+    /// s odkazem samotným; příznak slouží jen výpisu a navigaci v UI
+    /// a vyplňuje ho pouze `list_for_panel`.
+    pub link_to_dir: bool,
 }
 
 impl VfsItem {
     /// Příznaky položky jako bitová maska (pro FFI i pro řazení v UI).
     pub fn flags(&self) -> u32 {
         let mut flags = 0u32;
-        if self.kind == VfsItemKind::Dir {
+        // Odkaz na adresář nese oba příznaky (DIR i LINK): v panelu se řadí
+        // mezi adresáře a Enter do něj vstoupí.
+        if self.kind == VfsItemKind::Dir || self.link_to_dir {
             flags |= ITEM_FLAG_DIR;
         }
         if self.kind == VfsItemKind::Link {
@@ -123,6 +130,14 @@ pub trait Vfs: Send + Sync {
 
     /// Vrátí výpis adresáře (bez `.` a `..`), nesetříděný – řazení dělá UI.
     fn list(&self, path: &str) -> SalResult<Vec<VfsItem>>;
+
+    /// Výpis adresáře pro panel: jako `list`, navíc u odkazů doplní
+    /// `link_to_dir`, umí-li to VFS levně zjistit. Rekurzivní průchody
+    /// (hledání, kopírování, balení) volají `list`, aby cíle odkazů
+    /// zbytečně nezjišťovaly.
+    fn list_for_panel(&self, path: &str) -> SalResult<Vec<VfsItem>> {
+        self.list(path)
+    }
 
     /// Otevře soubor pro čtení (streamování).
     fn open_read(&self, path: &str) -> SalResult<Box<dyn VfsReadStream>>;
