@@ -13,6 +13,10 @@ Puvodni zdrojove kody pro windows jsou v adresari `samandarin`.
 
 > Adresář `samandarin/` (původní Windows zdrojáky Open Samandarin, ~138 MB) slouží
 > jen jako lokální reference a do repozitáře se necommituje (viz `.gitignore`).
+> Stáhne se skriptem `./fetch-samandarin.sh` (volitelně s názvem větve/tagu), který
+> naklonuje https://github.com/KRtkovo-eu-AI/salamander včetně všech
+> git submodulů (pluginy, 3rd-party), odstraní adresář `.git` a nahradí stávající
+> obsah `samandarin/`.
 
 ## Stav realizace (2026-11-12)
 
@@ -97,6 +101,7 @@ app/                        # tenké UI pro macOS
   Info.plist
 tests/main.swift            # end-to-end smoke test FFI (Swift CLI)
 Makefile                    # build celé aplikace jedním příkazem
+fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)
 samandarin/                 # původní Windows zdrojáky (reference, nemění se)
 ```
 

@@ -4,6 +4,7 @@
 
 # Původní Windows zdrojáky Open Samandarin – jen lokální reference (~138 MB)
 /samandarin/
+/.samandarin-tmp.*/
 
 # Pracovní a lokální soubory nástrojů
 /.zwork/
