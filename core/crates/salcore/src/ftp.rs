@@ -23,7 +23,10 @@ use suppaftp::FtpError;
 use suppaftp::FtpStream;
 
 use crate::error::{SalError, SalResult};
-use crate::vfs::{Vfs, VfsItem, VfsItemKind, VfsKind, VfsReadStream, VfsWriteStream};
+use crate::vfs::{
+    join_path, remote_path, split_path, system_time_to_unix, Vfs, VfsItem, VfsItemKind, VfsKind,
+    VfsReadStream, VfsWriteStream,
+};
 
 /// VFS nad jedním FTP spojením.
 pub struct FtpFs {
@@ -33,14 +36,15 @@ pub struct FtpFs {
     home: String,
     /// Popis pro titulek panelu.
     label: String,
+    /// Identita účtu na serveru (`ftp://uživatel@server:port`) – stejná pro
+    /// všechna připojení téhož účtu.
+    account: String,
 }
 
 /// Převede chybu suppaftp na SalError (text zprávy serveru zachová).
 fn ftp_error(error: FtpError) -> SalError {
     SalError::Io(error.to_string())
 }
-
-use crate::vfs::system_time_to_unix;
 
 /// Očistí jméno položky z LIST výpisu od symlinkového cíle („jméno -> cíl“).
 fn clean_list_name(name: &str) -> &str {
@@ -80,11 +84,12 @@ impl FtpFs {
         }
         let mut stream = stream.ok_or(last_error)?;
 
+        // Nejdřív přihlášení: před ním servery jiné příkazy odmítají (530).
+        stream.login(username, password).map_err(ftp_error)?;
         // Binární přenos je pro soubory povinnost (ASCII by rozbil binární data).
         stream
             .transfer_type(FileType::Image)
             .map_err(ftp_error)?;
-        stream.login(username, password).map_err(ftp_error)?;
 
         // Domovský adresář = kořen našeho VFS.
         let home = stream.pwd().map_err(ftp_error)?;
@@ -94,15 +99,16 @@ impl FtpFs {
             stream: Arc::new(Mutex::new(stream)),
             home,
             label: format!("FTP: {}:{}", host, port),
+            account: format!("ftp://{}@{}:{}", username, host, port),
         })
     }
 
     /// Převede cestu VFS na absolutní cestu na serveru.
     fn server_path(&self, vfs_path: &str) -> String {
-        crate::vfs::remote_path(&self.home, vfs_path)
+        remote_path(&self.home, vfs_path)
     }
 
-    /// Uzamkne spojení (helper proti opakování lock bohemi v kódu).
+    /// Uzamkne spojení (společné místo pro chybu otráveného zámku).
     fn lock(&self) -> SalResult<std::sync::MutexGuard<'_, FtpStream>> {
         self.stream.lock().map_err(|_| {
             SalError::Io("FTP spojení je nedostupné (uzamčené).".to_string())
@@ -110,12 +116,6 @@ impl FtpFs {
     }
 }
 
-/// Čtecí stream z FTP (RETR).
-///
-/// Drží datový stream a sdílené příkazové spojení. Po přečtení celého
-/// souboru (EOF) nebo při dropu dojde k finalizaci – přečte se závěrečná
-/// odpověď serveru; při přerušení se pošle ABOR, aby spojení zůstalo
-/// použitelné.
 /// Čtecí stream z FTP (RETR).
 ///
 /// Drží datový stream a sdílené příkazové spojení. Po přečtení celého
@@ -178,8 +178,9 @@ impl<T: Read + Write> ReadWrite for T {}
 
 /// Zapisovací stream na FTP (STOR).
 ///
-/// Data se posílají do datového spojení; při dokončení (drop po flush)
-/// se finalizuje odpověď serveru, při chybě abort.
+/// Data se posílají do datového spojení. `finish` spojení uzavře a vrátí
+/// závěrečnou odpověď serveru (teprve ta potvrzuje uložení souboru);
+/// stream zahozený bez `finish` se uzavře také, po chybě zápisu přes ABOR.
 pub struct FtpWriteStream {
     data: Option<Box<dyn ReadWrite + Send>>,
     cmd: Arc<Mutex<FtpStream>>,
@@ -219,26 +220,38 @@ impl Write for FtpWriteStream {
 }
 
 impl FtpWriteStream {
-    /// Finalizace uploadu: uzavře datový stream a přečte odpověď serveru.
-    fn finalize(&mut self) {
-        if let Some(data) = self.data.take() {
-            if let Ok(mut guard) = self.cmd.lock() {
-                if self.failed {
-                    let _ = guard.abort(data);
-                } else {
-                    let _ = guard.finalize_put_stream(data);
-                }
-            }
-        }
+    /// Finalizace uploadu: uzavře datový stream a přečte odpověď serveru
+    /// (po chybě zápisu přenos přeruší). Opakované volání už nic nedělá.
+    fn finalize(&mut self) -> io::Result<()> {
+        let Some(data) = self.data.take() else {
+            return Ok(());
+        };
+        let mut guard = self
+            .cmd
+            .lock()
+            .map_err(|_| io::Error::other("FTP spojení je nedostupné (uzamčené)."))?;
+        let result = if self.failed {
+            guard.abort(data)
+        } else {
+            guard.finalize_put_stream(data)
+        };
+        result.map_err(|err| io::Error::other(err.to_string()))
     }
 }
 
 impl Drop for FtpWriteStream {
     fn drop(&mut self) {
-        self.finalize();
+        // Bez `finish` (chyba, zrušení) už výsledek nikdo nečeká.
+        let _ = self.finalize();
     }
 }
-impl VfsWriteStream for FtpWriteStream {}
+
+impl VfsWriteStream for FtpWriteStream {
+    fn finish(&mut self) -> io::Result<()> {
+        self.flush()?;
+        self.finalize()
+    }
+}
 
 /// Převede položku z LIST výpisu na VfsItem.
 fn list_entry_to_item(entry: &FtpListEntry) -> Option<VfsItem> {
@@ -275,17 +288,9 @@ impl Vfs for FtpFs {
     }
 
     fn list(&self, path: &str) -> SalResult<Vec<VfsItem>> {
+        // LIST s absolutní cestou (zámek jen po dobu příkazu).
         let server_path = self.server_path(path);
-        let mut guard = self.lock()?;
-        // LIST s absolutní cestou; některé servery odmítají prázdný kořen,
-        // proto prázdnou cestu měníme na None (= aktuální adresář).
-        let listing_target = if server_path.is_empty() {
-            None
-        } else {
-            Some(server_path.as_str())
-        };
-        let lines = guard.list(listing_target).map_err(ftp_error)?;
-        drop(guard);
+        let lines = self.lock()?.list(Some(server_path.as_str())).map_err(ftp_error)?;
 
         let mut items = Vec::new();
         for line in lines {
@@ -335,36 +340,44 @@ impl Vfs for FtpFs {
     }
 
     fn delete(&self, path: &str, recursive: bool) -> SalResult<()> {
-        // U mazání adresáře musíme vědět, co mažeme (DELE vs RMD).
-        if self.is_dir(path)? {
-            let items = self.list(path)?;
-            if !recursive && !items.is_empty() {
-                // Neprázdný adresář bez rekurze smazat nelze.
-                return Err(SalError::NotEmpty);
-            }
-            // Rekurzivně: nejdřív obsah (FTP RMD maže jen prázdné adresáře).
-            for item in items {
-                self.delete(&crate::vfs::join_path(path, &item.name), true)?;
-            }
-            let mut guard = self.lock()?;
-            guard.rmdir(self.server_path(path)).map_err(ftp_error)
-        } else {
-            let mut guard = self.lock()?;
-            guard.rm(self.server_path(path)).map_err(ftp_error)
+        // U mazání musíme vědět, co mažeme (DELE vs RMD) – druh dá výpis rodiče.
+        self.delete_known(path, self.is_dir(path)?, recursive)
+    }
+
+    /// Mazání se známým druhem položky (bez výpisu rodiče kvůli každé položce).
+    /// Adresář: při `recursive` nejdřív obsah (FTP RMD maže jen prázdné
+    /// adresáře), jinak musí být prázdný.
+    fn delete_known(&self, path: &str, is_dir: bool, recursive: bool) -> SalResult<()> {
+        if !is_dir {
+            // Soubor i odkaz (i odkaz na adresář) se maže příkazem DELE.
+            return self.lock()?.rm(self.server_path(path)).map_err(ftp_error);
         }
+        let children = self.list(path)?;
+        if !recursive && !children.is_empty() {
+            return Err(SalError::NotEmpty);
+        }
+        for child in children {
+            self.delete_known(&join_path(path, &child.name), child.kind == VfsItemKind::Dir, true)?;
+        }
+        self.lock()?.rmdir(self.server_path(path)).map_err(ftp_error)
     }
 
     fn rename(&self, path: &str, new_name: &str) -> SalResult<()> {
         // RNFR/RNTO s absolutními cestami ve stejném adresáři.
-        let (parent, _) = crate::vfs::split_path(path);
+        let (parent, _) = split_path(path);
+        let new_path = join_path(&parent, new_name);
+        // RNTO by existující cíl na většině serverů tiše nahradilo.
+        if self.exists(&new_path)? {
+            return Err(SalError::AlreadyExists);
+        }
         let from = self.server_path(path);
-        let to = self.server_path(&crate::vfs::join_path(&parent, new_name));
+        let to = self.server_path(&new_path);
         let mut guard = self.lock()?;
         guard.rename(from, to).map_err(ftp_error)
     }
 
     fn exists(&self, path: &str) -> SalResult<bool> {
-        let (parent, name) = crate::vfs::split_path(path);
+        let (parent, name) = split_path(path);
         if name.is_empty() {
             return Ok(true);
         }
@@ -373,7 +386,7 @@ impl Vfs for FtpFs {
     }
 
     fn is_dir(&self, path: &str) -> SalResult<bool> {
-        let (parent, name) = crate::vfs::split_path(path);
+        let (parent, name) = split_path(path);
         if name.is_empty() {
             return Ok(true);
         }
@@ -383,19 +396,14 @@ impl Vfs for FtpFs {
             .any(|item| item.name == name && item.kind == VfsItemKind::Dir))
     }
 
-    fn free_space(&self, _path: &str) -> SalResult<Option<u64>> {
-        // FTP nemá standardní způsob, jak zjistit volné místo.
-        Ok(None)
-    }
-
-    fn writable(&self) -> bool {
-        true
-    }
-
     fn supports_size_scan(&self) -> bool {
         // Rekurzivní scan by znamenal dvojitý výpis všech adresářů
         // přes síť – zbytečně pomalé; progress bez celku.
         false
+    }
+
+    fn dir_identity(&self, dir: &str) -> Option<String> {
+        Some(format!("{}{}", self.account, self.server_path(dir)))
     }
 }
 
@@ -404,9 +412,57 @@ mod tests {
     use std::time::UNIX_EPOCH;
     use super::*;
 
-    /// Unit testy jen čistých funkcí – živé spojení vyžaduje server,
-    /// což v CI není k dispozici. Integrita přenosu se ověřuje
-    /// testy ops/find nad lokálním FS a zip/tar VFS.
+    /// Přihlášení proti minimálnímu serveru na 127.0.0.1, který se chová jako
+    /// skutečné FTP servery: před přihlášením odmítá vše kromě USER/PASS
+    /// kódem 530. Ověřuje pořadí příkazů při připojení (USER, PASS, TYPE, PWD)
+    /// a domovský adresář jako kořen VFS.
+    #[test]
+    fn test_connect_logs_in_before_other_commands() {
+        use std::io::{BufRead, BufReader};
+        use std::net::TcpListener;
+
+        // V prostředí bez povoleného naslouchání na portu se test přeskočí.
+        let Ok(listener) = TcpListener::bind("127.0.0.1:0") else {
+            return;
+        };
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut lines = BufReader::new(socket.try_clone().unwrap()).lines();
+            let mut commands: Vec<String> = Vec::new();
+            let mut logged_in = false;
+            socket.write_all(b"220 test\r\n").unwrap();
+            while let Some(Ok(line)) = lines.next() {
+                let verb = line.split(' ').next().unwrap_or("").to_uppercase();
+                let reply = match verb.as_str() {
+                    "USER" => "331 heslo\r\n",
+                    "PASS" => {
+                        logged_in = true;
+                        "230 ok\r\n"
+                    }
+                    _ if !logged_in => "530 Please login with USER and PASS.\r\n",
+                    "TYPE" => "200 ok\r\n",
+                    "PWD" => "257 \"/home/tester/\" is current directory\r\n",
+                    _ => "502 neumim\r\n",
+                };
+                commands.push(verb);
+                socket.write_all(reply.as_bytes()).unwrap();
+            }
+            commands
+        });
+
+        let fs = FtpFs::connect("127.0.0.1", port, "tester", "heslo", Duration::from_secs(5))
+            .expect("připojení k testovacímu FTP serveru");
+        assert_eq!(fs.home, "/home/tester");
+        assert_eq!(fs.server_path("/"), "/home/tester");
+        assert_eq!(fs.server_path("/pod/a.txt"), "/home/tester/pod/a.txt");
+        // Identita adresáře je stejná pro každé připojení téhož účtu.
+        assert_eq!(fs.dir_identity("/pod"), Some(format!("ftp://tester@127.0.0.1:{}/home/tester/pod", port)));
+        // Zavření spojení ukončí vlákno serveru.
+        drop(fs);
+        assert_eq!(server.join().unwrap(), ["USER", "PASS", "TYPE", "PWD"]);
+    }
+
     #[test]
     fn test_clean_list_name() {
         assert_eq!(clean_list_name("soubor.txt"), "soubor.txt");
@@ -420,5 +476,7 @@ mod tests {
             system_time_to_unix(UNIX_EPOCH + Duration::from_secs(12345)),
             12345
         );
+        // Čas před rokem 1970 se hlásí jako neznámý.
+        assert_eq!(system_time_to_unix(UNIX_EPOCH - Duration::from_secs(1)), 0);
     }
 }

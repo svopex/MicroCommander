@@ -222,16 +222,9 @@ final class PanelController: NSObject {
 
     /// Přejde na cestu zadanou uživatelem (v aktuálním VFS; "~" = domov na lokálním disku).
     func goToTypedPath(_ typed: String) {
-        var path = typed.trimmingCharacters(in: .whitespaces)
+        let path = typed.trimmingCharacters(in: .whitespaces)
         guard !path.isEmpty else { return }
-        // Na lokálním disku rozbalíme "~" a relativní cesty vůči aktuální.
-        if location.vfs.kind == SAL_VFS_LOCAL, path.hasPrefix("~") {
-            path = (path as NSString).expandingTildeInPath
-        }
-        if !path.hasPrefix("/") {
-            path = joinPath(location.path, path)
-        }
-        changePath(normalizePath(path))
+        changePath(resolveTypedPath(path, in: location))
     }
 
     /// Obnoví výpis na pozadí; kurzor a označení zůstanou na stejných jménech.
@@ -482,10 +475,8 @@ final class PanelController: NSObject {
         if let index = findPrefix(candidate) {
             quickSearch = candidate
             setCursor(index)
-        } else if quickSearch == nil {
-            // Nic nenalezeno ani pro první znak – rychlé hledání nezačne.
-            NSSound.beep()
         } else {
+            // Žádná shoda: znak se nepřidá (pro první znak hledání ani nezačne).
             NSSound.beep()
         }
         delegate?.panelStateChanged(self)
@@ -515,7 +506,8 @@ final class PanelController: NSObject {
         let count = rows.count
         for offset in 1..<count {
             let index = (cursor + (forward ? offset : count - offset)) % count
-            if rows[index].item.name.lowercased().hasPrefix(quickSearch.lowercased()) {
+            // Řádek „..“ se rychlým hledáním nehledá (stejně jako ve findPrefix).
+            if !rows[index].isParent, rows[index].item.name.lowercased().hasPrefix(quickSearch.lowercased()) {
                 setCursor(index)
                 return
             }
@@ -572,6 +564,20 @@ func parentPath(_ path: String) -> String {
 /// Poslední složka cesty.
 func lastComponent(_ path: String) -> String {
     (path as NSString).lastPathComponent
+}
+
+/// Cesta zadaná uživatelem (změna adresáře, cíl kopírování…) jako normalizovaná
+/// cesta ve VFS: absolutní, nebo relativní k `location`; na lokálním disku se
+/// rozvine „~“.
+/// - Parameters:
+///   - typed: zadaný text
+///   - location: lokace, ke které se vztahují relativní cesty
+func resolveTypedPath(_ typed: String, in location: Location) -> String {
+    var path = typed
+    if location.vfs.kind == SAL_VFS_LOCAL, path.hasPrefix("~") {
+        path = (path as NSString).expandingTildeInPath
+    }
+    return normalizePath(path.hasPrefix("/") ? path : joinPath(location.path, path))
 }
 
 /// Normalizuje cestu (odstraní ".", "..", zdvojená lomítka).

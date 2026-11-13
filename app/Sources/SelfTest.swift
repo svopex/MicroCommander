@@ -45,8 +45,6 @@ final class UISelfTest {
         NSApp.postEvent(event, atStart: false)
     }
 
-    /// Řetězec F-klávesy (znak NSF1FunctionKey + n).
-
     private func check(_ condition: Bool, _ message: String) {
         print((condition ? "OK   " : "FAIL ") + message)
         if !condition { failures.append(message) }
@@ -518,7 +516,7 @@ final class UIKeyCheck {
 
     func run() {
         setvbuf(stdout, nil, _IOLBF, 0)
-        // Testovací adresář s podadresářem (aby první položka byla „..“) a 40 soubory.
+        // Testovací adresář s podadresářem (aby první položka byla „..“).
         let dir = (NSTemporaryDirectory() as NSString).appendingPathComponent("sal-keycheck-\(getpid())/sub")
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         // 500 souborů – ve Stručném režimu vznikne mnoho sloupců s vodorovným posunem.

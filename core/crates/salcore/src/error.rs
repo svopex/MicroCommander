@@ -10,8 +10,8 @@
 use std::fmt;
 use std::io;
 
-/// Kód chyby předávaný přes FFI. Kladná hodnota 1 znamená zrušení
-/// operace uživatelem, záporné hodnoty jsou běžné chyby.
+/// Chyba operace jádra. Přes FFI se předává jako číselný kód (viz `code`):
+/// kladná hodnota 1 znamená zrušení uživatelem, záporné hodnoty jsou chyby.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SalError {
     /// Operaci zrušil uživatel (není to selhání).

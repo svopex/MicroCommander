@@ -3,8 +3,9 @@
 
 // Swift obálka nad C ABI jádra salcore (core/include/microcommander.h).
 // Poskytuje bezpečné Swift API: třída Vfs (handle + list), Item, operace
-// s progresem a zrušením. Volání jádra bez zamykání – jádro je thread-safe
-// na úrovni jednoho handle (FTP/SFTP si serializace řeší samy).
+// s progresem a zrušením. Volání jádra bez zamykání – jeden handle lze
+// používat z více vláken zároveň (jádro si sdílený stav zamyká samo,
+// příkazy nad jedním FTP/SFTP spojením serializuje).
 
 import Foundation
 import microcommander
@@ -49,10 +50,10 @@ struct Item {
     let mtime: Int64
     let flags: UInt32
 
-    var isDir: Bool { flags & UInt32(SAL_FLAG_DIR) != 0 }
-    var isLink: Bool { flags & UInt32(SAL_FLAG_LINK) != 0 }
-    var isHidden: Bool { flags & UInt32(SAL_FLAG_HIDDEN) != 0 }
-    var isReadonly: Bool { flags & UInt32(SAL_FLAG_READONLY) != 0 }
+    var isDir: Bool { flags & SAL_FLAG_DIR != 0 }
+    var isLink: Bool { flags & SAL_FLAG_LINK != 0 }
+    var isHidden: Bool { flags & SAL_FLAG_HIDDEN != 0 }
+    var isReadonly: Bool { flags & SAL_FLAG_READONLY != 0 }
     var isEncrypted: Bool { flags & SAL_FLAG_ENCRYPTED != 0 }
 }
 
@@ -302,6 +303,14 @@ final class Vfs {
 // ---------------------------------------------------------------------------
 // Progress + cancel předávané přes C callback
 // ---------------------------------------------------------------------------
+
+/// V čem operace hlásí průběh (určuje text dialogu průběhu).
+enum ProgressUnit {
+    /// Přenesené bajty (kopírování, přesun, balení, rozbalení).
+    case bytes
+    /// Zpracované položky (mazání, počítání velikosti, změna atributů).
+    case items
+}
 
 /// Stav běžící operace: progres a příznak zrušení.
 final class ProgressState {

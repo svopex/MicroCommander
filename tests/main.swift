@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Open Samandarin Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// End-to-end smoke test FFI vrstvy: projde open_local → list → mkdir →
-// copy (local→local) → rename → delete → find → pack ZIP a ověří výsledky.
+// End-to-end smoke test FFI vrstvy: projde open_local → list → copy
+// (local→local) → move → mkdir → rename → delete → find → pack ZIP a ověří výsledky.
 // Spustí se přes `make smoke`; nevyžaduje GUI, ověřuje vazbu Swift↔Rust jádro.
 
 import Foundation
@@ -51,6 +51,28 @@ func run() throws {
     let copied = try String(contentsOfFile: dstDir + "/pod/b.txt", encoding: .utf8)
     expect(copied == "obsah b", "obsah kopie odpovídá")
 
+    // Přesun v rámci jednoho VFS celého disku – tak ho volá aplikace (oba panely
+    // sdílejí lokální VFS s kořenem „/“): soubor i adresář musí změnit místo.
+    let disk = Vfs.openLocal(root: nil)!
+    let moveDir = base + "/presun"
+    try FileManager.default.createDirectory(atPath: moveDir, withIntermediateDirectories: true)
+    try coreMove(src: disk, srcDir: dstDir, names: ["a.txt", "pod"], dst: disk, dstDir: moveDir,
+                 overwrite: .ask, state: state)
+    expect(!dst.exists("/a.txt") && !dst.exists("/pod"), "přesun odebral položky ze zdroje")
+    expect(FileManager.default.fileExists(atPath: moveDir + "/pod/b.txt"), "přesun položky doručil do cíle")
+    // Přesun do téhož adresáře jádro odmítne (dřív „Přepsat“ soubor smazalo).
+    do {
+        try coreMove(src: disk, srcDir: moveDir, names: ["a.txt"], dst: disk, dstDir: moveDir,
+                     overwrite: .overwrite, state: state)
+        expect(false, "přesun do téhož adresáře musí selhat")
+    } catch {
+        expect(FileManager.default.fileExists(atPath: moveDir + "/a.txt"), "přesun do téhož adresáře nic nesmazal")
+    }
+    // Zpět do cíle – další kroky testu počítají s kopií v dst.
+    try coreMove(src: disk, srcDir: moveDir, names: ["a.txt", "pod"], dst: disk, dstDir: dstDir,
+                 overwrite: .ask, state: state)
+    expect(dst.exists("/a.txt") && dst.exists("/pod/b.txt"), "přesun zpět proběhl")
+
     // Mkdir přes FFI.
     try dst.mkdir("/novy")
     expect(dst.isDir("/novy"), "mkdir vytvořil adresář")
@@ -58,6 +80,14 @@ func run() throws {
     // Rename přes FFI.
     try dst.rename(dir: "/", oldName: "novy", newName: "prejmenovany")
     expect(dst.exists("/prejmenovany"), "rename přejmenoval adresář")
+    // Přejmenování na jméno existující položky ji nesmí nahradit.
+    do {
+        try dst.rename(dir: "/", oldName: "prejmenovany", newName: "a.txt")
+        expect(false, "rename na existující jméno musí selhat")
+    } catch {
+        expect((error as? CoreError)?.isExistsConflict == true && dst.isDir("/prejmenovany"),
+               "rename existující položku nenahradil")
+    }
 
     // Mazání přes FFI (rekurzivně).
     try coreDelete(vfs: dst, dir: "/", names: ["prejmenovany", "pod", "a.txt"], state: state)
@@ -83,6 +113,7 @@ func run() throws {
     }
     let zipItems = try zipVfs.list("/")
     expect(zipItems.contains { $0.name == "a.txt" }, "ZIP výpis obsahuje a.txt")
+    expect(zipItems.contains { $0.name == "pod" && $0.isDir }, "adresář v ZIP je ve výpisu adresářem")
 
     // Zaheslovaný ZIP (AES-256) přes FFI: bez hesla / chybné heslo / správné heslo.
     let aesPath = base + "/tajne.zip"
@@ -98,7 +129,6 @@ func run() throws {
     let aesOut = base + "/aes-out"
     try FileManager.default.createDirectory(atPath: aesOut, withIntermediateDirectories: true)
     // Cíl přes VFS celého disku (aesOut je absolutní cesta).
-    let disk = Vfs.openLocal(root: nil)!
     // Kopie ze šifrovaného archivu: postupně bez hesla, se špatným a se správným.
     func copyFromAes() -> CoreError? {
         do {

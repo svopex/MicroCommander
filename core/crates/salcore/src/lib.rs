@@ -11,6 +11,7 @@
 //! Původní C++ zdrojáky Windows verze jsou v adresáři `samandarin/` a slouží
 //! jako reference chování (masky, VFS koncept, operace); nejsou portovány 1:1.
 
+mod archive;
 pub mod error;
 pub mod ffi;
 pub mod find;
@@ -27,6 +28,3 @@ pub mod zipfs;
 pub use error::{SalError, SalResult};
 pub use local::LocalFs;
 pub use vfs::{Vfs, VfsItem, VfsItemKind, VfsKind};
-
-/// Verze jádra – vrací se přes FFI do UI (About dialog).
-pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");

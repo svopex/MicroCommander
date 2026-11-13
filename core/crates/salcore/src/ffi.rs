@@ -9,8 +9,10 @@
 //! - Návratové kódy odpovídají `SalError::code` (0 = OK, 1 = zrušeno,
 //!   záporné = chyba); text chyby se kopíruje do volajícím daného bufferu.
 //! - Panika uvnitř jádra je zachycena (catch_unwind), aby nepřešla přes FFI.
-//! - Pole jmen (`names`) i výpisů (`SalItem`) alokuje volající/UI a jádro
-//!   je čte/kopíruje; uvolňování výpisů dělá `sal_free_items`.
+//! - Pole jmen (`names`) alokuje volající a jádro je jen čte; výpisy
+//!   (`SalItem`) alokuje jádro a uvolňuje je `sal_free_items`.
+//! - Všechny funkce přebírající ukazatele jsou `unsafe`: volající ručí za
+//!   platnost ukazatelů a NUL-ukončení řetězců (viz microcommander.h).
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::fs::File;
@@ -88,16 +90,42 @@ const VERSION_CSTR: &str = concat!(env!("CARGO_PKG_VERSION"), "\0");
 // Pomocné funkce (ne FFI)
 // ---------------------------------------------------------------------------
 
-/// Zapíše chybovou zprávu do volajícím daného bufferu (vždy NUL-ukončený).
+/// Zapíše text (chybovou zprávu, popisek) do volajícím daného bufferu –
+/// vždy NUL-ukončený; delší text se zkrátí na hranici znaku UTF-8.
 fn write_err(err: *mut c_char, err_len: usize, msg: &str) {
     if err.is_null() || err_len == 0 {
         return;
     }
-    let bytes = msg.as_bytes();
-    let copy_len = bytes.len().min(err_len - 1);
+    // Zkrácení uprostřed vícebajtového znaku by dalo neplatné UTF-8.
+    let mut copy_len = msg.len().min(err_len - 1);
+    while !msg.is_char_boundary(copy_len) {
+        copy_len -= 1;
+    }
     unsafe {
-        std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, err, copy_len);
+        std::ptr::copy_nonoverlapping(msg.as_ptr() as *const c_char, err, copy_len);
         *err.add(copy_len) = 0;
+    }
+}
+
+/// Převede výsledek otevření/připojení VFS na handle pro C stranu (uvolňuje
+/// ho `sal_vfs_close`); při chybě zapíše její text do bufferu `err` (smí být
+/// NULL) a vrátí NULL.
+fn handle_or_null(result: SalResult<impl Vfs + 'static>, err: *mut c_char, err_len: usize) -> *mut SalVfs {
+    match result {
+        Ok(vfs) => Box::into_raw(Box::new(VfsHandle { vfs: Box::new(vfs) })) as *mut SalVfs,
+        Err(e) => {
+            write_err(err, err_len, &e.to_string());
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Časový limit připojení ze sekund (nula nebo záporná hodnota = výchozích 15 s).
+fn connect_timeout(timeout_sec: f64) -> Duration {
+    if timeout_sec > 0.0 {
+        Duration::from_secs_f64(timeout_sec)
+    } else {
+        Duration::from_secs(15)
     }
 }
 
@@ -217,48 +245,38 @@ pub extern "C" fn sal_version() -> *const c_char {
     VERSION_CSTR.as_ptr() as *const c_char
 }
 
+/// # Safety
+/// `root` je NULL nebo platný C řetězec.
 #[no_mangle]
-pub extern "C" fn sal_open_local(root: *const c_char) -> *mut SalVfs {
-    let root = unsafe { opt_string(root) };
-    let result = catch(|| LocalFs::new(root.as_deref()));
-    match result {
-        Ok(fs_impl) => Box::into_raw(Box::new(VfsHandle {
-            vfs: Box::new(fs_impl),
-        })) as *mut SalVfs,
-        Err(_) => std::ptr::null_mut(),
-    }
+pub unsafe extern "C" fn sal_open_local(root: *const c_char) -> *mut SalVfs {
+    let root = opt_string(root);
+    handle_or_null(catch(|| LocalFs::new(root.as_deref())), std::ptr::null_mut(), 0)
 }
 
+/// # Safety
+/// `archive_path` je NULL nebo platný C řetězec.
 #[no_mangle]
-pub extern "C" fn sal_open_zip(archive_path: *const c_char) -> *mut SalVfs {
-    let Some(path) = (unsafe { opt_string(archive_path) }) else {
+pub unsafe extern "C" fn sal_open_zip(archive_path: *const c_char) -> *mut SalVfs {
+    let Some(path) = opt_string(archive_path) else {
         return std::ptr::null_mut();
     };
-    let result = catch(|| ZipFs::open(Path::new(&path)));
-    match result {
-        Ok(fs_impl) => Box::into_raw(Box::new(VfsHandle {
-            vfs: Box::new(fs_impl),
-        })) as *mut SalVfs,
-        Err(_) => std::ptr::null_mut(),
-    }
+    handle_or_null(catch(|| ZipFs::open(Path::new(&path))), std::ptr::null_mut(), 0)
 }
 
+/// # Safety
+/// `archive_path` je NULL nebo platný C řetězec.
 #[no_mangle]
-pub extern "C" fn sal_open_tar(archive_path: *const c_char) -> *mut SalVfs {
-    let Some(path) = (unsafe { opt_string(archive_path) }) else {
+pub unsafe extern "C" fn sal_open_tar(archive_path: *const c_char) -> *mut SalVfs {
+    let Some(path) = opt_string(archive_path) else {
         return std::ptr::null_mut();
     };
-    let result = catch(|| TarFs::open(Path::new(&path)));
-    match result {
-        Ok(fs_impl) => Box::into_raw(Box::new(VfsHandle {
-            vfs: Box::new(fs_impl),
-        })) as *mut SalVfs,
-        Err(_) => std::ptr::null_mut(),
-    }
+    handle_or_null(catch(|| TarFs::open(Path::new(&path))), std::ptr::null_mut(), 0)
 }
 
+/// # Safety
+/// Řetězce jsou NULL nebo platné C řetězce, `err` je buffer délky `err_len`.
 #[no_mangle]
-pub extern "C" fn sal_connect_ftp(
+pub unsafe extern "C" fn sal_connect_ftp(
     host: *const c_char,
     port: u16,
     user: *const c_char,
@@ -267,32 +285,20 @@ pub extern "C" fn sal_connect_ftp(
     err: *mut c_char,
     err_len: usize,
 ) -> *mut SalVfs {
-    let Some(host) = (unsafe { opt_string(host) }) else {
+    let Some(host) = opt_string(host) else {
         write_err(err, err_len, "Chybí adresa serveru.");
         return std::ptr::null_mut();
     };
-    let user = unsafe { opt_string(user) }.unwrap_or_else(|| "anonymous".to_string());
-    let password = unsafe { opt_string(password) }.unwrap_or_default();
-    // Rozumný spodní limit timeoutu (0 = výchozích 15 s).
-    let timeout = if timeout_sec <= 0.0 {
-        Duration::from_secs(15)
-    } else {
-        Duration::from_secs_f64(timeout_sec)
-    };
-    let result = catch(|| FtpFs::connect(&host, port, &user, &password, timeout));
-    match result {
-        Ok(fs_impl) => Box::into_raw(Box::new(VfsHandle {
-            vfs: Box::new(fs_impl),
-        })) as *mut SalVfs,
-        Err(e) => {
-            write_err(err, err_len, &e.to_string());
-            std::ptr::null_mut()
-        }
-    }
+    let user = opt_string(user).unwrap_or_else(|| "anonymous".to_string());
+    let password = opt_string(password).unwrap_or_default();
+    let timeout = connect_timeout(timeout_sec);
+    handle_or_null(catch(|| FtpFs::connect(&host, port, &user, &password, timeout)), err, err_len)
 }
 
+/// # Safety
+/// Řetězce jsou NULL nebo platné C řetězce, `err` je buffer délky `err_len`.
 #[no_mangle]
-pub extern "C" fn sal_connect_sftp(
+pub unsafe extern "C" fn sal_connect_sftp(
     host: *const c_char,
     port: u16,
     user: *const c_char,
@@ -301,7 +307,7 @@ pub extern "C" fn sal_connect_sftp(
     err: *mut c_char,
     err_len: usize,
 ) -> *mut SalVfs {
-    let password = unsafe { opt_string(password) }.unwrap_or_default();
+    let password = opt_string(password).unwrap_or_default();
     connect_sftp_handle(host, port, user, SftpAuth::Password(password), timeout_sec, err, err_len)
 }
 
@@ -325,7 +331,7 @@ pub unsafe extern "C" fn sal_vfs_label(vfs: *mut SalVfs, out: *mut c_char, out_l
     }
     let handle = &*(vfs as *const VfsHandle);
     let label = handle.vfs.label();
-    write_err(out, out_len, &label); // stejná sémantika zápisu jako chyby
+    write_err(out, out_len, &label);
     crate::error::SAL_OK
 }
 
@@ -337,11 +343,7 @@ pub unsafe extern "C" fn sal_vfs_writable(vfs: *mut SalVfs) -> i32 {
         return 0;
     }
     let handle = &*(vfs as *const VfsHandle);
-    if handle.vfs.writable() {
-        1
-    } else {
-        0
-    }
+    i32::from(handle.vfs.writable())
 }
 
 /// # Safety
@@ -906,30 +908,31 @@ pub unsafe extern "C" fn sal_vfs_has_encrypted(vfs: *mut SalVfs) -> i32 {
 }
 
 /// Společné připojení SFTP se zvoleným ověřením (převod výsledku na handle / chybu).
-fn connect_sftp_handle(host: *const c_char, port: u16, user: *const c_char, auth: SftpAuth,
-                       timeout_sec: f64, err: *mut c_char, err_len: usize) -> *mut SalVfs {
-    let Some(host) = (unsafe { opt_string(host) }) else {
+/// # Safety
+/// `host` a `user` jsou NULL nebo platné C řetězce, `err` je buffer délky `err_len`.
+unsafe fn connect_sftp_handle(
+    host: *const c_char,
+    port: u16,
+    user: *const c_char,
+    auth: SftpAuth,
+    timeout_sec: f64,
+    err: *mut c_char,
+    err_len: usize,
+) -> *mut SalVfs {
+    let Some(host) = opt_string(host) else {
         write_err(err, err_len, "Chybí adresa serveru.");
         return std::ptr::null_mut();
     };
-    let user = unsafe { opt_string(user) }.unwrap_or_else(|| "root".to_string());
-    let timeout = if timeout_sec <= 0.0 {
-        Duration::from_secs(15)
-    } else {
-        Duration::from_secs_f64(timeout_sec)
-    };
-    match catch(|| SftpFs::connect_with(&host, port, &user, &auth, timeout)) {
-        Ok(fs_impl) => Box::into_raw(Box::new(VfsHandle { vfs: Box::new(fs_impl) })) as *mut SalVfs,
-        Err(e) => {
-            write_err(err, err_len, &e.to_string());
-            std::ptr::null_mut()
-        }
-    }
+    let user = opt_string(user).unwrap_or_else(|| "root".to_string());
+    let timeout = connect_timeout(timeout_sec);
+    handle_or_null(catch(|| SftpFs::connect_with(&host, port, &user, &auth, timeout)), err, err_len)
 }
 
 /// Připojení SFTP soukromým klíčem ze souboru; passphrase NULL/"" = klíč bez hesla.
+/// # Safety
+/// Řetězce jsou NULL nebo platné C řetězce, `err` je buffer délky `err_len`.
 #[no_mangle]
-pub extern "C" fn sal_connect_sftp_key(
+pub unsafe extern "C" fn sal_connect_sftp_key(
     host: *const c_char,
     port: u16,
     user: *const c_char,
@@ -939,18 +942,20 @@ pub extern "C" fn sal_connect_sftp_key(
     err: *mut c_char,
     err_len: usize,
 ) -> *mut SalVfs {
-    let Some(key) = (unsafe { opt_string(private_key_path) }) else {
+    let Some(key) = opt_string(private_key_path) else {
         write_err(err, err_len, "Chybí cesta k souboru s klíčem.");
         return std::ptr::null_mut();
     };
-    let passphrase = unsafe { opt_string(passphrase) }.filter(|value| !value.is_empty());
+    let passphrase = opt_string(passphrase).filter(|value| !value.is_empty());
     let auth = SftpAuth::KeyFile { private_key: std::path::PathBuf::from(key), passphrase };
     connect_sftp_handle(host, port, user, auth, timeout_sec, err, err_len)
 }
 
 /// Připojení SFTP klíči ze ssh-agenta (SSH_AUTH_SOCK).
+/// # Safety
+/// Řetězce jsou NULL nebo platné C řetězce, `err` je buffer délky `err_len`.
 #[no_mangle]
-pub extern "C" fn sal_connect_sftp_agent(
+pub unsafe extern "C" fn sal_connect_sftp_agent(
     host: *const c_char,
     port: u16,
     user: *const c_char,
@@ -962,12 +967,14 @@ pub extern "C" fn sal_connect_sftp_agent(
 }
 
 /// Je soubor se soukromým klíčem chráněný heslem? 1 = ano, 0 = ne, -1 = nelze přečíst.
+/// # Safety
+/// `private_key_path` je NULL nebo platný C řetězec.
 #[no_mangle]
-pub extern "C" fn sal_ssh_key_encrypted(private_key_path: *const c_char) -> i32 {
-    let Some(path) = (unsafe { opt_string(private_key_path) }) else {
+pub unsafe extern "C" fn sal_ssh_key_encrypted(private_key_path: *const c_char) -> i32 {
+    let Some(path) = opt_string(private_key_path) else {
         return -1;
     };
-    match crate::sftp::key_file_encrypted(std::path::Path::new(&path)) {
+    match crate::sftp::key_file_encrypted(Path::new(&path)) {
         Ok(true) => 1,
         Ok(false) => 0,
         Err(_) => -1,

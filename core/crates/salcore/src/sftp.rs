@@ -16,13 +16,16 @@
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use ssh2::{File as SshFile, FileStat, OpenFlags, OpenType, RenameFlags, Session, Sftp};
+use ssh2::{File as SshFile, FileStat, OpenFlags, OpenType, Session, Sftp};
 
 use crate::error::{SalError, SalResult};
-use crate::vfs::{Vfs, VfsItem, VfsItemKind, VfsKind, VfsReadStream, VfsWriteStream};
+use crate::vfs::{
+    join_path, remote_path, split_path, Vfs, VfsItem, VfsItemKind, VfsKind, VfsReadStream,
+    VfsWriteStream,
+};
 
 /// Vlastník SSH spojení: session + otevřený SFTP kanál.
 struct SftpBackend {
@@ -40,6 +43,9 @@ pub struct SftpFs {
     home: String,
     /// Popis pro titulek panelu.
     label: String,
+    /// Identita účtu na serveru (`sftp://uživatel@server:port`) – stejná pro
+    /// všechna připojení téhož účtu.
+    account: String,
 }
 
 /// Způsob přihlášení k SSH serveru.
@@ -47,8 +53,8 @@ pub struct SftpFs {
 pub enum SftpAuth {
     /// Uživatelské heslo.
     Password(String),
-    /// Soubor se soukromým klíčem; veřejný klíč se hledá jako `<klíč>.pub`
-    /// (když chybí, libssh2 ho odvodí ze soukromého). Passphrase = heslo ke klíči.
+    /// Soubor se soukromým klíčem (veřejný klíč si libssh2 odvodí z něj,
+    /// soubor `.pub` není potřeba). Passphrase = heslo ke klíči.
     KeyFile {
         private_key: PathBuf,
         passphrase: Option<String>,
@@ -270,12 +276,13 @@ impl SftpFs {
             backend: Arc::new(Mutex::new(SftpBackend { session, sftp })),
             home,
             label: format!("SFTP: {}:{}", host, port),
+            account: format!("sftp://{}@{}:{}", username, host, port),
         })
     }
 
     /// Převede cestu VFS na absolutní cestu na serveru.
     fn server_path(&self, vfs_path: &str) -> String {
-        crate::vfs::remote_path(&self.home, vfs_path)
+        remote_path(&self.home, vfs_path)
     }
 
     /// Uzamkne backend (všechny operace nad Session musí běžet pod zámkem).
@@ -285,9 +292,6 @@ impl SftpFs {
         })
     }
 }
-
-/// Používáme std MutexGuard přímo (alias kvůli čitelnosti).
-use std::sync::MutexGuard;
 
 /// Převede metadata ze serveru na VfsItem (jméno zvlášť – readdir ho
 /// vrací jako PathBuf).
@@ -308,10 +312,15 @@ fn stat_to_item(name: &str, stat: &FileStat) -> Option<VfsItem> {
         mtime: stat.mtime.unwrap_or(0) as i64,
         kind,
         hidden: name.starts_with('.'),
-        // Write bit pro vlastníka (0o200) jako indikátor jen-pro-čtení.
+        // Jen pro čtení = právo zápisu nemá vlastník, skupina ani ostatní.
         readonly: mode & 0o222 == 0,
         encrypted: false,
     })
+}
+
+/// Zámek backendu pro čtení/zápis bloku ve streamu (chyba jako io::Error).
+fn lock_stream(backend: &Mutex<SftpBackend>) -> io::Result<MutexGuard<'_, SftpBackend>> {
+    backend.lock().map_err(|_| io::Error::other("SFTP spojení je uzamčené."))
 }
 
 /// Čtecí stream z SFTP: drží otevřený handle a Arc na backend.
@@ -328,9 +337,7 @@ impl Read for SftpReadStream {
         };
         // Zámek držíme po dobu čtení – libssh2 Session není vláknově bezpečná,
         // veškerý přístup musí být serializovaný.
-        let _guard = self.backend.lock().map_err(|_| {
-            io::Error::new(io::ErrorKind::Other, "SFTP spojení je uzamčené.")
-        })?;
+        let _guard = lock_stream(&self.backend)?;
         file.read(buf)
     }
 }
@@ -351,9 +358,7 @@ impl Write for SftpWriteStream {
             ));
         };
         // Zámek držíme po dobu zápisu – libssh2 Session není vláknově bezpečná.
-        let _guard = self.backend.lock().map_err(|_| {
-            io::Error::new(io::ErrorKind::Other, "SFTP spojení je uzamčené.")
-        })?;
+        let _guard = lock_stream(&self.backend)?;
         file.write(buf)
     }
 
@@ -361,13 +366,23 @@ impl Write for SftpWriteStream {
         let Some(file) = self.file.as_mut() else {
             return Ok(());
         };
-        let _guard = self.backend.lock().map_err(|_| {
-            io::Error::new(io::ErrorKind::Other, "SFTP spojení je uzamčené.")
-        })?;
+        let _guard = lock_stream(&self.backend)?;
         file.flush()
     }
 }
-impl VfsWriteStream for SftpWriteStream {}
+
+impl VfsWriteStream for SftpWriteStream {
+    /// Zavře soubor na serveru a vrátí případnou chybu zavření (jinak by ji
+    /// zahození streamu spolklo).
+    fn finish(&mut self) -> io::Result<()> {
+        self.flush()?;
+        let Some(mut file) = self.file.take() else {
+            return Ok(());
+        };
+        let _guard = lock_stream(&self.backend)?;
+        file.close().map_err(io::Error::from)
+    }
+}
 
 impl Vfs for SftpFs {
     fn kind(&self) -> VfsKind {
@@ -440,61 +455,42 @@ impl Vfs for SftpFs {
     }
 
     fn delete(&self, path: &str, recursive: bool) -> SalResult<()> {
+        // lstat (ne stat): odkaz na adresář se smaže jako odkaz – rekurze do
+        // něj by smazala obsah adresáře, na který ukazuje.
         let server_path = self.server_path(path);
-        // SFTP rmdir neumí neprázdné adresáře – obsah mažeme rekurzivně.
-        if recursive {
-            let is_dir = {
-                let guard = self.lock()?;
-                guard
-                    .sftp
-                    .stat(Path::new(&server_path))
-                    .map(|stat| stat.is_dir())
-                    .map_err(ssh_error)?
-            };
-            if is_dir {
-                let children = self.list(path)?;
-                for child in children {
-                    let child_path = crate::vfs::join_path(path, &child.name);
-                    self.delete(&child_path, true)?;
-                }
-            }
+        let is_dir = self.lock()?.sftp.lstat(Path::new(&server_path)).map_err(ssh_error)?.is_dir();
+        self.delete_known(path, is_dir, recursive)
+    }
+
+    /// Mazání se známým druhem položky (z lstat nebo z výpisu rodiče).
+    /// Adresář: při `recursive` nejdřív obsah (SFTP rmdir maže jen prázdné
+    /// adresáře), jinak musí být prázdný. Odkaz se maže jako soubor – jeho
+    /// cíl zůstává.
+    fn delete_known(&self, path: &str, is_dir: bool, recursive: bool) -> SalResult<()> {
+        let server_path = self.server_path(path);
+        if !is_dir {
+            return self.lock()?.sftp.unlink(Path::new(&server_path)).map_err(ssh_error);
         }
-        let guard = self.lock()?;
-        let path_ref = Path::new(&server_path);
-        let stat = guard.sftp.stat(path_ref).map_err(ssh_error)?;
-        if stat.is_dir() {
-            if !recursive {
-                // Bez rekurze smíme mazat jen prázdný adresář.
-                let children = guard
-                    .sftp
-                    .readdir(path_ref)
-                    .map_err(ssh_error)?
-                    .into_iter()
-                    .filter(|(name, _)| {
-                        let name = name.to_string_lossy();
-                        name != "." && name != ".."
-                    })
-                    .count();
-                if children > 0 {
-                    return Err(SalError::NotEmpty);
-                }
-            }
-            guard.sftp.rmdir(path_ref).map_err(ssh_error)
-        } else {
-            guard.sftp.unlink(path_ref).map_err(ssh_error)
+        let children = self.list(path)?;
+        if !recursive && !children.is_empty() {
+            return Err(SalError::NotEmpty);
         }
+        for child in children {
+            self.delete_known(&join_path(path, &child.name), child.kind == VfsItemKind::Dir, true)?;
+        }
+        self.lock()?.sftp.rmdir(Path::new(&server_path)).map_err(ssh_error)
     }
 
     fn rename(&self, path: &str, new_name: &str) -> SalResult<()> {
-        let (parent, _) = crate::vfs::split_path(path);
+        let (parent, _) = split_path(path);
         let from = self.server_path(path);
-        let to = self.server_path(&crate::vfs::join_path(&parent, new_name));
+        let to = self.server_path(&join_path(&parent, new_name));
         let guard = self.lock()?;
-        // OVERWRITE: chování jako v Salamanderu – cíl se přepíše.
-        guard
-            .sftp
-            .rename(Path::new(&from), Path::new(&to), Some(RenameFlags::OVERWRITE))
-            .map_err(ssh_error)
+        // Existující cíl se nesmí nahradit (lstat: i odkaz vedoucí nikam je položka).
+        if guard.sftp.lstat(Path::new(&to)).is_ok() {
+            return Err(SalError::AlreadyExists);
+        }
+        guard.sftp.rename(Path::new(&from), Path::new(&to), None).map_err(ssh_error)
     }
 
     fn exists(&self, path: &str) -> SalResult<bool> {
@@ -517,30 +513,34 @@ impl Vfs for SftpFs {
         }
     }
 
-    fn free_space(&self, _path: &str) -> SalResult<Option<u64>> {
-        // SFTP protokol volné místo nenabízí.
-        Ok(None)
-    }
-
-    fn writable(&self) -> bool {
-        true
-    }
-
     fn supports_size_scan(&self) -> bool {
         // Rekurzivní scan = dvojitý průchod síťí; vypnuto jako u FTP.
         false
+    }
+
+    fn dir_identity(&self, dir: &str) -> Option<String> {
+        Some(format!("{}{}", self.account, self.server_path(dir)))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    /// Bez živého serveru testujeme jen překlad cest (formát se shoduje
-    /// s FTP obálkou). SftpFs::connect vyžaduje reálný SSH server.
+    use super::*;
+    use std::io::{Read, Write};
+
+    /// Bez živého serveru: převod atributů ze serveru na položku výpisu
+    /// (druh podle typu souboru v právech, jen pro čtení, skryté jméno).
     #[test]
-    fn test_server_path_format() {
-        let home = "/home/user";
-        let path = crate::vfs::normalize_vfs_path("/data/x.txt");
-        assert_eq!(format!("{}{}", home, path), "/home/user/data/x.txt");
+    fn test_stat_to_item() {
+        let stat = |perm: u32| FileStat { size: Some(5), uid: None, gid: None, perm: Some(perm), atime: None, mtime: Some(7) };
+        let file = stat_to_item("a.txt", &stat(0o100644)).unwrap();
+        assert_eq!((file.kind, file.size, file.mtime, file.readonly), (VfsItemKind::File, 5, 7, false));
+        assert_eq!(stat_to_item("pod", &stat(0o040755)).unwrap().kind, VfsItemKind::Dir);
+        // Odkaz zůstává odkazem (mazání ho pak nesmí procházet jako adresář).
+        assert_eq!(stat_to_item("odkaz", &stat(0o120777)).unwrap().kind, VfsItemKind::Link);
+        let readonly = stat_to_item(".skryty", &stat(0o100444)).unwrap();
+        assert!(readonly.readonly && readonly.hidden);
+        assert!(stat_to_item("..", &stat(0o040755)).is_none());
     }
 
     // ------------------------------------------------------------------
@@ -548,9 +548,6 @@ mod tests {
     // který nastartuje dočasný sshd na 127.0.0.1 a vygeneruje klíče).
     // Bez proměnných prostředí se přeskočí (#[ignore] + kontrola env).
     // ------------------------------------------------------------------
-
-    use super::*;
-    use std::io::{Read, Write};
 
     /// Parametry testovacího serveru z prostředí (port, adresář s klíči, uživatel).
     fn server() -> Option<(u16, PathBuf, String)> {
@@ -582,8 +579,29 @@ mod tests {
         let mut text = String::new();
         fs.open_read(&file).unwrap().read_to_string(&mut text).unwrap();
         assert_eq!(text, format!("obsah {}", tag));
+        // Přejmenování: na volné jméno projde, existující položku nenahradí.
+        fs.rename(&file, "jiny.txt").unwrap();
+        assert_eq!(fs.rename(&relative, &relative[1..]).unwrap_err(), SalError::AlreadyExists);
+        // Stejný adresář má stejnou identitu pro každé připojení účtu.
+        assert!(fs.dir_identity(&relative).unwrap().starts_with("sftp://"));
+        // Odkaz na adresář uvnitř mazaného stromu: smaže se jen odkaz, obsah
+        // adresáře, na který ukazuje, musí zůstat.
+        let target = format!("{}-cil", relative);
+        fs.mkdir(&target).unwrap();
+        let kept = format!("{}/zustane.txt", target);
+        let mut writer = fs.open_write(&kept, None).unwrap();
+        writer.write_all(b"x").unwrap();
+        writer.finish().unwrap();
+        drop(writer);
+        fs.lock()
+            .unwrap()
+            .sftp
+            .symlink(Path::new(&fs.server_path(&target)), Path::new(&fs.server_path(&format!("{}/odkaz", relative))))
+            .unwrap();
         fs.delete(&relative, true).unwrap();
         assert!(!fs.exists(&relative).unwrap_or(true), "pracovní adresář testu zůstal");
+        assert!(fs.exists(&kept).unwrap(), "mazání odkazu smazalo obsah cílového adresáře");
+        fs.delete(&target, true).unwrap();
     }
 
     #[test]

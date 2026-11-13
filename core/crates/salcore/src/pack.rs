@@ -17,7 +17,7 @@ use zip::unstable::write::FileOptionsExt;
 use zip::write::{FileOptions, SimpleFileOptions};
 use zip::{AesMode, ZipWriter};
 
-use crate::error::SalResult;
+use crate::error::{SalError, SalResult};
 use crate::ops::{ProgressCallback, TransferStats};
 use crate::vfs::{join_path, Vfs, VfsItemKind};
 
@@ -60,7 +60,7 @@ pub fn pack_zip_encrypted(
     // Kontrola hesla před vytvořením cílového souboru.
     match encryption {
         PackEncryption::Aes256(password) | PackEncryption::ZipCrypto(password) if password.is_empty() => {
-            return Err(crate::error::SalError::Io("Heslo pro šifrovaný archiv nesmí být prázdné.".to_string()));
+            return Err(SalError::Io("Heslo pro šifrovaný archiv nesmí být prázdné.".to_string()));
         }
         _ => {}
     }
@@ -72,7 +72,7 @@ pub fn pack_zip_encrypted(
         0
     };
     if !progress.on_progress(0, total_bytes) {
-        return Err(crate::error::SalError::Cancelled);
+        return Err(SalError::Cancelled);
     }
 
     let file = std::fs::File::create(dest)?;
@@ -168,7 +168,7 @@ fn pack_item(
         context.transferred += read as u64;
         file_bytes += read as u64;
         if !context.progress.on_progress(context.transferred, context.total_bytes) {
-            return Err(crate::error::SalError::Cancelled);
+            return Err(SalError::Cancelled);
         }
     }
     context.stats.files += 1;
@@ -179,7 +179,6 @@ fn pack_item(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::SalError;
     use crate::local::LocalFs;
     use crate::ops::NoProgress;
     use crate::zipfs::ZipFs;

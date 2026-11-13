@@ -12,7 +12,7 @@
 //! Oddělovač `|` rozděluje inkluzivní a exkluzivní část: vše za ním jsou
 //! masky negativní (shoda s nimi znamená zamítnutí jména).
 //!
-//! Zvláštní případy kvěli kompatibilitě s zvyklostmi z DOS/Salamandera:
+//! Zvláštní případy kvůli kompatibilitě se zvyklostmi z DOS/Salamandera:
 //! - `*` i `*.*` znamená vše
 //! - maska končící tečkou (např. `*.`) matchne jen jména bez přípony
 //!

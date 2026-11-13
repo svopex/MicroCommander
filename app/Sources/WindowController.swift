@@ -1133,10 +1133,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                                      message: "\(move ? "Přesunout" : "Kopírovat") \(what) do:",
                                      value: target.location.path, okTitle: move ? "Přesunout" : "Kopírovat") else { return }
         let dst = target.location.vfs
-        var dstDir = typed.hasPrefix("/") ? normalizePath(typed) : normalizePath(joinPath(target.location.path, typed))
-        if dst.kind == SAL_VFS_LOCAL, typed.hasPrefix("~") {
-            dstDir = (typed as NSString).expandingTildeInPath
-        }
+        let dstDir = resolveTypedPath(typed, in: target.location)
         // Neexistující cíl: nabídnout vytvoření adresáře.
         if !dst.isDir(dstDir) {
             guard confirm(title: verb, text: "Cílový adresář \(dstDir) neexistuje. Vytvořit?", okTitle: "Vytvořit") else { return }
@@ -1250,7 +1247,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let names = items.map(\.name)
         let dir = panel.location.path
         let vfs = panel.location.vfs
-        beginProgress(title: "Mazání") { state in
+        beginProgress(title: "Mazání", unit: .items) { state in
             try coreDelete(vfs: vfs, dir: dir, names: names, state: state)
         } completion: { [weak self] result in
             self?.endProgress()
@@ -1306,7 +1303,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         AttributesDialog.run(on: window, items: items, firstPath: paths[0]) { [weak self] changes in
             guard let self, let changes else { return }
-            self.beginProgress(title: "Změna atributů") { state in
+            self.beginProgress(title: "Změna atributů", unit: .items) { state in
                 try applyAttributeChanges(changes, to: paths, state: state)
             } completion: { [weak self] result in
                 guard let self else { return }
@@ -1336,6 +1333,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 try vfs.rename(dir: dir, oldName: item.name, newName: newName)
                 panel.focus(name: newName)
                 panel.reload()
+            } catch let error as CoreError where error.isExistsConflict {
+                // Jádro existující položku téhož jména nenahradí.
+                self?.showAlert(title: "Přejmenovat", text: "Položka „\(newName)“ v tomto adresáři už existuje.")
             } catch {
                 self?.showAlert(title: "Přejmenovat", text: error.localizedDescription)
             }
@@ -1475,7 +1475,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         guard let typed = promptText(title: "Rozbalit", message: "Rozbalit „\(item.name)“ do:",
                                      value: target.location.path, okTitle: "Rozbalit") else { return }
         let dst = target.location.vfs
-        let dstDir = typed.hasPrefix("/") ? normalizePath(typed) : normalizePath(joinPath(target.location.path, typed))
+        let dstDir = resolveTypedPath(typed, in: target.location)
         let names: [String]
         do {
             names = try archive.list("/").map(\.name)
@@ -1519,7 +1519,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let vfs = panel.location.vfs
         let dir = panel.location.path
         let totals = SizeTotals()
-        beginProgress(title: "Počítám velikost") { state in
+        beginProgress(title: "Počítám velikost", unit: .items) { state in
             for item in items {
                 if item.isDir {
                     totals.add(dirs: 1)
@@ -1771,12 +1771,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     // MARK: - Dialogy operací
 
     /// Otevře progress dialog a spustí operaci na pozadí.
-    /// - Parameter dismissOnCancel: Zrušit dialog hned zavře a výsledek operace
-    ///   (doběhne na pozadí) se zahodí – pro operace, které zrušit nejdou (připojení).
-    func beginProgress(title: String, dismissOnCancel: Bool = false,
+    /// - Parameters:
+    ///   - title: titulek dialogu
+    ///   - unit: v čem operace hlásí průběh (bajty přenosu / zpracované položky)
+    ///   - dismissOnCancel: Zrušit dialog hned zavře a výsledek operace
+    ///     (doběhne na pozadí) se zahodí – pro operace, které zrušit nejdou (připojení)
+    ///   - operation: operace na pozadí (dostane stav pro průběh a zrušení)
+    ///   - completion: výsledek operace na hlavním vlákně
+    func beginProgress(title: String, unit: ProgressUnit = .bytes, dismissOnCancel: Bool = false,
                        operation: @escaping (ProgressState) throws -> Void,
                        completion: @escaping (Result<Void, Error>) -> Void) {
-        let dialog = ProgressDialog(title: title, parentWindow: window)
+        let dialog = ProgressDialog(title: title, unit: unit, parentWindow: window)
         progressDialog = dialog
         dialog.begin()
         let state = dialog.state

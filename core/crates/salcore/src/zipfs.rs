@@ -8,11 +8,12 @@
 //! šifrovaná), heslo se vyžaduje až při čtení obsahu šifrované položky –
 //! bez hesla vrací jádro `PasswordRequired`, s chybným `InvalidPassword`.
 //!
-//! Archiv se otevírá pro každou operaci znovu ze souboru – ZIP je
-//! seek-based formát, takže je to levné a umožňuje to číst více souborů
-//! bez držení globálního zámku. Streamování obsahu používá self-referenční
-//! strukturu (ZipFile půjčuje data z ZipArchive), řešenou bezpečným
-//! rozšířením lifetime na heap-allocovaném archivu.
+//! Metadata položek (jméno, velikost, čas, šifrování) se načtou jednou při
+//! otevření do indexu – výpis adresáře ani test existence pak archiv nečtou.
+//! Pro čtení obsahu se archiv otevírá znovu ze souboru – ZIP je seek-based
+//! formát a více souborů tak lze číst bez globálního zámku. Streamování
+//! obsahu používá self-referenční strukturu (ZipFile půjčuje data
+//! z ZipArchive), řešenou rozšířením lifetime na heap-allocovaném archivu.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -23,10 +24,9 @@ use std::sync::Mutex;
 use zip::read::{ZipArchive, ZipFile};
 use zip::result::ZipError;
 
+use crate::archive::{self, canonical_entry_name};
 use crate::error::{SalError, SalResult};
-use crate::vfs::{
-    normalize_vfs_path, Vfs, VfsItem, VfsItemKind, VfsKind, VfsReadStream, VfsWriteStream,
-};
+use crate::vfs::{Vfs, VfsItem, VfsItemKind, VfsKind, VfsReadStream, VfsWriteStream};
 
 // Konverze chyb ZIP archivu na jednotný typ jádra; chybějící položka se
 // hlásí jako NotFound (UI podle ní reaguje), zbylé jako text IO chyby.
@@ -43,43 +43,63 @@ impl From<ZipError> for SalError {
     }
 }
 
+/// Jedna položka indexu archivu (metadata z centrálního adresáře).
+struct ZipIndexEntry {
+    /// Pořadové číslo položky v archivu – podle něj se otevírá obsah
+    /// (nezávisle na tom, jak je jméno v archivu zapsané).
+    archive_index: usize,
+    size: u64,
+    mtime: i64,
+    kind: VfsItemKind,
+    /// Položka je zašifrovaná (ZipCrypto nebo AES).
+    encrypted: bool,
+}
+
 /// VFS nad ZIP archivem na disku.
 pub struct ZipFs {
     /// Cesta k souboru archivu na lokálním disku.
     archive_path: PathBuf,
+    /// Index položek podle kanonického jména (sestavený při otevření).
+    index: BTreeMap<String, ZipIndexEntry>,
     /// Heslo pro šifrované položky (zadává UI, platí pro celý archiv).
     password: Mutex<Option<String>>,
     /// Archiv obsahuje alespoň jednu šifrovanou položku.
     any_encrypted: bool,
 }
 
-/// Převede cestu VFS na prefix jmen v archivu (kořen = prázdný prefix).
-/// Veřejná, protože stejnou konvenci jmen používá i TAR implementace.
-pub fn inner_prefix_of(path: &str) -> String {
-    let path = normalize_vfs_path(path);
-    if path == "/" {
-        String::new()
-    } else {
-        format!("{}/", path.trim_start_matches('/'))
-    }
-}
-
 impl ZipFs {
-    /// Otevře ZIP archiv (bez čtení obsahu – jen ověření hlavičky).
+    /// Otevře ZIP archiv a sestaví index položek (obsah souborů se nečte).
     pub fn open(archive_path: &Path) -> SalResult<ZipFs> {
         // Ověření, že jde o čitelný ZIP; selže u poškozených souborů hned.
         let file = File::open(archive_path)?;
         let mut archive = ZipArchive::new(file)?;
-        // Zjištění šifrování z metadat (raw přístup nic nedešifruje).
+        let mut index = BTreeMap::new();
         let mut any_encrypted = false;
-        for index in 0..archive.len() {
-            if archive.by_index_raw(index)?.encrypted() {
-                any_encrypted = true;
-                break;
+        for archive_index in 0..archive.len() {
+            // Raw přístup čte jen metadata – funguje i u šifrovaných položek bez hesla.
+            let file = archive.by_index_raw(archive_index)?;
+            let name = canonical_entry_name(file.name());
+            if name.is_empty() {
+                // Záznam samotného kořene archivu („./“) není položka výpisu.
+                continue;
             }
+            // Adresář má v archivu jméno zakončené lomítkem a nenese data.
+            let is_dir = file.is_dir();
+            let encrypted = file.encrypted() && !is_dir;
+            any_encrypted |= encrypted;
+            let entry = ZipIndexEntry {
+                archive_index,
+                size: if is_dir { 0 } else { file.size() },
+                mtime: zip_time_to_unix(file.last_modified().unwrap_or_default()),
+                kind: if is_dir { VfsItemKind::Dir } else { VfsItemKind::File },
+                encrypted,
+            };
+            // U duplicitních jmen platí poslední záznam (jako při rozbalování).
+            index.insert(name, entry);
         }
         Ok(ZipFs {
             archive_path: archive_path.to_path_buf(),
+            index,
             password: Mutex::new(None),
             any_encrypted,
         })
@@ -89,13 +109,6 @@ impl ZipFs {
     fn current_password(&self) -> Option<String> {
         self.password.lock().ok().and_then(|guard| guard.clone())
     }
-
-    /// Otevře novou instanci archivu pro sekvenční operaci (list apod.).
-    fn open_archive(&self) -> SalResult<ZipArchive<File>> {
-        let file = File::open(&self.archive_path)?;
-        Ok(ZipArchive::new(file)?)
-    }
-
 }
 
 /// Stream pro čtení souboru z ZIP archivu.
@@ -111,14 +124,12 @@ pub struct ZipReadStream {
 }
 
 impl ZipReadStream {
-    /// Otevře soubor `inner_path` z archivu na disku pro streamované čtení.
-    /// Šifrovaná položka se dešifruje zadaným heslem (bez hesla → PasswordRequired).
-    fn open(archive_path: &Path, inner_path: &str, password: Option<&str>) -> SalResult<ZipReadStream> {
+    /// Otevře položku číslo `index` z archivu na disku pro streamované čtení.
+    /// Šifrovaná položka (`encrypted`, známo z indexu) se dešifruje zadaným
+    /// heslem; bez hesla → PasswordRequired.
+    fn open(archive_path: &Path, index: usize, encrypted: bool, password: Option<&str>) -> SalResult<ZipReadStream> {
         let file = File::open(archive_path)?;
         let mut archive = Box::new(ZipArchive::new(file)?);
-        let index = archive
-            .index_for_name(inner_path)
-            .ok_or_else(|| SalError::NotFound)?;
 
         // SAFETY: Rozšíření lifetime je bezpečné, protože:
         // 1) archiv je vlastněn touto strukturou (Box) a jeho adresa na hromadě
@@ -129,7 +140,6 @@ impl ZipReadStream {
             let archive_ref: &'static mut ZipArchive<File> =
                 &mut *(&mut *archive as *mut ZipArchive<File>);
             // Heslo předáme jen šifrované položce; nešifrovanou čteme normálně.
-            let encrypted = archive_ref.by_index_raw(index)?.encrypted();
             match (encrypted, password) {
                 (true, Some(password)) => archive_ref.by_index_decrypt(index, password.as_bytes())?,
                 (true, None) => return Err(SalError::PasswordRequired),
@@ -188,67 +198,29 @@ impl Vfs for ZipFs {
     }
 
     fn list(&self, path: &str) -> SalResult<Vec<VfsItem>> {
-        let prefix = inner_prefix_of(path);
-        let mut archive = self.open_archive()?;
-        // Mapa podle jména řeší duplikátní záznamy adresářů v archivu
-        // (adresář může být zapsán jako položka i jen implikovaný cestou).
-        let mut items: BTreeMap<String, VfsItem> = BTreeMap::new();
-
-        for index in 0..archive.len() {
-            // Raw přístup čte jen metadata – funguje i u šifrovaných položek bez hesla.
-            let file = archive.by_index_raw(index)?;
-            // mangled_name vrací bezpečné jméno (ochrana před ../ útoky).
-            let raw_name = file.mangled_name().to_string_lossy().replace('\\', "/");
-            let Some(rest) = raw_name.strip_prefix(&prefix) else {
-                continue;
-            };
-            if rest.is_empty() {
-                // Položka odpovídá přímo prohledávanému adresáři.
-                continue;
-            }
-            match rest.find('/') {
-                Some(slash_index) => {
-                    // Cesta vede hlouběji – přímý potomek je adresář.
-                    let dir_name = &rest[..slash_index];
-                    items.entry(dir_name.to_string()).or_insert_with(|| VfsItem {
-                        name: dir_name.to_string(),
-                        size: 0,
-                        mtime: 0,
-                        kind: VfsItemKind::Dir,
-                        hidden: dir_name.starts_with('.'),
-                        readonly: true,
-                        encrypted: false,
-                    });
-                }
-                None => {
-                    let name = rest.to_string();
-                    let hidden = name.starts_with('.');
-                    let encrypted = file.encrypted();
-                    items.insert(
-                        name.clone(),
-                        VfsItem {
-                            name,
-                            size: file.size(),
-                            mtime: zip_time_to_unix(
-                                file.last_modified().unwrap_or_default(),
-                            ),
-                            kind: VfsItemKind::File,
-                            hidden,
-                            readonly: true,
-                            encrypted,
-                        },
-                    );
-                }
-            }
-        }
-        Ok(items.into_values().collect())
+        Ok(archive::list_dir(&self.index, path, |name, entry| VfsItem {
+            name: name.to_string(),
+            size: entry.size,
+            mtime: entry.mtime,
+            kind: entry.kind,
+            hidden: name.starts_with('.'),
+            readonly: true,
+            encrypted: entry.encrypted,
+        }))
     }
 
     fn open_read(&self, path: &str) -> SalResult<Box<dyn VfsReadStream>> {
-        let inner = normalize_vfs_path(path);
-        let inner = inner.trim_start_matches('/');
+        // Číst lze jen soubor; adresář (i implikovaný) obsah nemá.
+        let entry = archive::find_entry(&self.index, path)
+            .filter(|entry| entry.kind == VfsItemKind::File)
+            .ok_or(SalError::NotFound)?;
         let password = self.current_password();
-        Ok(Box::new(ZipReadStream::open(&self.archive_path, inner, password.as_deref())?))
+        Ok(Box::new(ZipReadStream::open(
+            &self.archive_path,
+            entry.archive_index,
+            entry.encrypted,
+            password.as_deref(),
+        )?))
     }
 
     fn open_write(&self, _path: &str, _size_hint: Option<u64>) -> SalResult<Box<dyn VfsWriteStream>> {
@@ -276,34 +248,15 @@ impl Vfs for ZipFs {
     }
 
     fn exists(&self, path: &str) -> SalResult<bool> {
-        // Existenci řešíme výpisem nadřazeného adresáře – bez potřeby
-        // dalšího API nad archivem.
-        let (parent, name) = crate::vfs::split_path(path);
-        if name.is_empty() {
-            return Ok(true);
-        }
-        let items = self.list(&parent)?;
-        Ok(items.iter().any(|item| item.name == name))
+        Ok(archive::exists(&self.index, path))
     }
 
     fn is_dir(&self, path: &str) -> SalResult<bool> {
-        let (parent, name) = crate::vfs::split_path(path);
-        if name.is_empty() {
-            return Ok(true);
-        }
-        let items = self.list(&parent)?;
-        Ok(items
-            .iter()
-            .any(|item| item.name == name && item.kind == VfsItemKind::Dir))
+        Ok(archive::is_dir(&self.index, path, |entry| entry.kind == VfsItemKind::Dir))
     }
 
     fn writable(&self) -> bool {
         false
-    }
-
-    fn supports_size_scan(&self) -> bool {
-        // Velikosti máme z centrálního adresáře, scan je levný.
-        true
     }
 
     fn set_password(&self, password: Option<&str>) -> bool {
@@ -321,7 +274,6 @@ impl Vfs for ZipFs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vfs::join_path;
     use std::fs;
     use std::io::Write;
 
@@ -340,6 +292,46 @@ mod tests {
         writer.write_all(b"obsah b").unwrap();
         writer.finish().unwrap();
         (base, zip_path)
+    }
+
+    /// Archiv s vlastními záznamy adresářů (tak je píše většina programů
+    /// i `pack_zip`): adresář musí být ve výpisu adresářem, i prázdný,
+    /// a jména zapsaná s „./“ nebo zpětnými lomítky se čtou.
+    #[test]
+    fn test_zip_directory_entries() {
+        let base = std::env::temp_dir().join(format!("salcore-zipdirs-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let zip_path = base.join("dirs.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&zip_path).unwrap());
+        let options: zip::write::SimpleFileOptions = Default::default();
+        writer.add_directory("pod", options).unwrap();
+        writer.start_file("pod/b.txt", options).unwrap();
+        writer.write_all(b"obsah b").unwrap();
+        writer.add_directory("prazdny", options).unwrap();
+        writer.start_file("./tecka/c.txt", options).unwrap();
+        writer.write_all(b"obsah c").unwrap();
+        writer.start_file("win\\d.txt", options).unwrap();
+        writer.write_all(b"obsah d").unwrap();
+        writer.finish().unwrap();
+
+        let vfs = ZipFs::open(&zip_path).unwrap();
+        let root: Vec<(String, VfsItemKind)> =
+            vfs.list("/").unwrap().into_iter().map(|item| (item.name, item.kind)).collect();
+        let dir = |name: &str| (name.to_string(), VfsItemKind::Dir);
+        assert_eq!(root, vec![dir("pod"), dir("prazdny"), dir("tecka"), dir("win")]);
+        assert!(vfs.is_dir("/prazdny").unwrap());
+        assert!(vfs.list("/prazdny").unwrap().is_empty());
+        assert!(vfs.exists("/tecka/c.txt").unwrap());
+        assert!(!vfs.exists("/neni").unwrap());
+        // Adresář nelze číst jako soubor.
+        assert!(vfs.open_read("/pod").is_err());
+        for (path, expected) in [("/pod/b.txt", "obsah b"), ("/tecka/c.txt", "obsah c"), ("/win/d.txt", "obsah d")] {
+            let mut content = String::new();
+            vfs.open_read(path).unwrap().read_to_string(&mut content).unwrap();
+            assert_eq!(content, expected);
+        }
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
@@ -371,7 +363,6 @@ mod tests {
         assert!(!vfs.writable());
         assert!(vfs.mkdir("/novy").is_err());
 
-        let _ = join_path("/", "x");
         fs::remove_dir_all(&base).unwrap();
     }
 }

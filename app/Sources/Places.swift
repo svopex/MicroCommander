@@ -241,11 +241,15 @@ enum PlaceStore {
         saveFolders(folders)
     }
 
-    /// Odebere vlastní adresář (a jeho příznak skrytí, pokud byl skrytý).
+    /// Odebere vlastní adresář (i jeho příznak skrytí a zkratku ⌘0–⌘9, aby
+    /// číslice nezůstala obsazená místem, které už neexistuje).
     static func removeFolder(path: String) {
         let key = Place.key(folder: path)
         if hiddenKeys.contains(key) {
             setHidden(key, false)
+        }
+        if shortcuts[key] != nil {
+            setShortcut(key, digit: nil)
         }
         saveFolders(customFolders().filter { $0.path != path })
     }

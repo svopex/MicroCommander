@@ -1,9 +1,10 @@
 /*
  * MicroCommander jádro – C ABI pro tenké Swift/AppKit UI.
  *
- * Všechny funkce jsou thread-safe v tom smyslu, že handle VFS může používat
- * jedno vlákno (UI volá operace z pracovních front). Handle je vlastněný
- * ukazatel na Box<dyn Vfs>; uvolňuje se sal_vfs_close.
+ * Handle VFS lze používat z více vláken zároveň (UI vypisuje panel na pozadí
+ * i během běžící operace) – jádro si přístup ke sdílenému stavu zamyká samo,
+ * příkazy nad jedním FTP/SFTP spojením se serializují. Uvolnit handle
+ * (sal_vfs_close) se smí až poté, co ho žádné vlákno nepoužívá.
  *
  * Konvence chyb: návratový kód 0 = úspěch (SAL_OK), 1 = zrušeno uživatelem,
  * záporné hodnoty = chyba. Text chyby se zapisuje do bufferu `err`.
@@ -99,7 +100,8 @@ SalVfs *sal_connect_sftp(const char *host, uint16_t port, const char *user,
                          const char *password, double timeout_sec, char *err, size_t err_len);
 
 /* Připojení SFTP soukromým klíčem ze souboru (OpenSSH/PEM: ed25519, ECDSA, RSA);
- * veřejný klíč se hledá jako <klíč>.pub; passphrase NULL nebo "" = klíč bez hesla. */
+ * veřejný klíč se odvodí ze soukromého (soubor .pub není potřeba);
+ * passphrase NULL nebo "" = klíč bez hesla. */
 SalVfs *sal_connect_sftp_key(const char *host, uint16_t port, const char *user,
                              const char *private_key_path, const char *passphrase,
                              double timeout_sec, char *err, size_t err_len);
@@ -130,7 +132,11 @@ int32_t sal_vfs_exists(SalVfs *vfs, const char *path, int32_t *out, char *err, s
 /* Volné místo v bajtech; -1 = nelze zjistit. */
 int64_t sal_vfs_free_space(SalVfs *vfs, const char *path);
 
-/* Kopírování / přesun vybraných jmen z adresáře do adresáře (rekurzivně). */
+/* Kopírování / přesun vybraných jmen z adresáře do adresáře (rekurzivně).
+ * Existující adresáře se slučují, existující soubory řeší `overwrite`
+ * (SAL_OVERWRITE_ASK = skončit kódem SAL_ERR_EXISTS). Přenos do téhož adresáře
+ * nebo adresáře do sebe sama je chyba. Při přesunu zůstávají ve zdroji
+ * položky přeskočené přes SAL_OVERWRITE_SKIP. */
 int32_t sal_copy(SalVfs *src, const char *src_dir, const char *const *names, size_t count,
                  SalVfs *dst, const char *dst_dir, int32_t overwrite,
                  const SalProgress *progress, char *err, size_t err_len);
@@ -145,7 +151,8 @@ int32_t sal_delete(SalVfs *vfs, const char *dir, const char *const *names, size_
 /* Vytvoření adresáře (nevnořený). */
 int32_t sal_mkdir(SalVfs *vfs, const char *path, char *err, size_t err_len);
 
-/* Přejmenování položky v adresáři (jen jméno, ne cestu). */
+/* Přejmenování položky v adresáři (jen jméno, ne cestu). Existující jinou
+ * položku téhož jména nenahradí – vrátí SAL_ERR_EXISTS. */
 int32_t sal_rename(SalVfs *vfs, const char *dir, const char *old_name, const char *new_name,
                    char *err, size_t err_len);
 
@@ -175,7 +182,8 @@ int32_t sal_find_ex(SalVfs *vfs, const char *root, const char *mask, uint32_t fl
                     SalFoundFn found, SalFindDirFn dir_cb, void *user, uint64_t *errors,
                     char *err, size_t err_len);
 
-/* Detekce archivu podle obsahu souboru: 0 = není, SAL_VFS_ZIP, SAL_VFS_TAR. */
+/* Detekce archivu podle obsahu souboru: 0 = není, SAL_VFS_ZIP, SAL_VFS_TAR
+ * (TAR i TAR.GZ; samostatný gzip bez TAR uvnitř archiv není). */
 int32_t sal_probe_archive(const char *path);
 
 /* Vytvoření ZIP archivu z vybraných položek libovolného VFS. */

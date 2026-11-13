@@ -6,6 +6,7 @@
 //! Cesty VFS jsou absolutní s lomítky od kořene (`/Users/x/…`), kořen
 //! lze při vytvoření omezit (např. na domovský adresář sandboxované aplikace).
 
+use std::ffi::CString;
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -42,7 +43,7 @@ impl LocalFs {
     }
 
     /// Převede cestu VFS na cestu na disku (spojení s kořenem).
-    fn disk_path(&self, vfs_path: &str) -> PathBuf {
+    pub(crate) fn disk_path(&self, vfs_path: &str) -> PathBuf {
         let path = normalize_vfs_path(vfs_path);
         // Odstranění úvodního lomítka a napojení za kořen.
         let relative = path.trim_start_matches('/');
@@ -63,9 +64,21 @@ impl LocalFs {
         }
     }
 
-    /// Mají oba lokální VFS stejný kořen? (Podmínka pro rychlý přesun rename.)
-    pub fn same_root(&self, other: &LocalFs) -> bool {
-        self.root == other.root
+    /// Leží adresář `dir` na stejném svazku jako adresář `other_dir` druhého
+    /// lokálního VFS? (Podmínka přesunu přejmenováním; nečitelný adresář = ne.)
+    pub fn same_device(&self, dir: &str, other: &LocalFs, other_dir: &str) -> bool {
+        use std::os::unix::fs::MetadataExt;
+        match (fs::metadata(self.disk_path(dir)), fs::metadata(other.disk_path(other_dir))) {
+            (Ok(first), Ok(second)) => first.dev() == second.dev(),
+            _ => false,
+        }
+    }
+
+    /// Přesune položku `path` přejmenováním na cestu `new_path` v lokálním VFS
+    /// `other` (i do jiného adresáře). Existující cílový soubor se nahradí;
+    /// mezi svazky selže chybou EXDEV.
+    pub fn rename_to(&self, path: &str, other: &LocalFs, new_path: &str) -> io::Result<()> {
+        fs::rename(self.disk_path(path), other.disk_path(new_path))
     }
 }
 
@@ -170,7 +183,7 @@ impl Vfs for LocalFs {
                 Err(_) => continue,
             };
             let file_name = entry.file_name().to_string_lossy().to_string();
-            match std::fs::symlink_metadata(entry.path()) {
+            match fs::symlink_metadata(entry.path()) {
                 Ok(metadata) => items.push(metadata_to_item(&file_name, &metadata)),
                 Err(_) => continue,
             }
@@ -212,16 +225,28 @@ impl Vfs for LocalFs {
     }
 
     fn rename(&self, path: &str, new_name: &str) -> SalResult<()> {
+        use std::os::unix::fs::MetadataExt;
         // Přejmenování jen změní jméno, adresář zůstává stejný.
         let (dir, _) = crate::vfs::split_path(path);
         let old_path = self.disk_path(path);
         let new_path = self.disk_path(&join_path(&dir, new_name));
+        // fs::rename by existující cíl tiše nahradilo. Výjimkou je tatáž
+        // položka pod novým jménem (změna velikosti písmen na disku, který
+        // ji nerozlišuje) – pozná se podle shodného zařízení a inode.
+        if let Ok(target) = fs::symlink_metadata(&new_path) {
+            let source = fs::symlink_metadata(&old_path)?;
+            if (source.dev(), source.ino()) != (target.dev(), target.ino()) {
+                return Err(SalError::AlreadyExists);
+            }
+        }
         fs::rename(old_path, new_path)?;
         Ok(())
     }
 
     fn exists(&self, path: &str) -> SalResult<bool> {
-        Ok(self.disk_path(path).exists())
+        // Položka sama, ne cíl odkazu: i odkaz vedoucí nikam ve výpisu je
+        // a při kopírování znamená konflikt.
+        Ok(fs::symlink_metadata(self.disk_path(path)).is_ok())
     }
 
     fn is_dir(&self, path: &str) -> SalResult<bool> {
@@ -231,14 +256,12 @@ impl Vfs for LocalFs {
 
     fn free_space(&self, path: &str) -> SalResult<Option<u64>> {
         // statfs na macOS/Linux; volné místo = bloky dostupné běžnému uživateli.
-        let path_bytes = self.disk_path(path);
-        let mut stats: libc::statfs = unsafe { std::mem::zeroed() };
-        let result = unsafe {
-            libc::statfs(
-                path_bytes.as_os_str().as_encoded_bytes().as_ptr() as *const libc::c_char,
-                &mut stats,
-            )
+        // Cesta musí být C řetězec ukončený NUL (cesta s vnitřním NUL neexistuje).
+        let Ok(disk_path) = CString::new(self.disk_path(path).as_os_str().as_encoded_bytes()) else {
+            return Ok(None);
         };
+        let mut stats: libc::statfs = unsafe { std::mem::zeroed() };
+        let result = unsafe { libc::statfs(disk_path.as_ptr(), &mut stats) };
         if result != 0 {
             return Ok(None);
         }
@@ -248,6 +271,14 @@ impl Vfs for LocalFs {
 
     fn as_local(&self) -> Option<&LocalFs> {
         Some(self)
+    }
+
+    fn dir_identity(&self, dir: &str) -> Option<String> {
+        // Skutečná cesta s rozvinutými odkazy: tentýž adresář může být dosažitelný
+        // víc cestami (např. `/tmp` a `/private/tmp`) i přes VFS s jiným kořenem.
+        // Neexistující adresář rozvinout nejde – zůstane zadaná cesta.
+        let disk_path = self.disk_path(dir);
+        Some(fs::canonicalize(&disk_path).unwrap_or(disk_path).to_string_lossy().into_owned())
     }
 }
 
@@ -302,6 +333,12 @@ mod tests {
         assert!(fs_impl.is_dir("/dir2").unwrap());
         fs_impl.rename("/novy.txt", "prejmenovany.txt").unwrap();
         assert!(!fs_impl.exists("/novy.txt").unwrap());
+        // Přejmenování na jméno jiné existující položky ji nesmí nahradit;
+        // změna jen velikosti písmen téže položky projde.
+        assert_eq!(fs_impl.rename("/prejmenovany.txt", "a.txt").unwrap_err(), SalError::AlreadyExists);
+        assert_eq!(fs::read(dir.join("a.txt")).unwrap(), b"obsah a");
+        fs_impl.rename("/prejmenovany.txt", "PREJMENOVANY.txt").unwrap();
+        fs_impl.rename("/PREJMENOVANY.txt", "prejmenovany.txt").unwrap();
         fs_impl.delete("/prejmenovany.txt", false).unwrap();
         fs_impl.delete("/sub", true).unwrap();
         let items = fs_impl.list("/").unwrap();

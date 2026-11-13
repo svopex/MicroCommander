@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Open Samandarin Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// Dialogy: průběh operace s cancel, správa a připojení FTP/SFTP serverů, hledání.
+// Dialogy: průběh operace se zrušením, správa a připojení FTP/SFTP serverů,
+// interní prohlížeč (F3), volby šifrování při balení do ZIP a nabídka disků.
 
 import AppKit
 
@@ -12,9 +13,16 @@ final class ProgressDialog: NSWindowController {
     private let bar = NSProgressIndicator()
     private let label = NSTextField(labelWithString: "")
     private let parent: NSWindow?
+    /// Jednotka hlášeného průběhu (bajty / položky) pro text pod ukazatelem.
+    private let unit: ProgressUnit
 
-    init(title: String, parentWindow: NSWindow?) {
+    /// - Parameters:
+    ///   - title: titulek a výchozí text dialogu
+    ///   - unit: v čem operace hlásí průběh
+    ///   - parentWindow: okno, nad kterým se dialog zobrazí jako sheet
+    init(title: String, unit: ProgressUnit = .bytes, parentWindow: NSWindow?) {
         parent = parentWindow
+        self.unit = unit
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 110),
             styleMask: [.titled],
@@ -78,7 +86,8 @@ final class ProgressDialog: NSWindowController {
         window?.orderOut(nil)
     }
 
-    /// Aktualizuje ukazatel podle stavu operace.
+    /// Aktualizuje ukazatel podle stavu operace: se známým celkem procenta,
+    /// jinak jen dosud zpracované množství (v bajtech nebo položkách).
     private func refresh() {
         let snapshot = state.snapshot()
         if snapshot.total > 0 {
@@ -88,9 +97,17 @@ final class ProgressDialog: NSWindowController {
             }
             let percent = Double(snapshot.done) / Double(snapshot.total) * 100
             bar.doubleValue = percent
-            label.stringValue = "\(formatSize(snapshot.done)) z \(formatSize(snapshot.total)) (\(Int(percent)) %)"
+            switch unit {
+            case .bytes:
+                label.stringValue = "\(formatSize(snapshot.done)) z \(formatSize(snapshot.total)) (\(Int(percent)) %)"
+            case .items:
+                label.stringValue = "Položka \(min(snapshot.done + 1, snapshot.total)) z \(snapshot.total)"
+            }
         } else if snapshot.done > 0 {
-            label.stringValue = "Přeneseno \(formatSize(snapshot.done))"
+            switch unit {
+            case .bytes: label.stringValue = "Přeneseno \(formatSize(snapshot.done))"
+            case .items: label.stringValue = "Zpracováno položek: \(formatExactSize(snapshot.done))"
+            }
         }
     }
 
@@ -343,7 +360,6 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         loadForm(row >= 0 ? row : nil)
     }
 
-    /// Vybere server v seznamu a načte ho do formuláře (nil = nic, formulář se zakáže).
     /// Vybere server v seznamu; formulář načte delegát výběru. Pokud se výběr
     /// nezměnil (např. po odebrání zůstal stejný index), načte se ručně.
     private func select(_ index: Int) {
@@ -781,7 +797,9 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
 /// Okno prohlížeče: Escape, F3 a F10 ho zavřou.
 private final class ViewerWindow: NSWindow {
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == KeyCode.escape || event.keyCode == 99 || event.keyCode == 109 {
+        // F3 a F10 podle kódů kláves (KeyCode.functionKeys je číslováno od F1).
+        if event.keyCode == KeyCode.escape || event.keyCode == KeyCode.functionKeys[2]
+            || event.keyCode == KeyCode.functionKeys[9] {
             close()
             return
         }
@@ -899,8 +917,9 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
 
     private var entries: [Entry]
     private let onChoose: (Int) -> Void
-    /// Skupiny přesouvatelných položek (rozsahy indexů, např. disky a servery);
-    /// položka se přesouvá jen v rámci své skupiny, ostatní („FTP/SFTP servery…“) stojí.
+    /// Skupiny přesouvatelných položek (rozsahy indexů; nabídka disků má jednu
+    /// skupinu se všemi místy); položka se přesouvá jen v rámci své skupiny,
+    /// ostatní („FTP/SFTP servery…“) stojí.
     let movableGroups: [Range<Int>]
     /// Přesun položky (z indexu, na index) – volající uloží nové pořadí.
     var onMove: ((Int, Int) -> Void)?

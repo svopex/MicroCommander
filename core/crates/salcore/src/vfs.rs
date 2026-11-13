@@ -98,16 +98,23 @@ impl VfsItem {
 /// Stream pro čtení obsahu souboru z libovolného VFS.
 pub trait VfsReadStream: Read + Send {}
 /// Stream pro zápis obsahu souboru do libovolného VFS.
-/// U FTP/SFTP se vlastní přenos typicky provede až při `close`
-/// (upload nahraného dočasného souboru).
-pub trait VfsWriteStream: Write + Send {}
+pub trait VfsWriteStream: Write + Send {
+    /// Dokončí zápis a potvrdí, že cíl data přijal (u FTP závěrečná odpověď
+    /// serveru, u SFTP zavření souboru). Volá se po zapsání celého obsahu;
+    /// stream zahozený bez `finish` (chyba, zrušení) se jen uzavře.
+    fn finish(&mut self) -> std::io::Result<()> {
+        self.flush()
+    }
+}
 
 /// Společné rozhraní všech souborových systémů.
 ///
 /// Cesty používají vždy lomítka `/` jako oddělovač a absolutní tvar
 /// od kořene daného VFS (`/`, `/sub/adresar/soubor.txt`).
-/// Implementace jsou volány z pracovních vláken UI, proto vyžadujeme `Send`.
-pub trait Vfs: Send {
+/// Jeden VFS používá UI z více vláken zároveň (výpis panelu na pozadí během
+/// běžící operace), proto vyžadujeme `Send + Sync`; implementace si přístup
+/// ke sdílenému stavu (spojení, heslo, dekompresní kurzor) zamykají samy.
+pub trait Vfs: Send + Sync {
     /// Druh souborového systému.
     fn kind(&self) -> VfsKind;
 
@@ -130,7 +137,15 @@ pub trait Vfs: Send {
     /// Smaže soubor nebo (při `recursive`) neprázdný adresář.
     fn delete(&self, path: &str, recursive: bool) -> SalResult<()>;
 
+    /// Smaže položku, jejíž druh volající už zná (z výpisu rodiče). Výchozí
+    /// implementace volá `delete`; vzdálené VFS ji přepisují, aby se kvůli
+    /// druhu položky znovu neptaly serveru.
+    fn delete_known(&self, path: &str, _is_dir: bool, recursive: bool) -> SalResult<()> {
+        self.delete(path, recursive)
+    }
+
     /// Přejmenuje položku `path` na `new_name` (jen jméno, bez cesty).
+    /// Existující jinou položku téhož jména nenahradí – vrátí AlreadyExists.
     fn rename(&self, path: &str, new_name: &str) -> SalResult<()>;
 
     /// Existuje položka na dané cestě?
@@ -153,6 +168,14 @@ pub trait Vfs: Send {
     /// Přímý přístup k lokální implementaci, pokud jím VFS je.
     /// Slouží k optimalizaci přesunu v rámci jednoho disku (rename).
     fn as_local(&self) -> Option<&crate::local::LocalFs> {
+        None
+    }
+
+    /// Identita adresáře `dir` napříč instancemi VFS nad stejným úložištěm
+    /// (dva lokální VFS, dvě připojení k témuž serveru): stejný řetězec =
+    /// tentýž adresář. Podle ní se odmítá přenos do zdrojového adresáře.
+    /// `None` = VFS identitu neumí (archivy); porovnává se pak jen instance.
+    fn dir_identity(&self, _dir: &str) -> Option<String> {
         None
     }
 
@@ -219,6 +242,28 @@ pub fn parent_path(path: &str) -> String {
     }
 }
 
+/// Převede cestu VFS na absolutní cestu na vzdáleném serveru (FTP/SFTP),
+/// kde kořen VFS odpovídá domovskému adresáři `home` (bez koncového lomítka;
+/// domov v kořeni serveru je tedy prázdný řetězec).
+pub fn remote_path(home: &str, vfs_path: &str) -> String {
+    let path = normalize_vfs_path(vfs_path);
+    if path != "/" {
+        format!("{}{}", home, path)
+    } else if home.is_empty() {
+        // Kořen serveru (typicky chroot): prázdnou cestu servery odmítají.
+        "/".to_string()
+    } else {
+        home.to_string()
+    }
+}
+
+/// Převede SystemTime na unixové sekundy (čas před rokem 1970 / neznámý = 0).
+pub fn system_time_to_unix(time: std::time::SystemTime) -> i64 {
+    time.duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,22 +289,13 @@ mod tests {
         assert_eq!(parent_path("/a/b"), "/a");
         assert_eq!(parent_path("/"), "/");
     }
-}
 
-/// Převede cestu VFS na absolutní cestu na vzdáleném serveru (FTP/SFTP),
-/// kde kořen VFS odpovídá domovskému adresáři `home`.
-pub fn remote_path(home: &str, vfs_path: &str) -> String {
-    let path = normalize_vfs_path(vfs_path);
-    if path == "/" {
-        home.to_string()
-    } else {
-        format!("{}{}", home, path)
+    #[test]
+    fn test_remote_path() {
+        assert_eq!(remote_path("/home/user", "/"), "/home/user");
+        assert_eq!(remote_path("/home/user", "/data/x.txt"), "/home/user/data/x.txt");
+        // Domov v kořeni serveru (home je po oříznutí lomítka prázdný).
+        assert_eq!(remote_path("", "/data"), "/data");
+        assert_eq!(remote_path("", "/"), "/");
     }
-}
-
-/// Převede SystemTime na unixové sekundy (čas před rokem 1970 / neznámý = 0).
-pub fn system_time_to_unix(time: std::time::SystemTime) -> i64 {
-    time.duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .unwrap_or(0)
 }

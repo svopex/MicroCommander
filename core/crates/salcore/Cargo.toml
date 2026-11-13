@@ -13,15 +13,18 @@ crate-type = ["rlib", "cdylib"]
 # Archivy ZIP: čtení i vytváření, komprese deflate (pure Rust backend),
 # šifrování AES-128/192/256 (WinZip AE-1/AE-2) i starší ZipCrypto.
 zip = { version = "4", default-features = false, features = ["deflate", "time", "aes-crypto"] }
-# Archivy TAR a dekomprese gzip pro .tar.gz.
-tar = "0.4"
+# Dekomprese gzip pro .tar.gz (TAR čte vlastní parser v tarfs.rs).
 flate2 = "1"
 # FTP klient (čisté FTP, pasivní mód); synchronní API je výchozí,
 # async/TLS features nepotřebujeme.
 suppaftp = { version = "6", default-features = false }
 # SFTP klient; vendored-openssl sestaví OpenSSL ze zdrojů, aby build nezávisel na systémové knihovně.
 ssh2 = { version = "0.9", features = ["vendored-openssl"] }
-# Volání systových API (statfs pro volné místo na disku).
+# Volání systémových API (statfs pro volné místo na disku).
 libc = "0.2"
 # Hledání v obsahu souborů (text, HEX, celá slova, regulární výrazy) nad bajty.
 regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
+
+[dev-dependencies]
+# Vytváření testovacích TAR archivů (čtení dělá vlastní parser).
+tar = "0.4"

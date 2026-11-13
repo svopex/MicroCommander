@@ -42,6 +42,11 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   OpenSSH/PEM – ed25519, ECDSA, RSA, i chráněným heslem – nebo klíči
   ze ssh-agenta). Souborové operace (copy/move/delete) pracují mezi libovolnou
   dvojicí VFS streamovaně po 256 KiB blocích, s hlášením průběhu a zrušením.
+  Existující adresáře v cíli se slučují. Přesun na jednom lokálním svazku je
+  přejmenování (okamžité), jinak se každá položka zkopíruje a její zdroj se
+  smaže hned po potvrzeném zápisu; položky přeskočené kvůli existujícímu cíli
+  zůstávají ve zdroji. Kopie či přesun do téhož adresáře a adresáře do sebe
+  sama se odmítne, po chybě nebo zrušení nezůstane v cíli nedokončený soubor.
   Hledání nad libovolným VFS s maskami ve stylu Salamandera (`*`, `?`, `#`,
   skupiny oddělené `;`, vyloučení za `|`; maska bez `*`, `?` a `.` hledá jména,
   která ji obsahují), volitelně bez podadresářů a s hledáním v obsahu souborů
@@ -75,14 +80,19 @@ core/                       # Rust workspace
     src/lib.rs              # moduly jádra
     src/vfs.rs              # trait Vfs, VfsItem, cesty (join/split/normalize)
     src/local.rs            # lokální disk (std::fs + statfs)
-    src/zipfs.rs            # ZIP jako VFS (jen čtení, AES/ZipCrypto s heslem)
+    src/archive.rs          # společné pro archivy: index položek podle jména,
+                            #   výpis adresáře z indexu, implikované adresáře
+    src/zipfs.rs            # ZIP jako VFS (jen čtení, AES/ZipCrypto s heslem;
+                            #   index položek sestavený při otevření)
     src/tarfs.rs            # TAR/TAR.GZ jako VFS – vlastní parser (ustar,
-                            #   GNU longname, PAX; tar.gz sdílená dekompresní
-                            #   session pro jednoprůchodové rozbalení)
+                            #   GNU longname, PAX, kontrolní součty hlaviček;
+                            #   tar.gz sdílená dekompresní session pro
+                            #   jednoprůchodové rozbalení)
     src/ftp.rs              # FTP VFS (suppaftp, RETR/STOR streamy, abort)
     src/sftp.rs             # SFTP VFS (ssh2, serializace přístupu zámkem)
     src/mask.rs             # masky ve stylu Salamandera (port myšlenky masks.cpp)
-    src/ops.rs              # copy/move/delete mezi VFS, progress, cancel
+    src/ops.rs              # copy/move/delete mezi VFS, progress, cancel,
+                            #   přesun přejmenováním, kontrola cíle
     src/find.rs             # rekurzivní hledání nad VFS (maska, podadresáře,
                             #   obsah souborů: text/HEX/celá slova/regex)
     src/pack.rs             # vytváření ZIP z položek libovolného VFS
@@ -122,6 +132,7 @@ app/                        # tenké UI pro macOS
 tools/make-icon.swift       # vykreslí ikonu: oranžový disk s tlapkou mloka
                             #   ve stylu Salamandera na macOS dlaždici
 tests/main.swift            # end-to-end smoke test FFI (Swift CLI)
+tests/sftp_test.sh          # SFTP end-to-end proti dočasnému sshd (make sftp-test)
 Makefile                    # build celé aplikace jedním příkazem
 fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)
 CODESIGNING.md              # vlastní certifikát pro podpis (trvalá oprávnění macOS)
@@ -163,7 +174,8 @@ Na klávesnici Macu F-klávesy vyžadují Fn (nebo zapnout „Používat F1, F2 
 jako standardní funkční klávesy“). Přehled zobrazí F1.
 
 - **Panely:** ↑↓ PgUp PgDn Home End – pohyb kurzoru; Enter / dvojklik – otevřít
-  adresář, archiv (ZIP/TAR/TAR.GZ jako panel) nebo soubor ve výchozí aplikaci;
+  adresář, archiv (ZIP/TAR/TAR.GZ jako panel; pozná se podle obsahu, samostatný
+  `.gz` bez TAR uvnitř archiv není) nebo soubor ve výchozí aplikaci;
   **spustitelný shell skript** (právo `+x` a shebang `sh`/`bash`/`zsh`/`dash`/`ksh`,
   i přes `/usr/bin/env`; přípona nerozhoduje) Enter spustí v Terminalu
   v adresáři panelu – skript bez `+x` nebo bez shebangu se jen otevře;
@@ -201,7 +213,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   shoda, Escape konec.
 - **F-klávesy:** F1 nápověda, F2 přejmenovat (přímo v panelu bez dialogu:
   předvybrané jméno bez přípony, Enter potvrdí, Escape zruší, klik jinam
-  potvrdí), F3 prohlížeč, F4 editor, F5
+  potvrdí; jméno jiné existující položky se odmítne), F3 prohlížeč, F4 editor, F5
   kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 smazat,
   F9 terminál v adresáři, F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
   zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; **⌘F2 / ⌃F2 změnit atributy**
@@ -346,7 +358,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
   (prázdné nebo neshodné heslo dialog nepustí dál).
 - Dialogy: Enter potvrdí, Escape zruší. Při konfliktu v cíli se UI zeptá:
-  přepsat vše / přeskočit existující / zrušit.
+  přepsat vše / přeskočit existující / zrušit (adresáře se slučují; při přesunu
+  přeskočené položky zůstanou ve zdroji). Cílem nemůže být zdrojový adresář
+  ani přenášený adresář sám. Dialog průběhu ukazuje u přenosů bajty a procenta,
+  u mazání, počítání velikosti a změny atributů počet položek.
 
 ### Funkční omezení první verze
 
@@ -370,12 +385,16 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 
 ### Testy
 
-- `make test` – 28 unit testů jádra (masky, cesty, operace, hledání včetně
-  obsahu souborů, HEX a regulárních výrazů, ZIP,
-  TAR plain i TAR.GZ včetně rekurzivního rozbalení, balení s adresářovou
-  strukturou, AES-256 a ZipCrypto: bez hesla / chybné / správné heslo)
+- `make test` – 41 unit testů jádra (masky, cesty, operace včetně přesunu
+  v jednom VFS, konfliktů a přeskakování, odmítnutí přenosu do téhož adresáře
+  a úklidu po zrušení, hledání včetně obsahu souborů, HEX a regulárních výrazů,
+  ZIP včetně adresářových záznamů, TAR plain i TAR.GZ včetně rekurzivního
+  rozbalení, dlouhých jmen a PAX hlaviček, rozpoznání ne-archivů, balení
+  s adresářovou strukturou, AES-256 a ZipCrypto: bez hesla / chybné / správné
+  heslo, přihlášení k FTP proti minimálnímu serveru na 127.0.0.1)
 - `make smoke` – end-to-end test vazby Swift↔Rust: otevření VFS, list, copy,
-  mkdir, rename, delete, find, pack ZIP, probe, otevření ZIP, AES-256 ZIP přes
+  move (v rámci jednoho VFS jako v aplikaci), mkdir, rename, delete, find,
+  pack ZIP, probe, otevření ZIP, AES-256 ZIP přes
   FFI (kódy chyb hesla) a kompatibilita s libarchive (`bsdtar`) oběma směry:
   náš AES-256 archiv rozbalí bsdtar, AES-256 i ZipCrypto archiv z bsdtar
   přečte jádro
@@ -399,6 +418,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   (pod uživatelem, vlastní konfigurace, volný port), vygeneruje klíče a ověří
   přihlášení ed25519 bez hesla / s heslem (bez hesla, chybné, správné), RSA PEM,
   ECDSA, ssh-agent, odmítnutý klíč a chybějící soubor, vždy se zápisem, čtením
-  a smazáním souboru; totéž přes FFI (Swift). Systémové Vzdálené přihlášení se
+  a smazáním souboru (včetně odkazu na adresář – jeho cíl musí zůstat); totéž
+  přes FFI (Swift). Systémové Vzdálené přihlášení se
   nemění, vše se po testu uklidí
 - vývojářský snímek okna: `SAL_SNAPSHOT=/cesta.png build/MicroCommander.app/Contents/MacOS/MicroCommander`

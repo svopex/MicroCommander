@@ -40,7 +40,9 @@ test:
 
 # End-to-end smoke test FFI vrstvy (Swift CLI binárka nad stejnou knihovnou).
 # Soubor se jmenuje main.swift, protože obsahuje top-level kód.
-smoke:
+# Potřebuje sestavené jádro a adresář build (i po `make clean`).
+smoke: release
+	@mkdir -p $(BUILD)
 	swiftc -O -I $(CORE)/include -L $(CORE)/target/release -lsalcore \
 		-Xlinker -rpath -Xlinker $(CORE)/target/release \
 		$(ROOT)/tests/main.swift $(APP)/Sources/Core.swift -o $(BUILD)/ffi-smoke
