@@ -310,7 +310,9 @@ final class FileGridView: NSView {
             drawText(typeDescription(for: row), in: NSRect(x: textX, y: cell.minY + 20, width: width, height: 14),
                      font: NSFont.systemFont(ofSize: 11), color: secondary, alignment: .left)
             if !row.isParent {
-                let size = row.item.isDir ? "" : formatSize(row.item.size) + ", "
+                // Adresář jen se spočítanou velikostí (⌥F10), jinak bez velikosti.
+                let bytes = row.item.isDir ? owner?.panel.dirSize(of: row.item) : row.item.size
+                let size = bytes.map { formatSize($0) + ", " } ?? ""
                 drawText(size + formatDay(row.item.mtime) + " " + formatTime(row.item.mtime),
                          in: NSRect(x: textX, y: cell.minY + 34, width: width, height: 14),
                          font: NSFont.systemFont(ofSize: 11), color: secondary, alignment: .left)

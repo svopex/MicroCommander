@@ -255,7 +255,12 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat (také ⌃F), ⌥F10 obsazené místo
   (také ⌃Q; dialog ve stylu Informací o jednotce: umístění, položka nebo počet
   označených položek, velikost v bajtech i zaokrouhleně, počty souborů
-  a adresářů; hodnoty lze označit a zkopírovat, zavírá se Enterem nebo Escape).
+  a adresářů; hodnoty lze označit a zkopírovat, zavírá se Enterem nebo Escape;
+  u označených adresářů se během výpočtu postupně místo „DIR“ ve sloupci
+  Velikost zobrazí jejich spočítaná velikost, která zůstává do změny adresáře;
+  nepřístupné adresáře se přeskočí a výpočet pokračuje). Sloupec Velikost
+  se rozšíří, aby se vešlo celé nejdelší číslo (velké soubory i spočítané
+  adresáře), v jiném adresáři se vrátí na výchozí šířku.
 - **Vlastnosti a oprávnění** (jako Alt+Enter a Ctrl+P v Salamanderu): ⌥↩ / ⌘I
   (Soubory › Vlastnosti…, kontextové menu) a ⌃P (Soubory › Oprávnění…) otevřou
   okno Informace z Finderu pro označené položky (jinak pro položku pod

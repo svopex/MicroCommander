@@ -84,7 +84,7 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             (ColumnID.name, "Jméno", 200, 80),
             (ColumnID.ext, "Přípona", 50, 30),
             (ColumnID.type, "Typ", 130, 50),
-            (ColumnID.size, "Velikost", 80, 40),
+            (ColumnID.size, "Velikost", Self.sizeColumnWidth, 40),
             (ColumnID.date, "Datum", 76, 50),
             (ColumnID.time, "Čas", 58, 40),
             (ColumnID.attr, "Atr", 34, 24),
@@ -364,6 +364,31 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     /// Nový adresář: mřížka zahodí miniatury předchozího.
     func directoryChanged() {
         gridView.clearThumbnails()
+        // Sloupec Velikost se v novém adresáři vrátí na výchozí šířku
+        // (a podle potřeby se znovu rozšíří při překreslení).
+        sizeColumn?.width = Self.sizeColumnWidth
+    }
+
+    /// Výchozí šířka sloupce Velikost.
+    private static let sizeColumnWidth: CGFloat = 80
+
+    /// Sloupec Velikost tabulky.
+    private var sizeColumn: NSTableColumn? {
+        tableView.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier(ColumnID.size))
+    }
+
+    /// Rozšíří sloupec Velikost, aby se do něj vešlo celé nejdelší číslo
+    /// (velké soubory i spočítané velikosti adresářů); nikdy ho nezužuje.
+    func fitSizeColumn() {
+        guard let column = sizeColumn else { return }
+        // Nejdelší text má největší hodnota (číslice mají v písmu stejnou šířku);
+        // měří se tučným písmem označených řádků, plus okraje buňky.
+        let largest = panel.rows.map { $0.item.isDir ? panel.dirSize(of: $0.item) ?? 0 : $0.item.size }.max() ?? 0
+        let text = formatExactSize(largest) as NSString
+        let needed = ceil(text.size(withAttributes: [.font: boldListFont]).width) + 10
+        if needed > column.width {
+            column.width = needed
+        }
     }
 
     /// Cílový řádek pro směrovou klávesu podle rozvržení režimu
@@ -387,6 +412,7 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     /// Úplné překreslení (nový výpis, hromadné označení).
     func reloadTable() {
         if viewMode.usesTable {
+            fitSizeColumn()
             tableView.reloadData()
         } else {
             gridView.relayout()
@@ -512,8 +538,11 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             text = typeDescription(for: entry)
         case ColumnID.size:
             alignment = .right
-            if entry.isParent || item.isDir {
-                text = entry.isParent ? "UP-DIR" : "DIR"
+            // Adresář ukazuje velikost spočítanou přes ⌥F10, jinak „DIR“.
+            if entry.isParent {
+                text = "UP-DIR"
+            } else if item.isDir {
+                text = panel.dirSize(of: item).map(formatExactSize) ?? "DIR"
             } else {
                 text = formatExactSize(item.size)
             }

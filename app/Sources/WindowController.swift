@@ -441,7 +441,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             return "..: nadřazený adresář • \(visibleCount - dirs) souborů, \(dirs) adresářů\(hiddenText)"
         }
         let item = row.item
-        let size = item.isDir ? "DIR" : formatExactSize(item.size)
+        let size = item.isDir ? panel.dirSize(of: item).map(formatExactSize) ?? "DIR" : formatExactSize(item.size)
         var parts = ["\(item.name): \(size)", "\(formatDay(item.mtime)) \(formatTime(item.mtime))"]
         if item.isReadonly || item.isHidden || item.isLink || item.isEncrypted {
             parts.append([item.isReadonly ? "R" : "", item.isHidden ? "H" : "", item.isLink ? "L" : "",
@@ -1530,8 +1530,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let panel = activePanel
         let items = panel.operationItems
         guard !items.isEmpty else { return }
-        let vfs = panel.location.vfs
-        let dir = panel.location.path
+        let location = panel.location
         let totals = SizeTotals()
         beginProgress(title: "Počítám velikost", unit: .items) { state in
             for item in items {
@@ -1539,10 +1538,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 if item.isRealDir {
                     totals.add(dirs: 1)
                     let collector = FindCollector()
-                    try coreFind(vfs: vfs, root: joinPath(dir, item.name), mask: "*", includeDirs: true,
-                                 state: state, collector: collector)
+                    do {
+                        try coreFind(vfs: location.vfs, root: joinPath(location.path, item.name), mask: "*",
+                                     includeDirs: true, state: state, collector: collector)
+                    } catch let error as CoreError where !error.isCancelledLike {
+                        // Nečitelný označený adresář (např. odepřený přístup) se přeskočí
+                        // a zůstane u něj „DIR“; nečitelné podadresáře přeskakuje už jádro.
+                        continue
+                    }
+                    // Součty adresáře lokálně, do celkových jedním voláním (bez zámku na položku).
+                    var dirFiles = 0, subdirs = 0
+                    var dirBytes: UInt64 = 0
                     for found in collector.snapshot() {
-                        if found.item.isDir { totals.add(dirs: 1) } else { totals.add(files: 1, bytes: found.item.size) }
+                        if found.item.isDir {
+                            subdirs += 1
+                        } else {
+                            dirFiles += 1
+                            dirBytes += found.item.size
+                        }
+                    }
+                    totals.add(files: dirFiles, dirs: subdirs, bytes: dirBytes)
+                    // Hotový adresář hned ukáže v panelu velikost místo „DIR“
+                    // (postupně, jak výpočet prochází označené adresáře).
+                    let name = item.name
+                    DispatchQueue.main.async {
+                        panel.setDirSize(dirBytes, for: name, in: location)
                     }
                 } else {
                     totals.add(files: 1, bytes: item.size)

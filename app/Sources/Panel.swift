@@ -11,6 +11,11 @@ import AppKit
 struct Location {
     let vfs: Vfs
     var path: String
+
+    /// Je to stejné místo (tentýž otevřený VFS a stejná cesta)?
+    func isSame(as other: Location) -> Bool {
+        vfs === other.vfs && path == other.path
+    }
 }
 
 /// Identifikátory sloupců tabulky (pořadí jako v Salamanderu).
@@ -95,6 +100,8 @@ final class PanelController: NSObject {
     private(set) var cursor: Int = 0
     /// Jména označených položek.
     private(set) var marked: Set<String> = []
+    /// Spočítané velikosti adresářů (⌥F10) podle jména; platí do změny adresáře.
+    private var dirSizes: [String: UInt64] = [:]
     /// Řazení.
     private(set) var sortKey: SortKey = .name
     private(set) var sortAscending = true
@@ -303,7 +310,7 @@ final class PanelController: NSObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try vfs.list(path) }
             DispatchQueue.main.async {
-                guard let self, self.location.vfs === vfs, self.location.path == path else { return }
+                guard let self, self.location.isSame(as: Location(vfs: vfs, path: path)) else { return }
                 self.isLoading = false
                 switch result {
                 case .success(let listed):
@@ -311,6 +318,9 @@ final class PanelController: NSObject {
                     // Označení necháme jen u jmen, která stále existují.
                     let names = Set(listed.map(\.name))
                     self.marked = self.marked.intersection(names)
+                    // Spočítané velikosti adresářů zůstávají jen při obnovení téhož
+                    // adresáře a jen u jmen, která stále existují.
+                    self.dirSizes = sameLocation ? self.dirSizes.filter { names.contains($0.key) } : [:]
                     self.pendingFocus = focusName
                     if !sameLocation {
                         self.cursor = 0
@@ -349,7 +359,7 @@ final class PanelController: NSObject {
         rowsGeneration += 1
 
         // Kurzor na zapamatované jméno, jinak na začátek.
-        if let focusName, let index = rows.firstIndex(where: { !$0.isParent && $0.item.name == focusName }) {
+        if let focusName, let index = rowIndex(named: focusName) {
             cursor = index
         } else {
             cursor = min(cursor, max(rows.count - 1, 0))
@@ -383,6 +393,34 @@ final class PanelController: NSObject {
             result = lhs.mtime == rhs.mtime ? byName : (lhs.mtime < rhs.mtime ? .orderedAscending : .orderedDescending)
         }
         return sortAscending ? result == .orderedAscending : result == .orderedDescending
+    }
+
+    /// Uloží spočítanou velikost adresáře (⌥F10) a překreslí jeho řádek,
+    /// takže se místo „DIR“ zobrazí velikost.
+    /// - Parameters:
+    ///   - bytes: součet velikostí souborů v adresáři (rekurzivně)
+    ///   - name: jméno adresáře v aktuálním výpisu
+    ///   - location: lokace, ve které se počítalo – po přechodu jinam se výsledek zahodí
+    func setDirSize(_ bytes: UInt64, for name: String, in location: Location) {
+        guard location.isSame(as: self.location) else { return }
+        dirSizes[name] = bytes
+        view?.fitSizeColumn()
+        if let index = rowIndex(named: name) {
+            view?.refreshRows([index])
+            // Stavový řádek pod kurzorem ukazuje velikost také.
+            if index == cursor { delegate?.panelStateChanged(self) }
+        }
+    }
+
+    /// Spočítaná velikost adresáře (⌥F10), nil = nespočítáno (zobrazí se „DIR“).
+    /// - Parameter item: adresář z výpisu
+    func dirSize(of item: Item) -> UInt64? {
+        dirSizes[item.name]
+    }
+
+    /// Index řádku položky daného jména („..“ se nepočítá), nil = není ve výpisu.
+    func rowIndex(named name: String) -> Int? {
+        rows.firstIndex { !$0.isParent && $0.item.name == name }
     }
 
     /// Nastaví řazení; opakovaná volba stejného klíče obrací pořadí.
@@ -525,7 +563,7 @@ final class PanelController: NSObject {
 
     /// Postaví kurzor na položku daného jména (pokud existuje).
     func focus(name: String) {
-        if let index = rows.firstIndex(where: { !$0.isParent && $0.item.name == name }) {
+        if let index = rowIndex(named: name) {
             setCursor(index)
         } else {
             pendingFocus = name
