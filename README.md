@@ -251,7 +251,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   aktuální, Včetně podadresářů; označené položky, jinak položka pod kurzorem;
   jen lokální disk; Windows atributy jsou vidět, ale nedostupné); ⌃F3–⌃F6 řazení podle
   jména/přípony/času/velikosti (opakovaně obrací), ⌃F9 obnovit, ⌃F10 porovnat
-  adresáře (označí odlišné soubory); ⌥F1/⌥F2 disk vlevo/vpravo, ⌥F5 zabalit do
+  adresáře (označí odlišné soubory; shodu ohlásí); ⌥F1/⌥F2 disk vlevo/vpravo, ⌥F5 zabalit do
   ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat (také ⌃F), ⌥F10 obsazené místo
   (také ⌃Q; dialog ve stylu Informací o jednotce: umístění, položka nebo počet
   označených položek, velikost v bajtech i zaokrouhleně, počty souborů

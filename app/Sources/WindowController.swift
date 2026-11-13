@@ -1582,7 +1582,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         left.setMarked(leftMarks)
         right.setMarked(rightMarks)
         if leftMarks.isEmpty && rightMarks.isEmpty {
-            showAlert(title: "Porovnat adresáře", text: "Adresáře obsahují stejné soubory.", style: .informational)
+            showInfo(title: "Porovnat adresáře", text: "Adresáře obsahují stejné soubory.")
         }
     }
 
@@ -1857,12 +1857,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         focusActivePanel()
     }
 
-    /// Dotaz s výstražnou ikonou ve stylu Salamandera (Enter = první tlačítko,
-    /// Escape = zrušit).
+    /// Informační hlášení ve stylu Salamandera s ikonou aplikace a tlačítkem OK
+    /// (Enter i Escape ho zavřou).
+    private func showInfo(title: String, text: String) {
+        _ = ask(title: title, text: text, buttons: ["OK"], icon: NSApp.applicationIconImage, showsCancel: false)
+    }
+
+    /// Dotaz ve stylu Salamandera, výchozí s výstražnou ikonou (Enter = první
+    /// tlačítko, Escape = zrušit).
+    /// - Parameters:
+    ///   - icon: ikona vlevo od textu (nil = výstražná)
+    ///   - showsCancel: přidat tlačítko Zrušit
     /// - Returns: index stisknutého tlačítka, nil při zrušení
-    private func ask(title: String, text: String, buttons: [String]) -> Int? {
-        let dialog = PromptDialog(title: title, message: text, icon: NSImage(named: NSImage.cautionName),
-                                  buttons: buttons)
+    private func ask(title: String, text: String, buttons: [String], icon: NSImage? = nil,
+                     showsCancel: Bool = true) -> Int? {
+        let dialog = PromptDialog(title: title, message: text, icon: icon ?? NSImage(named: NSImage.cautionName),
+                                  buttons: buttons, showsCancel: showsCancel)
         let response = dialog.run(over: window)
         focusActivePanel()
         return response

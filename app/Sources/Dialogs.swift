@@ -1244,10 +1244,10 @@ final class PromptDialog: NSWindowController {
     ///   - icon: ikona vlevo od textu (nil = bez ikony)
     ///   - value: výchozí text vstupního pole; nil = dialog bez pole
     ///   - selectsBaseName: po otevření označit jen jméno bez přípony
-    ///   - buttons: titulky tlačítek zleva; první je výchozí (Enter),
-    ///     tlačítko Zrušit (Escape) se přidá samo
+    ///   - buttons: titulky tlačítek zleva; první je výchozí (Enter)
+    ///   - showsCancel: přidat na konec tlačítko Zrušit (Escape zavře dialog vždy)
     init(title: String, message: String, icon: NSImage? = nil, value: String? = nil,
-         selectsBaseName: Bool = false, buttons: [String]) {
+         selectsBaseName: Bool = false, buttons: [String], showsCancel: Bool = true) {
         self.selectsBaseName = selectsBaseName
         // Výška je jen výchozí – buildContent ji dopočítá podle obsahu.
         let window = DialogWindow(contentRect: NSRect(x: 0, y: 0, width: PromptDialog.width, height: 0),
@@ -1255,7 +1255,7 @@ final class PromptDialog: NSWindowController {
         window.title = title
         super.init(window: window)
         window.onCancel = { [weak self] in self?.finish(nil) }
-        buildContent(message: message, icon: icon, value: value, buttons: buttons)
+        buildContent(message: message, icon: icon, value: value, buttons: buttons, showsCancel: showsCancel)
     }
 
     required init?(coder: NSCoder) {
@@ -1264,7 +1264,7 @@ final class PromptDialog: NSWindowController {
 
     /// Rozvržení: ikona a text dotazu, pod ním vstupní pole, čára a tlačítka
     /// uprostřed. Výška dialogu se dopočítá podle textu dotazu.
-    private func buildContent(message: String, icon: NSImage?, value: String?, buttons: [String]) {
+    private func buildContent(message: String, icon: NSImage?, value: String?, buttons: [String], showsCancel: Bool) {
         let width = PromptDialog.width
         let margin: CGFloat = 16
         let content = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 0))
@@ -1302,7 +1302,7 @@ final class PromptDialog: NSWindowController {
 
         y = content.addSeparator(y: y)
 
-        // Tlačítka: akční zleva (tag = index), nakonec Zrušit; řada je uprostřed.
+        // Tlačítka: akční zleva (tag = index), nakonec případně Zrušit; řada je uprostřed.
         var views: [NSButton] = []
         for (index, title) in buttons.enumerated() {
             let button = NSButton(title: title, target: self, action: #selector(buttonClicked(_:)))
@@ -1311,7 +1311,9 @@ final class PromptDialog: NSWindowController {
             views.append(button)
         }
         // Escape (i ⌘.) obsluhuje okno (DialogWindow.onCancel), tlačítko zkratku nepotřebuje.
-        views.append(NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:))))
+        if showsCancel {
+            views.append(NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:))))
+        }
         // Šířka podle titulku, nejméně 110 (jako tlačítko Zavřít u Informací o jednotce).
         let gap: CGFloat = 10
         let widths = views.map { max(110, ceil($0.fittingSize.width) + 12) }
