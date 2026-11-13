@@ -231,6 +231,38 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         }
     }
 
+    /// Zahájí přetažení souborů (Finder, Zprávy, Mail…): táhne označené položky,
+    /// pokud je mezi nimi položka pod myší, jinak jen ji. Táhnout lze jen soubory
+    /// z lokálního disku (archiv/FTP nemají cestu, kterou by cíl mohl otevřít).
+    /// - Parameters:
+    ///   - index: řádek, na kterém tažení začalo
+    ///   - event: událost tažení myší
+    ///   - view: pohled (tabulka / mřížka), ze kterého se táhne
+    func beginFileDrag(index: Int, event: NSEvent, in view: NSView) {
+        guard index < panel.rows.count, !panel.rows[index].isParent else { return }
+        let items = panel.isMarked(row: index) ? panel.markedItems : [panel.rows[index].item]
+        let files = items.compactMap { item in panel.localPath(of: item.name).map { (item, $0) } }
+        guard !files.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        // Obrázky položek u kurzoru myši, mírně posunuté pod sebou. Skutečnou ikonu
+        // souboru (dotaz na disk) mají jen první viditelné položky, ostatní ikonu
+        // z cache podle přípony – tažení tisíců souborů tak nezdrží.
+        let origin = view.convert(event.locationInWindow, from: nil)
+        let size: CGFloat = 32
+        let draggingItems = files.enumerated().map { offset, file -> NSDraggingItem in
+            let (item, path) = file
+            let dragItem = NSDraggingItem(pasteboardWriter: URL(fileURLWithPath: path) as NSURL)
+            let image = offset < 6 ? NSWorkspace.shared.icon(forFile: path) : listIcon(for: item)
+            let shift = CGFloat(min(offset, 5)) * 4
+            dragItem.setDraggingFrame(NSRect(x: origin.x - size / 2 + shift, y: origin.y - size / 2 - shift,
+                                             width: size, height: size), contents: image)
+            return dragItem
+        }
+        view.beginDraggingSession(with: draggingItems, event: event, source: self)
+    }
+
     /// Pravé tlačítko: kurzor na položku a kontextové menu operací.
     func handleContextMenu(index: Int?, in view: NSView) -> NSMenu? {
         view.window?.makeFirstResponder(view)
@@ -592,15 +624,66 @@ final class SalTableView: NSTableView {
         }
     }
 
+    /// Rozpracované tažení (místo stisku myši).
+    private var dragStart = PanelDragStart()
+
     override func mouseDown(with event: NSEvent) {
         guard let owner else { return }
         let row = self.row(at: convert(event.locationInWindow, from: nil))
-        owner.handleClick(index: row >= 0 ? row : nil, event: event, anchor: &anchorRow, in: self)
+        let index = row >= 0 ? row : nil
+        dragStart.begin(index: index, event: event)
+        owner.handleClick(index: index, event: event, anchor: &anchorRow, in: self)
+    }
+
+    /// Tažení myší ze řádku položky = přetažení souborů do jiné aplikace.
+    override func mouseDragged(with event: NSEvent) {
+        if let index = dragStart.indexToDrag(event) {
+            owner?.beginFileDrag(index: index, event: event, in: self)
+        }
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = self.row(at: convert(event.locationInWindow, from: nil))
         return owner?.handleContextMenu(index: row >= 0 ? row : nil, in: self)
+    }
+}
+
+/// Přetahování souborů z panelu: ven z aplikace kopie/odkaz/přesun podle cíle
+/// (Finder, Zprávy, Mail…); dovnitř aplikace se přetažení nepřijímá.
+extension PanelView: NSDraggingSource {
+    func draggingSession(_ session: NSDraggingSession,
+                         sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .outsideApplication ? [.copy, .link, .generic, .move] : []
+    }
+
+    /// Po přesunu (např. do Koše) se panel obnoví.
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        if operation.contains(.move) || operation.contains(.delete) {
+            panel.reload()
+        }
+    }
+}
+
+/// Stav zahájení tažení myší společný pro tabulku i mřížku panelu: tažení
+/// začne až po posunu o několik bodů, aby běžný klik/dvojklik fungoval dál.
+struct PanelDragStart {
+    /// Řádek pod stiskem myši; po zahájení tažení nil (jedno tažení na stisk).
+    private var index: Int?
+    private var location = NSPoint.zero
+
+    /// Stisk tlačítka myši nad položkou (nil = mimo položky).
+    mutating func begin(index: Int?, event: NSEvent) {
+        self.index = event.clickCount == 1 && !event.modifierFlags.contains(.shift) ? index : nil
+        location = event.locationInWindow
+    }
+
+    /// Řádek k přetažení, jakmile se myš posune dost daleko (jen jednou za stisk).
+    mutating func indexToDrag(_ event: NSEvent) -> Int? {
+        guard let index else { return nil }
+        let distance = hypot(event.locationInWindow.x - location.x, event.locationInWindow.y - location.y)
+        guard distance >= 4 else { return nil }
+        self.index = nil
+        return index
     }
 }
 

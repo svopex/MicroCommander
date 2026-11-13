@@ -272,6 +272,11 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   Upravit, Zobrazit, Možnosti). V archivu či na FTP/SFTP se hledá ve VFS panelu.
   Nastavení a historie: předvolby `find*` (`findNamedHistory`,
   `findLookInHistory`, `findContainingHistory`, `findAdvanced`, …).
+- **Přetažení myší ven z aplikace:** položku (nebo všechny označené, pokud se
+  táhne za označenou) lze přetáhnout do Finderu, Zpráv (iMessage), Mailu
+  a dalších aplikací ve všech režimech zobrazení; tažení začne po posunu myši
+  o pár bodů. Jen soubory z lokálního disku (ne z archivu či FTP/SFTP);
+  přetažení do panelu zatím není.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (Finder, kopírovat cestu).
 - **Příkazová řádka** (⌃Tab): Enter spustí příkaz v login shellu v adresáři

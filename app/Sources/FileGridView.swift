@@ -379,9 +379,20 @@ final class FileGridView: NSView {
         owner?.panel.markAll(true)
     }
 
+    /// Rozpracované tažení (místo stisku myši).
+    private var dragStart = PanelDragStart()
+
     override func mouseDown(with event: NSEvent) {
         let index = index(at: convert(event.locationInWindow, from: nil))
+        dragStart.begin(index: index, event: event)
         owner?.handleClick(index: index, event: event, anchor: &anchorRow, in: self)
+    }
+
+    /// Tažení myší z položky = přetažení souborů do jiné aplikace.
+    override func mouseDragged(with event: NSEvent) {
+        if let index = dragStart.indexToDrag(event) {
+            owner?.beginFileDrag(index: index, event: event, in: self)
+        }
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
