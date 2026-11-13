@@ -130,6 +130,7 @@ app/                        # tenké UI pro macOS
                             #   operací (cíl kopie/přesunu, potvrzení mazání)
   Sources/Attributes.swift  # dialog Změnit atributy (⌘F2 / ⌃F2)
   Sources/DriveInfo.swift   # dialog Informace o jednotce (⌘F1 / ⌃F1)
+  Sources/OccupiedSpace.swift  # dialog Obsazené místo (⌥F10 / ⌃Q)
   Sources/FindWindow.swift  # okno Vyhledat soubory a adresáře (⌃F/⌥F7)
                             #   a dialog Upřesnit možnosti
   Sources/Servers.swift     # uložené FTP/SFTP servery (UserDefaults),
@@ -252,7 +253,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   jména/přípony/času/velikosti (opakovaně obrací), ⌃F9 obnovit, ⌃F10 porovnat
   adresáře (označí odlišné soubory); ⌥F1/⌥F2 disk vlevo/vpravo, ⌥F5 zabalit do
   ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat (také ⌃F), ⌥F10 obsazené místo
-  (také ⌃Q).
+  (také ⌃Q; dialog ve stylu Informací o jednotce: umístění, položka nebo počet
+  označených položek, velikost v bajtech i zaokrouhleně, počty souborů
+  a adresářů; hodnoty lze označit a zkopírovat, zavírá se Enterem nebo Escape).
 - **Vlastnosti a oprávnění** (jako Alt+Enter a Ctrl+P v Salamanderu): ⌥↩ / ⌘I
   (Soubory › Vlastnosti…, kontextové menu) a ⌃P (Soubory › Oprávnění…) otevřou
   okno Informace z Finderu pro označené položky (jinak pro položku pod

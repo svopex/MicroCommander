@@ -1561,10 +1561,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 self?.showErrorUnlessCancelled(title: "Velikost", error)
                 return
             }
-            let value = totals.snapshot()
-            self?.showAlert(title: "Obsazené místo",
-                            text: "\(formatExactSize(value.bytes)) B (\(formatSize(value.bytes)))\n\(value.files) souborů, \(value.dirs) adresářů",
-                            style: .informational)
+            let info = OccupiedSpaceInfo(panel: panel, items: items, totals: totals.snapshot())
+            self?.presentSheet(OccupiedSpaceDialog(info: info))
         }
     }
 

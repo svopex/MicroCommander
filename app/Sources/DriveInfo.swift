@@ -162,20 +162,23 @@ final class DialogWindow: NSWindow {
     }
 }
 
-/// Dialog Informace o jednotce (sheet nad hlavním oknem), jen pro čtení.
-final class DriveInfoDialog: NSWindowController {
-    private static let width: CGFloat = 600
+/// Základ informačních dialogů jen pro čtení (Informace o jednotce, Obsazené
+/// místo): sheet s řádky „popisek: hodnota“, čarami a tlačítkem Zavřít
+/// (Enter i Escape dialog zavřou). Podtřída sestaví obsah a zavolá finish.
+class InfoDialog: NSWindowController {
+    /// Šířka dialogu (obsah ji používá pro rozvržení).
+    let width: CGFloat
 
-    /// Sestaví dialog; zobrazuje se jako sheet (MainWindowController.presentSheet).
-    /// - Parameter info: údaje o svazku
-    init(info: VolumeInfo) {
-        // Výška je jen výchozí – buildContent ji dopočítá podle obsahu.
-        let window = DialogWindow(contentRect: NSRect(x: 0, y: 0, width: DriveInfoDialog.width, height: 0),
-                                     styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "Informace o jednotce"
+    /// - Parameters:
+    ///   - title: titulek okna
+    ///   - width: šířka dialogu; výšku dopočítá finish podle obsahu
+    init(title: String, width: CGFloat) {
+        self.width = width
+        let window = DialogWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 0),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = title
         super.init(window: window)
         window.onCancel = { [weak self] in self?.close(nil) }
-        buildContent(info)
     }
 
     required init?(coder: NSCoder) {
@@ -184,7 +187,7 @@ final class DriveInfoDialog: NSWindowController {
 
     /// Hodnota řádku: lze ji označit a zkopírovat; dlouhý text se zkrátí
     /// uprostřed a celý je v tooltipu.
-    private func makeValue(_ text: String, alignment: NSTextAlignment = .left) -> NSTextField {
+    func makeValue(_ text: String, alignment: NSTextAlignment = .left) -> NSTextField {
         let field = NSTextField(labelWithString: text)
         field.isSelectable = true
         field.alignment = alignment
@@ -193,10 +196,55 @@ final class DriveInfoDialog: NSWindowController {
         return field
     }
 
+    /// Řádek velikosti: popisek, bajty a zaokrouhlená velikost zarovnané vpravo
+    /// (stejné sloupce ve všech informačních dialozích).
+    /// - Returns: svislá poloha dalšího řádku
+    func addSizeRow(_ label: String, bytes: UInt64, to content: FlippedView, y: CGFloat) -> CGFloat {
+        content.place(NSTextField(labelWithString: label), NSRect(x: 70, y: y, width: 110, height: 17))
+        content.place(makeValue(formatExactSize(bytes) + " bajtů", alignment: .right),
+                      NSRect(x: 180, y: y, width: 190, height: 17))
+        content.place(makeValue(formatSize(bytes), alignment: .right), NSRect(x: 376, y: y, width: 90, height: 17))
+        return y + 24
+    }
+
+    /// Dokončí obsah: tlačítko Zavřít uprostřed, výška okna podle obsahu
+    /// a fokus na tlačítku (aby žádná hodnota nebyla po otevření označená).
+    /// - Parameters:
+    ///   - content: sestavený obsah dialogu
+    ///   - y: svislá poloha pod posledním prvkem obsahu
+    func finish(content: FlippedView, y: CGFloat) {
+        let closeButton = NSButton(title: "Zavřít", target: self, action: #selector(close(_:)))
+        closeButton.keyEquivalent = "\r"
+        content.place(closeButton, NSRect(x: (width - 110) / 2, y: y, width: 110, height: 28))
+        let height = y + 28 + 16
+        content.setFrameSize(NSSize(width: width, height: height))
+        window?.setContentSize(NSSize(width: width, height: height))
+        window?.contentView = content
+        window?.initialFirstResponder = closeButton
+    }
+
+    /// Zavře sheet.
+    @objc private func close(_ sender: Any?) {
+        if let window { window.sheetParent?.endSheet(window) }
+    }
+}
+
+/// Dialog Informace o jednotce (sheet nad hlavním oknem), jen pro čtení.
+final class DriveInfoDialog: InfoDialog {
+    /// Sestaví dialog; zobrazuje se jako sheet (MainWindowController.presentSheet).
+    /// - Parameter info: údaje o svazku
+    init(info: VolumeInfo) {
+        super.init(title: "Informace o jednotce", width: 600)
+        buildContent(info)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Není podporováno")
+    }
+
     /// Rozvržení podle dialogu Salamandera: svazek, místo s grafem, bloky,
     /// systém souborů. Výška dialogu se dopočítá podle textu příznaků.
     private func buildContent(_ info: VolumeInfo) {
-        let width = DriveInfoDialog.width
         // Sloupce popisků a hodnot, výška řádku.
         let labelX: CGFloat = 70
         let valueX: CGFloat = 230
@@ -248,11 +296,7 @@ final class DriveInfoDialog: NSWindowController {
                 swatch.fillColor = color
                 content.addSubview(swatch)
             }
-            content.place(NSTextField(labelWithString: label), NSRect(x: labelX, y: y, width: 110, height: 17))
-            content.place(makeValue(formatExactSize(bytes) + " bajtů", alignment: .right),
-                          NSRect(x: 180, y: y, width: 190, height: 17))
-            content.place(makeValue(formatSize(bytes), alignment: .right), NSRect(x: 376, y: y, width: 90, height: 17))
-            y += rowHeight
+            y = addSizeRow(label, bytes: bytes, to: content, y: y)
         }
         let pie = UsagePieView()
         pie.freeFraction = info.capacity > 0 ? CGFloat(info.free) / CGFloat(info.capacity) : 0
@@ -273,22 +317,6 @@ final class DriveInfoDialog: NSWindowController {
         let flagsHeight = ceil(flagsField.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: valueWidth, height: 10000)).height ?? 17)
         addRow("Příznaky:", flagsField, height: flagsHeight)
         addSeparator()
-
-        // Tlačítko Zavřít (Enter; Escape řeší okno).
-        let closeButton = NSButton(title: "Zavřít", target: self, action: #selector(close(_:)))
-        closeButton.keyEquivalent = "\r"
-        content.place(closeButton, NSRect(x: (width - 110) / 2, y: y, width: 110, height: 28))
-        y += 28 + 16
-
-        content.setFrameSize(NSSize(width: width, height: y))
-        window?.setContentSize(NSSize(width: width, height: y))
-        window?.contentView = content
-        // Fokus na tlačítku, aby žádná hodnota nebyla po otevření označená.
-        window?.initialFirstResponder = closeButton
-    }
-
-    /// Zavře sheet.
-    @objc private func close(_ sender: Any?) {
-        if let window { window.sheetParent?.endSheet(window) }
+        finish(content: content, y: y)
     }
 }
