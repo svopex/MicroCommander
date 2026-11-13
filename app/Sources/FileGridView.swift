@@ -385,7 +385,7 @@ final class FileGridView: NSView {
         }
     }
 
-    /// ⌘A (Úpravy › Vybrat vše) = příkaz Označit vše (rozhoduje hlavní okno).
+    /// ⌘A (Označit › Označit vše, akce selectAll:) = příkaz Označit vše (rozhoduje hlavní okno).
     override func selectAll(_ sender: Any?) {
         guard let owner else { return }
         owner.inputHandler?.panelView(owner, perform: .selectAll)

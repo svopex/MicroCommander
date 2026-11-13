@@ -18,7 +18,7 @@ protocol PanelInputHandler: AnyObject {
     func panelView(_ view: PanelView, menuForRow row: Int) -> NSMenu?
     /// Menu disků (tlačítko na řádku adresáře).
     func panelViewShowDriveChooser(_ view: PanelView, anchor: NSView)
-    /// Příkaz vyvolaný z pohledu panelu (např. ⌘A přes Úpravy › Vybrat vše).
+    /// Příkaz vyvolaný z pohledu panelu (např. ⌘A přes Označit › Označit vše).
     func panelView(_ view: PanelView, perform command: Command)
 }
 
@@ -683,7 +683,7 @@ final class SalTableView: NSTableView {
 
     override var acceptsFirstResponder: Bool { true }
 
-    /// ⌘A (Úpravy › Vybrat vše) = příkaz Označit vše (rozhoduje hlavní okno).
+    /// ⌘A (Označit › Označit vše, akce selectAll:) = příkaz Označit vše (rozhoduje hlavní okno).
     override func selectAll(_ sender: Any?) {
         guard let owner else { return }
         owner.inputHandler?.panelView(owner, perform: .selectAll)

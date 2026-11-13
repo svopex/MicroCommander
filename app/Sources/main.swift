@@ -93,14 +93,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "Ukončit MicroCommander", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         addSubmenu(appMenu, title: "MicroCommander", to: mainMenu)
 
-        // Standardní Úpravy – nutné pro ⌘C/⌘V/⌘X v textových polích (⌘A v panelu označí vše).
+        // Standardní Úpravy – nutné pro ⌘C/⌘V/⌘X v textových polích
+        // (⌘A / vybrat vše je v menu Označit › Označit vše).
         let editMenu = NSMenu(title: "Úpravy")
         editMenu.addItem(withTitle: "Zpět", action: Selector(("undo:")), keyEquivalent: "z")
         editMenu.addItem(.separator())
         editMenu.addItem(withTitle: "Vyjmout", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: "Kopírovat", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Vložit", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Vybrat vše", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenu.addItem(.separator())
         // Cesta aktuálního adresáře aktivního panelu (Ctrl+Alt+Insert v Salamanderu).
         editMenu.addItem(makeItem(("Kopírovat cestu adresáře", .copyDirPath, "c", [.command, .option]), controller))
@@ -127,7 +127,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addSubmenu(editMenu, title: "Úpravy", to: mainMenu)
 
         let markEntries: [Entry] = [
-            ("Označit vše", .selectAll, "a", [.command]),
             ("Zrušit označení", .unselectAll, "d", [.command]),
             ("Označit podle masky…", .selectMask, "=", [.command]),
             ("Odznačit podle masky…", .unselectMask, "-", [.command]),
@@ -135,7 +134,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nil,
             ("Porovnat adresáře", .compare, KeyCode.functionKeyString(10), [.control]),
         ]
-        addSubmenu(makeMenu("Označit", markEntries, controller), title: "Označit", to: mainMenu)
+        let markMenu = makeMenu("Označit", markEntries, controller)
+        // ⌘A přes responder chain (cíl nil): v panelu označí vše (selectAll: →
+        // příkaz Označit vše), v textových polích a dialozích vybere text.
+        markMenu.insertItem(withTitle: "Označit vše", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a", at: 0)
+        addSubmenu(markMenu, title: "Označit", to: mainMenu)
 
         let commandEntries: [Entry] = [
             ("Vyhledat soubory a adresáře…", .find, "f", [.command]),
