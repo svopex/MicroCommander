@@ -23,10 +23,10 @@ enum Settings {
         }
     }
 
-    /// Označit vše (⌘A) označuje i adresáře; výchozí ne = jen soubory.
+    /// Označit vše (⌘A) označuje i adresáře; výchozí ano (bez uložené volby).
     /// Zrušení označení platí vždy i pro adresáře.
     static var selectAllIncludesDirs: Bool {
-        get { UserDefaults.standard.bool(forKey: selectAllDirsKey) }
+        get { UserDefaults.standard.object(forKey: selectAllDirsKey) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: selectAllDirsKey) }
     }
 }
@@ -85,7 +85,7 @@ final class SettingsWindowController: NSWindowController {
         selectDirsCheckbox.action = #selector(selectDirsToggled(_:))
         let middleBarNote = note("Svislá lišta s ikonami operací (kopírovat, přesunout, smazat…) mezi levým a pravým panelem. "
                                  + "Vypnutá lišta zůstane jen jako úzký dělicí pruh.")
-        let selectDirsNote = note("Bez zaškrtnutí ⌘A označí jen soubory. Opakovaný stisk ⌘A zruší celé označení "
+        let selectDirsNote = note("Výchozí je zapnuto. Bez zaškrtnutí ⌘A označí jen soubory. Opakovaný stisk ⌘A zruší celé označení "
                                   + "(vždy i adresáře).")
 
         let stack = NSStackView(views: [heading("Vzhled"), middleBarCheckbox, middleBarNote,

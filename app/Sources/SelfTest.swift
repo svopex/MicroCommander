@@ -107,6 +107,9 @@ final class UISelfTest {
             for (key, value) in savedSettings {
                 if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
             }
+            // Test končí okamžitým exit() – změny předvoleb se musí zapsat hned,
+            // jinak by se (hlavně odstranění klíče) nemusely stihnout uložit.
+            CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
         }
         prepareFiles()
         var steps: [(ready: () -> Bool, action: () -> Void)] = []
@@ -248,7 +251,7 @@ final class UISelfTest {
             try? applyAttributeChanges(AttributeChanges(readonly: false), to: [path], state: ProgressState())
             self.check(FileManager.default.isWritableFile(atPath: path), "změna atributů: vrácení zápisu")
         }))
-        // 11c) ⌘A označí jen soubory (výchozí Nastavení), druhé ⌘A označení zruší.
+        // 11c) ⌘A s vypnutou volbou „i adresáře“ označí jen soubory, druhé ⌘A označení zruší.
         steps.append((ready: { self.windowFree }, action: {
             Settings.selectAllIncludesDirs = false
             try? FileManager.default.createDirectory(atPath: self.root + "/src/podadresar", withIntermediateDirectories: true)

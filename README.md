@@ -177,7 +177,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   aktivního panelu do schránky (u archivu/FTP tak, jak ji ukazuje řádek adresáře)
 - **Označování:** Space / Insert – označit a posunout; ⇧↑↓, ⇧PgUp/PgDn,
   ⇧Home/End, ⌘klik, ⇧klik; ⌘A – označit vše (opakovaný stisk označení zruší;
-  adresáře podle Nastavení, výchozí jen soubory), ⌘D – nic; Num + / Num − (⌘= / ⌘−) –
+  adresáře podle Nastavení, výchozí i adresáře), ⌘D – nic; Num + / Num − (⌘= / ⌘−) –
   podle masky; Num * – invertovat. Operace pracují s označenými položkami,
   bez označení s položkou pod kurzorem.
 - **Režimy zobrazení** (⌥1–⌥6, menu Zobrazení, tlačítko na liště, kontextové
@@ -243,8 +243,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **Nastavení** (⌘, v aplikačním menu): **Zobrazovat lištu příkazů mezi
   panely** – svislá lišta s ikonami operací; výchozí je vypnutá, mezi panely
   je jen úzký dělicí pruh jako v Salamanderu. Změna platí hned (předvolba
-  `showMiddleBar`). **Označit vše (⌘A) označuje i adresáře** – výchozí vypnuto
-  (⌘A označí jen soubory); zrušení označení platí vždy i pro adresáře
+  `showMiddleBar`). **Označit vše (⌘A) označuje i adresáře** – výchozí zapnuto
+  (vypnuté = ⌘A označí jen soubory); zrušení označení platí vždy i pro adresáře
   (předvolba `selectAllIncludesDirs`).
 - **FTP/SFTP servery** (F11, tlačítko FTP/SFTP v liště disků, poslední položka
   nabídky disků): seznam libovolného počtu uložených serverů – **+** přidá,
