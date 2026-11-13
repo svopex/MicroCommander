@@ -258,9 +258,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     a Num * invertuje jen soubory), zrušení označení platí vždy i pro adresáře
     (předvolba `selectAllIncludesDirs`).
   - **Barvy:** barevné schéma panelů podle Konfigurace › Barvy Salamandera
-    (předvolba `colorScheme`): **macOS – tmavé** (výchozí; systémové barvy
-    a vynucený tmavý režim celé aplikace), **macOS – podle systému** (světlý/tmavý
-    podle macOS) a schémata převzatá z Open Salamanderu se světlým okolím panelů –
+    (předvolba `colorScheme`): **macOS – podle systému** (výchozí; systémové
+    barvy, světlý/tmavý režim podle macOS), **macOS – tmavé** (systémové barvy
+    a vynucený tmavý režim celé aplikace) a schémata převzatá z Open Salamanderu se světlým okolím panelů –
     **Open Salamander** (bílé pozadí, označené červeně, šedý kurzor), **Windows
     Explorer** (označené bíle na tmavě modré), **Norton Commander** (azurová
     na tmavě modré, označené žlutě, tyrkysový kurzor) a **DOS Navigator** (bílá

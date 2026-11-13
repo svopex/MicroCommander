@@ -44,7 +44,7 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: savePanelPathsKey) }
     }
 
-    /// Barevné schéma panelů; výchozí „macOS – tmavé“. Změna nastaví vzhled
+    /// Barevné schéma panelů; výchozí PanelColorScheme.defaultScheme. Změna nastaví vzhled
     /// aplikace a oznámí překreslení panelů.
     static var colorScheme: PanelColorScheme {
         get {
@@ -271,8 +271,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         row.orientation = .horizontal
         row.spacing = 8
         let note = noteLabel(
-            "„macOS – tmavé“ (výchozí) používá systémové barvy v tmavém režimu, „macOS – podle systému“ "
-            + "přepíná světlý a tmavý režim s macOS. Ostatní schémata odpovídají Open Salamanderu "
+            "„\(PanelColorScheme.macSystem.title)“ používá systémové barvy a přepíná světlý a tmavý režim "
+            + "s macOS, „\(PanelColorScheme.macDark.title)“ je vždy v tmavém režimu. "
+            + "Výchozí je „\(PanelColorScheme.defaultScheme.title)“. Ostatní schémata odpovídají Open Salamanderu "
             + "a mají světlé okolí panelů.")
         let page = NSView()
         for view in [row, note] as [NSView] {

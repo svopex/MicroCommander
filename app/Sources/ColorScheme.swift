@@ -4,16 +4,15 @@
 // Barevná schémata panelů podle Konfigurace › Panely › Barvy Salamandera
 // (SalamanderColors, ExplorerColors, NortonColors, NavigatorColors
 // v salamdr1.cpp) a k nim macOS schémata se systémovými barvami.
-// Výchozí je „macOS – tmavé“ (systémové barvy ve vynuceném tmavém vzhledu).
 
 import AppKit
 
 /// Barevné schéma panelů (uložené v UserDefaults pod svým rawValue).
 enum PanelColorScheme: String, CaseIterable {
-    case macDark, macSystem, salamander, explorer, norton, navigator
+    case macSystem, macDark, salamander, explorer, norton, navigator
 
-    /// Výchozí schéma (bez uložené volby).
-    static let defaultScheme = PanelColorScheme.macDark
+    /// Výchozí schéma bez uložené volby: systémové barvy, světlý/tmavý podle macOS.
+    static let defaultScheme = PanelColorScheme.macSystem
 
     /// Název v Nastavení (jména schémat převzatá ze Salamandera).
     var title: String {
