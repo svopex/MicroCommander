@@ -150,11 +150,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
     static func show(parent: MainWindowController, panel: PanelController? = nil, selecting: UUID? = nil) {
         // Kontroler musí žít po celou dobu sheetu (jinak tlačítka nereagují).
         let controller = ConnectWindowController(owner: parent, panel: panel, selecting: selecting)
-        parent.sheetController = controller
-        parent.window!.beginSheet(controller.window!) { [weak parent] _ in
-            parent?.sheetController = nil
-            parent?.focusActivePanel()
-        }
+        parent.presentSheet(controller)
     }
 
     init(owner: MainWindowController, panel: PanelController? = nil, selecting: UUID? = nil) {
@@ -664,11 +660,7 @@ final class FindWindowController: NSWindowController, NSTableViewDataSource, NST
     /// Zobrazí dialog hledání (sheet nad hlavním oknem).
     static func show(parent: MainWindowController) {
         let controller = FindWindowController(owner: parent)
-        parent.sheetController = controller
-        parent.window!.beginSheet(controller.window!) { [weak parent] _ in
-            parent?.sheetController = nil
-            parent?.focusActivePanel()
-        }
+        parent.presentSheet(controller)
     }
 
     init(owner: MainWindowController) {

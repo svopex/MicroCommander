@@ -184,6 +184,13 @@ README.md       # zadání (aktualizovat na konci)
 
 ## Poslední aktualizace
 
+- 2026-11-13 (25): Nabídka disků = jeden společný seznam míst (Places.swift:
+  Place, PlaceStore – placesOrder/hiddenPlaces/customFolders, převod
+  driveOrder): disky, vlastní adresáře a servery bez omezení pořadí, skrytí,
+  dialog „Upravit nabídku disků…“ (menu Panel, konec nabídky, kontextové menu
+  lišty) s přetahováním myší; lišta disků bez serverů a skrytých,
+  MainWindowController.presentSheet pro všechny sheety.
+
 - 2026-11-13 (24): Duplikovat server ve správě serverů (kopie i s heslem
   v Klíčence). Nabídka disků: šířka podle nejdelší položky, text na jednom
   řádku, šipky nahoru/dolů v řádku; DriveChooser.movableGroups (disky

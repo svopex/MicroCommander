@@ -99,6 +99,8 @@ app/                        # tenké UI pro macOS
                             #   interní prohlížeč, nabídka disků
   Sources/Servers.swift     # uložené FTP/SFTP servery (UserDefaults),
                             #   hesla v Klíčence, připojení serveru v panelu
+  Sources/Places.swift      # místa nabídky disků (pořadí, skrytí, vlastní
+                            #   adresáře) a dialog Upravit nabídku disků
   Sources/SelfTest.swift    # self-test UI (SAL_SELFTEST=1)
   Sources/main.swift        # NSApplication, hlavní menu
   Info.plist
@@ -168,18 +170,29 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   adresáře (označí odlišné soubory); ⌥F1/⌥F2 disk vlevo/vpravo, ⌥F5 zabalit do
   ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat, ⌥F10 obsazené místo.
 - **Nabídka disků** (⌥F1 levý / ⌥F2 pravý panel, tlačítko disku na řádku
-  adresáře): kořen, domov, připojené svazky, **uložené FTP/SFTP servery**
-  (výběr serveru ho připojí v daném panelu) a „FTP/SFTP servery…“ (správa);
-  kurzor začíná na disku,
-  kde panel je. ↑/↓ cyklí (z poslední položky na první a obráceně), Home/End,
-  číslice 1–9 vyberou přímo, Enter potvrdí, Escape nebo klik mimo zavře.
-  **Pořadí disků** je výchozí Domů, „/“, svazky; mění se v nabídce šipkami
-  nahoru/dolů vpravo v řádku, klávesami ⌥↑ / ⌥↓ (⌘↑ / ⌘↓) nebo pravým
-  tlačítkem na disku v liště disků (Na první místo / Posunout doleva /
-  doprava). Stejně (šipkami v řádku, ⌥↑ / ⌥↓) se mění i **pořadí serverů** –
-  disky i servery se přesouvají jen v rámci své skupiny. Pořadí se pamatuje
-  a platí pro lištu i nabídku; nově připojené svazky se řadí na konec.
-  Nabídka je široká podle nejdelší položky, text je vždy na jednom řádku.
+  adresáře): kořen, domov, připojené svazky, **vlastní adresáře** a **uložené
+  FTP/SFTP servery** (výběr serveru ho připojí v daném panelu), na konci
+  „FTP/SFTP servery…“ (správa) a „Upravit nabídku disků…“; kurzor začíná na
+  místě, kde panel je. ↑/↓ cyklí (z poslední položky na první a obráceně),
+  Home/End, číslice 1–9 vyberou přímo, Enter potvrdí, Escape nebo klik mimo
+  zavře. **Pořadí** je jedno společné pro všechny položky (disky, adresáře
+  i servery lze libovolně promíchat); výchozí Domů, „/“, svazky, adresáře,
+  servery. Mění se šipkami nahoru/dolů vpravo v řádku, klávesami ⌥↑ / ⌥↓
+  (⌘↑ / ⌘↓), v dialogu Upravit nabídku disků nebo pravým tlačítkem na liště
+  disků (Na první místo / Posunout doleva / doprava / Skrýt). Pořadí se
+  pamatuje a platí pro lištu i nabídku; nová místa (svazek, adresář, server)
+  se řadí na konec. Nabídka je široká podle nejdelší položky, text je vždy na
+  jednom řádku.
+- **Upravit nabídku disků** (menu Panel, poslední položka nabídky disků,
+  pravé tlačítko na liště disků): všechna místa v pořadí nabídky; zaškrtnutí
+  „Zobrazit“ = položka je v nabídce a na liště disků, odškrtnutá je **skrytá**
+  (i disk nebo server). **Přidat adresář…** přidá vlastní adresáře (i více
+  najednou), **Odebrat** je smaže, dvojklik na název vlastního adresáře ho
+  přejmenuje; pořadí se mění **přetažením myší** nebo šipkami pro vybranou
+  položku. Změny platí hned. Lišta disků
+  ukazuje disky a vlastní adresáře (servery jen v nabídce). Uložení
+  v předvolbách: `placesOrder` (pořadí), `hiddenPlaces` (skryté),
+  `customFolders` (adresáře); dřívější `driveOrder` se převezme.
 - **FTP/SFTP servery** (F11, tlačítko FTP/SFTP v liště disků, poslední položka
   nabídky disků): seznam libovolného počtu uložených serverů – **+** přidá,
   **−** odebere (po potvrzení), **Duplikovat** vytvoří kopii vybraného serveru
@@ -251,7 +264,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - `make keycheck` – Home/End, ⌥↑/⌥↓ a systémové příkazy začátek/konec
   dokumentu ve všech šesti režimech s 500 soubory v okně skutečné velikosti
   (kurzor na „..“ / poslední položku a zůstane vidět), cyklení a změna pořadí
-  v nabídce disků, uložené FTP/SFTP servery (název, adresa, potřeba hesla,
+  v nabídce disků, řazení míst podle uloženého pořadí, uložené FTP/SFTP servery (název, adresa, potřeba hesla,
   uložení do JSON);
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`

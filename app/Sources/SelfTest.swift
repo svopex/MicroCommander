@@ -536,18 +536,26 @@ final class UIKeyCheck {
         do {
             // Volitelný snímek dialogu připojení (hodnoty dodají argumenty -connect…).
             if let path = ProcessInfo.processInfo.environment["SAL_CONNECT_SNAPSHOT"] {
-                let dialog = ConnectWindowController(owner: self.controller)
-                // Světlý vzhled: mimo obrazovku se pozadí okna nekreslí (bílý text by nebyl vidět).
-                dialog.window?.appearance = NSAppearance(named: .aqua)
-                dialog.window?.contentView?.layoutSubtreeIfNeeded()
-                if let view = dialog.window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-                    view.cacheDisplay(in: view.bounds, to: rep)
-                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
-                }
+                self.writeSnapshot(ConnectWindowController(owner: self.controller).window, to: path)
+            }
+            // Volitelný snímek dialogu „Upravit nabídku disků“.
+            if let path = ProcessInfo.processInfo.environment["SAL_PLACES_SNAPSHOT"] {
+                self.writeSnapshot(PlacesWindowController().window, to: path)
             }
             try? FileManager.default.removeItem(atPath: (dir as NSString).deletingLastPathComponent)
             print(self.failures == 0 ? "KEYCHECK: vše OK" : "KEYCHECK: \(self.failures) chyb")
             exit(self.failures == 0 ? 0 : 1)
+        }
+    }
+
+    /// Uloží snímek okna dialogu do PNG (vykreslení mimo obrazovku).
+    /// Světlý vzhled: mimo obrazovku se pozadí okna nekreslí (bílý text by nebyl vidět).
+    private func writeSnapshot(_ window: NSWindow?, to path: String) {
+        window?.appearance = NSAppearance(named: .aqua)
+        window?.contentView?.layoutSubtreeIfNeeded()
+        if let view = window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
         }
     }
 
@@ -599,13 +607,13 @@ final class UIKeyCheck {
         reorder.select(3)
         _ = reorder.handleKey(event(KeyCode.up, NSUpArrowFunctionKey, [.option, .function]))
         self.check(moves.count == 2, "nabídka disků: „FTP/SFTP servery…“ se nepřesouvá")
-        // Dvě skupiny (disky 0–1, servery 2–3): přesun jen uvnitř skupiny.
-        let groups = DriveChooser(entries: entries, selected: 0, movableGroups: [0..<2, 2..<4]) { _ in }
-        self.check(groups.canMove(2, to: 3) && !groups.canMove(1, to: 2),
-                   "nabídka disků: server se přesouvá jen mezi servery, ne mezi disky")
+        // Pořadí míst: uložené klíče první, nová místa na konec, neexistující se přeskočí.
+        let natural = ["a", "b", "c"].map { Place(key: $0, kind: .folder, title: $0, detail: "/" + $0, icon: nil) }
+        let ordered = PlaceStore.ordered(natural, saved: ["c", "x", "a"]).map(\.key)
+        self.check(ordered == ["c", "a", "b"], "nabídka disků: uložené pořadí, nové místo na konec (\(ordered))")
         // Výchozí pořadí (jen pokud uživatel ještě nic neuložil): Domů první.
-        if UserDefaults.standard.object(forKey: "driveOrder") == nil {
-            self.check(DriveBar.listDrives().first?.path == NSHomeDirectory(), "výchozí pořadí disků: Domů první")
+        if UserDefaults.standard.object(forKey: "placesOrder") == nil && UserDefaults.standard.object(forKey: "driveOrder") == nil {
+            self.check(PlaceStore.allPlaces().first?.detail == NSHomeDirectory(), "výchozí pořadí disků: Domů první")
         }
         // Volitelný snímek skutečné nabídky (vykreslení mimo obrazovku, bez zobrazení okna).
         if let path = ProcessInfo.processInfo.environment["SAL_CHOOSER_SNAPSHOT"] {

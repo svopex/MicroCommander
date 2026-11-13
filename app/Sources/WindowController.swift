@@ -190,7 +190,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         topBar.onCommand = { [weak self] in self?.perform($0) }
         middleBar.onCommand = { [weak self] in self?.perform($0) }
         functionBar.onCommand = { [weak self] in self?.perform($0) }
-        driveBar.onDrive = { [weak self] drive in self?.openDrive(drive.path, in: self?.activePanel) }
+        driveBar.onPlace = { [weak self] place in
+            guard let self else { return }
+            self.open(place, in: self.activePanel)
+        }
+        driveBar.onEditPlaces = { [weak self] in self?.perform(.editPlaces) }
         driveBar.onConnect = { [weak self] in self?.perform(.connect) }
         commandLine.onExecute = { [weak self] in self?.executeCommandLine($0) }
         commandLine.onLeave = { [weak self] in self?.focusActivePanel() }
@@ -687,92 +691,88 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     /// Akce položky nabídky disků.
     enum DriveChoice {
-        case drive(path: String)
-        case server(ServerProfile)
+        case place(Place)
         case manageServers
+        case editPlaces
 
-        /// Cesta disku (nil u ostatních položek).
-        var drivePath: String? {
-            if case .drive(let path) = self { return path }
-            return nil
-        }
-
-        /// Uložený server (nil u ostatních položek).
-        var server: ServerProfile? {
-            if case .server(let server) = self { return server }
+        /// Místo (nil u pevných položek na konci nabídky).
+        var place: Place? {
+            if case .place(let place) = self { return place }
             return nil
         }
     }
 
-    /// Položky nabídky disků: kořen, domov, svazky (v uloženém pořadí), uložené
-    /// FTP/SFTP servery a na konci správa serverů. Sdílí nabídka i self-test.
+    /// Položky nabídky disků: zobrazená místa (disky, vlastní adresáře, servery)
+    /// ve společném pořadí, na konci správa serverů a úprava nabídky. Sdílí
+    /// nabídka i self-test.
     static func driveChooserItems() -> [(entry: DriveChooser.Entry, choice: DriveChoice)] {
         // Cestu ukážeme jen tam, kde se liší od názvu (kořen „/“ by byl dvakrát).
-        var items = DriveBar.listDrives().map {
-            (entry: DriveChooser.Entry(title: $0.title, detail: $0.title == $0.path ? "" : $0.path, icon: $0.icon),
-             choice: DriveChoice.drive(path: $0.path))
-        }
-        let serverIcon = NSImage(systemSymbolName: "server.rack", accessibilityDescription: nil)
-        items += ServerStore.load().map {
-            (entry: DriveChooser.Entry(title: $0.displayName, detail: $0.urlString, icon: serverIcon),
-             choice: DriveChoice.server($0))
+        var items = PlaceStore.visiblePlaces().map {
+            (entry: DriveChooser.Entry(title: $0.title, detail: $0.title == $0.detail ? "" : $0.detail, icon: $0.icon),
+             choice: DriveChoice.place($0))
         }
         items.append((entry: DriveChooser.Entry(title: "FTP/SFTP servery…", detail: "",
                                                 icon: NSImage(systemSymbolName: "network", accessibilityDescription: nil)),
                       choice: .manageServers))
+        items.append((entry: DriveChooser.Entry(title: "Upravit nabídku disků…", detail: "",
+                                                icon: NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)),
+                      choice: .editPlaces))
         return items
     }
 
-    /// Skupiny přesouvatelných položek nabídky: souvislé úseky disků a serverů
-    /// (každá skupina se přesouvá zvlášť; správa serverů nikam nepatří).
+    /// Přesouvatelné položky nabídky: všechna místa (bez omezení mezi typy),
+    /// pevné zůstávají jen dvě položky na konci.
     static func driveChooserGroups(_ items: [(entry: DriveChooser.Entry, choice: DriveChoice)]) -> [Range<Int>] {
-        let drives = items.compactMap(\.choice.drivePath).count
-        let servers = items.compactMap(\.choice.server).count
-        return [0..<drives, drives..<(drives + servers)]
+        [0..<items.compactMap(\.choice.place).count]
     }
 
-    /// Nabídka disků pro panel (⌥F1/⌥F2, tlačítko disku). Výchozí řádek = disk,
-    /// na kterém panel právě je; disky i servery lze přesouvat (šipky v řádku, ⌥↑/⌥↓).
+    /// Nabídka disků pro panel (⌥F1/⌥F2, tlačítko disku). Výchozí řádek = místo,
+    /// na kterém panel právě je; místa lze přesouvat (šipky v řádku, ⌥↑/⌥↓).
     func panelViewShowDriveChooser(_ view: PanelView, anchor: NSView) {
         let panel = view.panel
-        let drives = DriveBar.listDrives()
         // Položky se při přesunu v nabídce prohazují – výběr pak odpovídá novému pořadí.
         var items = MainWindowController.driveChooserItems()
-        let chooser = DriveChooser.show(entries: items.map(\.entry), selected: currentDriveIndex(drives, panel: panel),
+        let places = items.compactMap(\.choice.place)
+        let chooser = DriveChooser.show(entries: items.map(\.entry), selected: currentPlaceIndex(places, panel: panel),
                                         movableGroups: MainWindowController.driveChooserGroups(items),
                                         below: anchor) { [weak self] index in
             guard let self else { return }
             self.activate(panel)
             switch items[index].choice {
-            case .drive(let path): self.openDrive(path, in: panel)
-            case .server(let server): self.connect(server: server, in: panel)
+            case .place(let place): self.open(place, in: panel)
             case .manageServers: ConnectWindowController.show(parent: self, panel: panel)
+            case .editPlaces: PlacesWindowController.show(parent: self)
             }
         }
         chooser.onMove = { from, to in
             items.swapAt(from, to)
-            // Uloží se jen skupina, ve které se přesouvalo (disky, nebo servery).
-            if items[to].choice.drivePath != nil {
-                DriveBar.saveOrder(items.compactMap(\.choice.drivePath))
-            } else {
-                // Pořadí podle nabídky, aktuální údaje serverů z úložiště.
-                let stored = ServerStore.load()
-                let order = items.compactMap(\.choice.server?.id)
-                ServerStore.save(order.compactMap { id in stored.first { $0.id == id } })
+            // Prohození v celkovém pořadí míst (skrytá místa zůstávají na svém místě).
+            if let first = items[from].choice.place, let second = items[to].choice.place {
+                PlaceStore.swap(first.key, second.key)
             }
         }
     }
 
-    /// Index disku, pod který patří aktuální cesta panelu (nejdelší shodný prefix).
-    private func currentDriveIndex(_ drives: [DriveBar.Drive], panel: PanelController) -> Int {
+    /// Otevře místo v panelu: disk/adresář jako cestu, server připojí.
+    func open(_ place: Place, in panel: PanelController) {
+        switch place.kind {
+        case .drive, .folder: openDrive(place.detail, in: panel)
+        case .server(let server): connect(server: server, in: panel)
+        }
+    }
+
+    /// Index místa, pod které patří aktuální cesta panelu (nejdelší shodný prefix
+    /// cesty disku nebo adresáře); vzdálený panel → 0.
+    private func currentPlaceIndex(_ places: [Place], panel: PanelController) -> Int {
         guard let path = panel.location.vfs.realPath(panel.location.path) else { return 0 }
         var best = 0
         var bestLength = -1
-        for (index, drive) in drives.enumerated() {
-            let prefix = drive.path == "/" ? "/" : drive.path + "/"
-            if (path == drive.path || path.hasPrefix(prefix)) && drive.path.count > bestLength {
+        for (index, place) in places.enumerated() {
+            guard let placePath = place.path else { continue }
+            let prefix = placePath == "/" ? "/" : placePath + "/"
+            if (path == placePath || path.hasPrefix(prefix)) && placePath.count > bestLength {
                 best = index
-                bestLength = drive.path.count
+                bestLength = placePath.count
             }
         }
         return best
@@ -962,6 +962,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .terminal: commandTerminal()
         case .quit: NSApp.terminate(nil)
         case .connect: ConnectWindowController.show(parent: self)
+        case .editPlaces: PlacesWindowController.show(parent: self)
         case .disconnect: panel.closeNested()
         case .sortName: panel.setSort(.name)
         case .sortExt: panel.setSort(.ext)
@@ -1571,6 +1572,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     private func showErrorUnlessCancelled(title: String, _ error: Error) {
         if let error = error as? CoreError, error.isCancelledLike { return }
         showAlert(title: title, text: error.localizedDescription)
+    }
+
+    /// Zobrazí kontroler jako sheet nad hlavním oknem. Kontroler se drží
+    /// v `sheetController` po celou dobu sheetu (jinak tlačítka nereagují),
+    /// po zavření se vrátí fokus do panelu.
+    func presentSheet(_ controller: NSWindowController) {
+        sheetController = controller
+        window!.beginSheet(controller.window!) { [weak self] _ in
+            self?.sheetController = nil
+            self?.focusActivePanel()
+        }
     }
 
     /// Zobrazí hlášení (modálně).

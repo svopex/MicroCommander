@@ -146,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nil,
             ("Disk v levém panelu…", .driveLeft, KeyCode.functionKeyString(1), [.option]),
             ("Disk v pravém panelu…", .driveRight, KeyCode.functionKeyString(2), [.option]),
+            ("Upravit nabídku disků…", .editPlaces, "", []),
             nil,
             ("Řadit podle jména", .sortName, KeyCode.functionKeyString(3), [.control]),
             ("Řadit podle přípony", .sortExt, KeyCode.functionKeyString(4), [.control]),

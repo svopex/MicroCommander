@@ -13,7 +13,7 @@ enum Command: CaseIterable {
     case help, rename, view, edit, newFile, copy, move, mkdir, changeDir, delete
     case terminal, quit, connect, disconnect
     case sortName, sortExt, sortTime, sortSize, refresh, compare
-    case driveLeft, driveRight, pack, unpack, find, calcSize
+    case driveLeft, driveRight, editPlaces, pack, unpack, find, calcSize
     case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden
     case selectMask, unselectMask, invertMarks, selectAll, unselectAll
     case viewMenu, viewBrief, viewDetailed, viewIcons, viewThumbnails, viewTiles, viewTypes
@@ -119,19 +119,16 @@ final class CommandBar: NSView {
     }
 }
 
-/// Lišta disků: kořen, domov, připojené svazky a FTP.
+/// Lišta disků: místa z nabídky disků kromě serverů (disky, vlastní adresáře)
+/// v jejím pořadí a bez skrytých, na konci tlačítko FTP/SFTP serverů.
 final class DriveBar: NSView {
-    /// Svazek na liště (název, cesta, ikona).
-    struct Drive {
-        let title: String
-        let path: String
-        let icon: NSImage
-    }
-
     private let stack = NSStackView()
-    private(set) var drives: [Drive] = []
-    var onDrive: ((Drive) -> Void)?
+    /// Místa na liště (index = tag tlačítka).
+    private(set) var places: [Place] = []
+    var onPlace: ((Place) -> Void)?
     var onConnect: (() -> Void)?
+    /// Otevření dialogu „Upravit nabídku disků“ (kontextové menu).
+    var onEditPlaces: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -146,35 +143,35 @@ final class DriveBar: NSView {
             heightAnchor.constraint(equalToConstant: 24),
         ])
         refresh()
-        // Připojení/odpojení svazku lištu obnoví.
+        // Připojení/odpojení svazku a změna nabídky disků lištu obnoví.
         let center = NSWorkspace.shared.notificationCenter
-        center.addObserver(self, selector: #selector(volumesChanged(_:)), name: NSWorkspace.didMountNotification, object: nil)
-        center.addObserver(self, selector: #selector(volumesChanged(_:)), name: NSWorkspace.didUnmountNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(volumesChanged(_:)),
-                                               name: DriveBar.orderChanged, object: nil)
+        center.addObserver(self, selector: #selector(placesChanged(_:)), name: NSWorkspace.didMountNotification, object: nil)
+        center.addObserver(self, selector: #selector(placesChanged(_:)), name: NSWorkspace.didUnmountNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(placesChanged(_:)),
+                                               name: PlaceStore.changed, object: nil)
     }
 
     required init?(coder: NSCoder) {
         fatalError("Není podporováno")
     }
 
-    @objc private func volumesChanged(_ notification: Notification) {
+    @objc private func placesChanged(_ notification: Notification) {
         refresh()
     }
 
-    /// Načte seznam svazků a znovu sestaví tlačítka.
+    /// Načte zobrazená místa (bez serverů) a znovu sestaví tlačítka.
     func refresh() {
-        drives = DriveBar.listDrives()
+        places = PlaceStore.visiblePlaces().filter { !$0.isServer }
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for (index, drive) in drives.enumerated() {
-            let button = NSButton(title: drive.title, image: drive.icon, target: self, action: #selector(driveClicked(_:)))
+        for (index, place) in places.enumerated() {
+            let button = NSButton(title: place.title, image: place.icon ?? NSImage(), target: self, action: #selector(placeClicked(_:)))
             button.bezelStyle = .texturedRounded
             button.isBordered = false
             button.imagePosition = .imageLeading
             button.font = NSFont.systemFont(ofSize: 11)
             button.tag = index
-            button.toolTip = drive.path + " – pravým tlačítkem změníte pořadí"
-            button.menu = reorderMenu(for: index)
+            button.toolTip = place.detail + " – pravým tlačítkem změníte pořadí nebo položku skryjete"
+            button.menu = contextMenu(for: index)
             stack.addArrangedSubview(button)
         }
         let ftp = NSButton(title: "FTP/SFTP", image: NSImage(systemSymbolName: "network", accessibilityDescription: nil) ?? NSImage(),
@@ -187,80 +184,53 @@ final class DriveBar: NSView {
         stack.addArrangedSubview(ftp)
     }
 
-    /// Klíč uloženého pořadí disků (pole cest) v UserDefaults.
-    private static let orderKey = "driveOrder"
-    /// Oznámení o změně pořadí (lišta disků se překreslí).
-    static let orderChanged = Notification.Name("MicroCommanderDriveOrderChanged")
-
-    /// Disky v pořadí uživatele: uložené cesty první, nové svazky na konec.
-    /// Výchozí pořadí (nic uloženo): Domů, kořen „/“, svazky.
-    static func listDrives() -> [Drive] {
-        let natural = naturalDrives()
-        let saved = UserDefaults.standard.stringArray(forKey: orderKey) ?? [NSHomeDirectory(), "/"]
-        var ordered: [Drive] = saved.compactMap { path in natural.first { $0.path == path } }
-        ordered += natural.filter { drive in !ordered.contains { $0.path == drive.path } }
-        return ordered
-    }
-
-    /// Uloží pořadí disků (cesty) a oznámí změnu.
-    static func saveOrder(_ paths: [String]) {
-        UserDefaults.standard.set(paths, forKey: orderKey)
-        NotificationCenter.default.post(name: orderChanged, object: nil)
-    }
-
-    /// Přesune disk v uloženém pořadí z indexu `from` na `to`.
-    static func moveDrive(from: Int, to: Int) {
-        var paths = listDrives().map(\.path)
-        guard from >= 0, from < paths.count, to >= 0, to < paths.count, from != to else { return }
-        let path = paths.remove(at: from)
-        paths.insert(path, at: to)
-        saveOrder(paths)
-    }
-
-    /// Kořen disku, domovský adresář a připojené svazky (/Volumes) v systémovém pořadí.
-    private static func naturalDrives() -> [Drive] {
-        func icon(_ path: String) -> NSImage {
-            let image = NSWorkspace.shared.icon(forFile: path)
-            image.size = NSSize(width: 16, height: 16)
-            return image
-        }
-        var result = [
-            Drive(title: "/", path: "/", icon: icon("/")),
-            Drive(title: "Domů", path: NSHomeDirectory(), icon: icon(NSHomeDirectory())),
-        ]
-        // Svazky kromě systémového (ten je už jako "/").
-        let keys: [URLResourceKey] = [.volumeNameKey, .volumeIsRootFileSystemKey]
-        let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
-        for url in urls {
-            let values = try? url.resourceValues(forKeys: Set(keys))
-            if values?.volumeIsRootFileSystem == true { continue }
-            result.append(Drive(title: values?.volumeName ?? url.lastPathComponent, path: url.path, icon: icon(url.path)))
-        }
-        return result
-    }
-
-    /// Kontextové menu tlačítka disku: změna pořadí.
-    private func reorderMenu(for index: Int) -> NSMenu {
+    /// Kontextové menu tlačítka: změna pořadí, skrytí, úprava nabídky disků.
+    private func contextMenu(for index: Int) -> NSMenu {
         let menu = NSMenu()
-        let entries: [(String, Int)] = [("Na první místo", 0), ("Posunout doleva", index - 1), ("Posunout doprava", index + 1)]
-        for (title, target) in entries {
-            let item = NSMenuItem(title: title, action: #selector(reorderSelected(_:)), keyEquivalent: "")
+        let front = NSMenuItem(title: "Na první místo", action: #selector(moveToFrontSelected(_:)), keyEquivalent: "")
+        front.target = self
+        front.tag = index
+        front.isEnabled = index > 0
+        menu.addItem(front)
+        for (title, target) in [("Posunout doleva", index - 1), ("Posunout doprava", index + 1)] {
+            let item = NSMenuItem(title: title, action: #selector(swapSelected(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = [index, target]
-            item.isEnabled = target >= 0 && target < drives.count && target != index
+            item.isEnabled = target >= 0 && target < places.count
             menu.addItem(item)
         }
+        menu.addItem(.separator())
+        let hide = NSMenuItem(title: "Skrýt", action: #selector(hideSelected(_:)), keyEquivalent: "")
+        hide.target = self
+        hide.tag = index
+        menu.addItem(hide)
+        let edit = NSMenuItem(title: "Upravit nabídku disků…", action: #selector(editSelected(_:)), keyEquivalent: "")
+        edit.target = self
+        menu.addItem(edit)
         menu.autoenablesItems = false
         return menu
     }
 
-    @objc private func reorderSelected(_ sender: NSMenuItem) {
-        guard let pair = sender.representedObject as? [Int], pair.count == 2 else { return }
-        DriveBar.moveDrive(from: pair[0], to: pair[1])
+    @objc private func moveToFrontSelected(_ sender: NSMenuItem) {
+        PlaceStore.moveToFront(places[sender.tag].key)
     }
 
-    @objc private func driveClicked(_ sender: NSButton) {
-        onDrive?(drives[sender.tag])
+    /// Posun na liště = prohození se sousedním tlačítkem v celkovém pořadí míst.
+    @objc private func swapSelected(_ sender: NSMenuItem) {
+        guard let pair = sender.representedObject as? [Int], pair.count == 2 else { return }
+        PlaceStore.swap(places[pair[0]].key, places[pair[1]].key)
+    }
+
+    @objc private func hideSelected(_ sender: NSMenuItem) {
+        PlaceStore.setHidden(places[sender.tag].key, true)
+    }
+
+    @objc private func editSelected(_ sender: Any?) {
+        onEditPlaces?()
+    }
+
+    @objc private func placeClicked(_ sender: NSButton) {
+        onPlace?(places[sender.tag])
     }
 
     @objc private func connectClicked(_ sender: Any?) {
