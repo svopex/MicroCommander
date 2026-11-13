@@ -284,8 +284,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (Finder, kopírovat cestu).
 - **Příkazová řádka** (⌘Tab, také ⌃Tab): Enter spustí příkaz v login shellu v adresáři
-  panelu (výstup v prohlížeči), `cd cesta` mění adresář panelu, ↑↓ historie,
-  ⌃↩ (z panelu i z příkazové řádky) vloží jméno položky pod kurzorem na pozici
+  panelu (na pozadí, bez terminálu; výstup v prohlížeči po doběhnutí), **⌘Enter**
+  nebo **⌃Enter** ho spustí v novém okně Terminalu v adresáři panelu (interaktivní skripty, dotazy
+  na heslo, průběžný výstup; po doběhnutí zůstane v okně shell), `cd cesta` mění adresář panelu, ↑↓ historie,
+  ⌃↩ v panelu (nebo v prázdné příkazové řádce) vloží jméno položky pod kurzorem na pozici
   kurzoru v řádce – u souboru na začátku prázdné řádky jako `./jméno` a fokus
   přejde do řádky, takže Enter skript/program rovnou spustí; jinde jako argument
   (za „./“ bez mezery), ⌃[ / ⌃] cestu levého/pravého panelu.

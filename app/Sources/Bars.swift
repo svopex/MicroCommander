@@ -258,7 +258,13 @@ final class CommandLineView: NSView, NSTextFieldDelegate {
     private var history: [String] = []
     private var historyIndex = 0
 
-    var onExecute: ((String) -> Void)?
+    /// Spuštění příkazu: text a zda v novém okně Terminalu (⌘Enter / ⌃Enter).
+    var onExecute: ((String, _ inTerminal: Bool) -> Void)?
+
+    /// Obsahuje řádka příkaz (ne jen mezery)?
+    var hasCommand: Bool {
+        !field.stringValue.trimmingCharacters(in: .whitespaces).isEmpty
+    }
     var onLeave: (() -> Void)?
     /// Předání klávesy panelu (navigace při prázdné příkazové řádce).
     var onForwardKey: ((NSEvent) -> Void)?
@@ -279,7 +285,7 @@ final class CommandLineView: NSView, NSTextFieldDelegate {
         field.delegate = self
         field.focusRingType = .none
         field.bezelStyle = .squareBezel
-        field.placeholderString = "příkazová řádka (⌘Tab) – Enter spustí příkaz v adresáři panelu, cd změní adresář"
+        field.placeholderString = "příkazová řádka (⌘Tab) – Enter spustí příkaz v adresáři panelu, ⌘Enter / ⌃Enter v Terminalu, cd změní adresář"
         for view in [promptLabel, field] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
@@ -297,6 +303,21 @@ final class CommandLineView: NSView, NSTextFieldDelegate {
 
     required init?(coder: NSCoder) {
         fatalError("Není podporováno")
+    }
+
+    /// Odešle příkaz z řádky (uloží ho do historie a řádku vyprázdní).
+    /// - Parameter inTerminal: spustit v novém okně Terminalu (⌘Enter),
+    ///   jinak na pozadí s výstupem v prohlížeči (Enter)
+    func submit(inTerminal: Bool) {
+        guard hasCommand else {
+            onLeave?()
+            return
+        }
+        let command = field.stringValue.trimmingCharacters(in: .whitespaces)
+        history.append(command)
+        historyIndex = history.count
+        field.stringValue = ""
+        onExecute?(command, inTerminal)
     }
 
     /// Vloží text do příkazové řádky na pozici kurzoru, jinak na konec.
@@ -345,15 +366,7 @@ final class CommandLineView: NSView, NSTextFieldDelegate {
         }
         switch commandSelector {
         case #selector(NSResponder.insertNewline(_:)):
-            let command = field.stringValue.trimmingCharacters(in: .whitespaces)
-            guard !command.isEmpty else {
-                onLeave?()
-                return true
-            }
-            history.append(command)
-            historyIndex = history.count
-            field.stringValue = ""
-            onExecute?(command)
+            submit(inTerminal: false)
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             field.stringValue = ""

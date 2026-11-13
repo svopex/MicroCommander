@@ -31,6 +31,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Monitory klávesnice (F-klávesy, Tab, modifikátory pro lištu F-kláves).
     private var keyMonitor: Any?
     private var flagsMonitor: Any?
+    /// Pozorovatelé aktivace aplikace (odregistrují se v deinit).
+    private var appObservers: [NSObjectProtocol] = []
 
     /// Jméno automatického ukládání polohy okna (používá i převod nastavení v main.swift).
     static let frameAutosaveName = "MicroCommanderMain"
@@ -122,6 +124,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     deinit {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+        appObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
     // MARK: - Rozvržení
@@ -233,7 +236,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         driveBar.onEditPlaces = { [weak self] in self?.perform(.editPlaces) }
         driveBar.onConnect = { [weak self] in self?.perform(.connect) }
-        commandLine.onExecute = { [weak self] in self?.executeCommandLine($0) }
+        commandLine.onExecute = { [weak self] command, inTerminal in
+            self?.executeCommandLine(command, inTerminal: inTerminal)
+        }
         commandLine.onLeave = { [weak self] in self?.focusActivePanel() }
         commandLine.onForwardKey = { [weak self] event in
             guard let self else { return }
@@ -266,11 +271,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 self.perform(command)
                 return nil
             }
-            // Ctrl+Enter: jméno položky pod kurzorem do příkazové řádky – z panelu
-            // i z příkazové řádky. Zachytává se tady, protože macOS jinak ⌃↩ použije
-            // jako „Zobrazit kontextovou nabídku“ a do panelu se klávesa nedostane.
+            // Enter s modifikátorem (zachytává se tady, protože macOS jinak ⌃↩ použije
+            // jako „Zobrazit kontextovou nabídku“ a do panelu se klávesa nedostane):
+            // - ⌘Enter / Ctrl+Enter v příkazové řádce s příkazem: spustit ho v novém
+            //   okně Terminalu (interaktivní skripty, dotazy na heslo, průběžný výstup),
+            // - Ctrl+Enter jinde (panel, prázdná řádka): jméno položky do řádky.
+            let modifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
             if event.keyCode == KeyCode.returnKey || event.keyCode == KeyCode.enter,
-               event.modifierFlags.intersection([.shift, .control, .option, .command]) == .control {
+               modifiers == .command || modifiers == .control {
+                if self.commandLineHasFocus, modifiers == .command || self.commandLine.hasCommand {
+                    self.commandLine.submit(inTerminal: true)
+                    return nil
+                }
+                guard modifiers == .control else { return event }
                 if let item = self.activePanel.currentItem {
                     // Soubor na začátku prázdné řádky = „./jméno“ připravené ke spuštění;
                     // fokus pak do řádky (kurzor na konec), aby Enter příkaz spustil.
@@ -303,6 +316,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             self?.functionBar.update(modifiers: event.modifierFlags)
             return event
         }
+        // Puštění modifikátoru v jiné aplikaci (např. ⌃↩ spustí Terminal) aplikace
+        // nedostane – lišta F-kláves by zůstala ve vrstvě Ctrl/Shift/Alt. Při
+        // deaktivaci se vrátí základní vrstva, při aktivaci aktuální stav kláves.
+        let center = NotificationCenter.default
+        appObservers = [
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.functionBar.update(modifiers: [])
+            },
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.functionBar.update(modifiers: NSEvent.modifierFlags)
+            },
+        ]
     }
 
     /// Má fokus příkazová řádka (její field editor)?
@@ -1360,8 +1385,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             showAlert(title: "Terminál", text: "Terminál lze otevřít jen v adresáři na lokálním disku.")
             return
         }
-        let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
-        NSWorkspace.shared.open([URL(fileURLWithPath: dir)], withApplicationAt: terminal,
+        NSWorkspace.shared.open([URL(fileURLWithPath: dir)], withApplicationAt: Self.terminalApp,
                                 configuration: NSWorkspace.OpenConfiguration())
     }
 
@@ -1552,8 +1576,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         activate(activePanel)
     }
 
-    /// Příkazová řádka: „cd cesta“ mění adresář, jinak spustí příkaz v shellu.
-    private func executeCommandLine(_ command: String) {
+    /// Terminal macOS (F9, ⌘Enter / ⌃Enter v příkazové řádce).
+    private static let terminalApp = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+    /// Login shell uživatele pro příkazovou řádku.
+    private static var userShell: String { ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh" }
+
+    /// Příkazová řádka: „cd cesta“ mění adresář panelu, jinak spustí příkaz
+    /// v shellu v adresáři panelu – na pozadí s výstupem v prohlížeči, nebo
+    /// v novém okně Terminalu.
+    /// - Parameters:
+    ///   - command: text příkazu
+    ///   - inTerminal: spustit v Terminalu (⌘Enter / ⌃Enter)
+    private func executeCommandLine(_ command: String, inTerminal: Bool) {
         let panel = activePanel
         if command == "cd" || command.hasPrefix("cd ") {
             let target = command.count > 3 ? String(command.dropFirst(3)) : "~"
@@ -1569,9 +1603,49 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             showAlert(title: "Příkazová řádka", text: "Příkazy lze spouštět jen v adresáři na lokálním disku.")
             return
         }
-        // Spuštění v login shellu uživatele; výstup se zobrazí v prohlížeči.
+        if inTerminal {
+            runInTerminal(command, in: dir)
+        } else {
+            runInBackground(command, in: dir)
+        }
+    }
+
+    /// Spustí příkaz v novém okně Terminalu přes dočasný skript `.command`, který
+    /// Terminal sám spustí (bez oprávnění k ovládání Terminalu přes AppleScript);
+    /// po doběhnutí příkazu zůstane v okně interaktivní shell.
+    /// - Parameters:
+    ///   - command: text příkazu
+    ///   - dir: pracovní adresář
+    private func runInTerminal(_ command: String, in dir: String) {
+        let shell = Self.userShell
+        // Skript se po spuštění sám smaže; příkaz běží v login shellu uživatele.
+        let script = """
+        #!\(shell) -l
+        rm -f "$0"
+        cd \(shellQuote(dir)) || exit 1
+        \(command)
+        exec \(shellQuote(shell)) -l
+        """
+        let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("microcommander-\(UUID().uuidString).command")
+        do {
+            try script.write(toFile: path, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
+        } catch {
+            showAlert(title: "Příkazová řádka", text: error.localizedDescription)
+            return
+        }
+        NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: Self.terminalApp,
+                                configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    /// Spustí příkaz na pozadí v login shellu uživatele (bez terminálu);
+    /// výstup se po doběhnutí zobrazí v prohlížeči.
+    /// - Parameters:
+    ///   - command: text příkazu
+    ///   - dir: pracovní adresář
+    private func runInBackground(_ command: String, in dir: String) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh")
+        process.executableURL = URL(fileURLWithPath: Self.userShell)
         process.arguments = ["-lc", command]
         process.currentDirectoryURL = URL(fileURLWithPath: dir)
         let pipe = Pipe()
@@ -1605,7 +1679,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let text = """
         Panely: ↑↓ PgUp PgDn Home End – pohyb, Enter – otevřít (adresář, archiv, soubor),
         ⌘Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
-        ⌫ – nadřazený adresář, Tab – druhý panel, ⌘Tab (⌃Tab) – příkazová řádka,
+        ⌫ – nadřazený adresář, Tab – druhý panel, ⌘Tab (⌃Tab) – příkazová řádka
+        (v ní Enter spustí s výstupem v prohlížeči, ⌘Enter / ⌃Enter v Terminalu),
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
         ⌘A / ⌘D – označit vše / nic, psaní písmen – rychlé hledání,
         ⌥← / ⌥→ – historie, ⌘\\ – kořen, ⌃H – skryté soubory.
