@@ -160,8 +160,12 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 
 - **Panely:** ↑↓ PgUp PgDn Home End – pohyb kurzoru; Enter / dvojklik – otevřít
   adresář, archiv (ZIP/TAR/TAR.GZ jako panel) nebo soubor ve výchozí aplikaci;
+  **spustitelný shell skript** (právo `+x` a shebang `sh`/`bash`/`zsh`/`dash`/`ksh`,
+  i přes `/usr/bin/env`; přípona nerozhoduje) Enter spustí v Terminalu
+  v adresáři panelu – skript bez `+x` nebo bez shebangu se jen otevře;
   **⌘Enter** – spustit / otevřít systémově bez vstupu dovnitř (aplikace `.app`
-  se spustí, archiv se otevře ve výchozí aplikaci, adresář ve Finderu;
+  se spustí, archiv se otevře ve výchozí aplikaci, adresář ve Finderu, skript
+  se shebangem se otevře podle přípony – bez přípony v textovém editoru;
   z archivu či FTP se soubor nejdřív rozbalí do dočasného adresáře);
   ⌫ / „..“ – nadřazený adresář (kurzor se vrátí na adresář, ze kterého se
   přišlo; na kořeni archivu/FTP se lokace zavře); Tab – druhý panel;

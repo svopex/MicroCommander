@@ -251,6 +251,28 @@ final class UISelfTest {
             try? applyAttributeChanges(AttributeChanges(readonly: false), to: [path], state: ProgressState())
             self.check(FileManager.default.isWritableFile(atPath: path), "změna atributů: vrácení zápisu")
         }))
+        // 11d) Rozpoznání shell skriptů pro Enter (spustit v Terminalu): spustitelný
+        // soubor se shebangem shellu ano, bez +x, bez shebangu nebo Python ne.
+        steps.append((ready: { self.windowFree }, action: {
+            let fm = FileManager.default
+            let cases: [(String, String, Bool, Bool)] = [
+                ("s1.sh", "#!/bin/bash\necho a\n", true, true),
+                ("s2", "#!/usr/bin/env zsh\necho a\n", true, true),
+                ("s3.sh", "#!/bin/sh\n", false, false),
+                ("s4.sh", "echo bez shebangu\n", true, false),
+                ("s5", "#!/usr/bin/env python3\nprint(1)\n", true, false),
+                ("s6", "#!/bin/bash\r\necho crlf\r\n", true, true),
+            ]
+            var results: [String] = []
+            for (name, text, executable, expected) in cases {
+                let path = self.root + "/" + name
+                fm.createFile(atPath: path, contents: Data(text.utf8),
+                              attributes: [.posixPermissions: executable ? 0o755 : 0o644])
+                if isShellScript(atPath: path) != expected { results.append(name) }
+                try? fm.removeItem(atPath: path)
+            }
+            self.check(results.isEmpty, "rozpoznání shell skriptů pro Enter (chybně: \(results))")
+        }))
         // 11c) ⌘A s vypnutou volbou „i adresáře“ označí jen soubory, druhé ⌘A označení zruší.
         steps.append((ready: { self.windowFree }, action: {
             Settings.selectAllIncludesDirs = false

@@ -954,6 +954,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.changePath(joinPath(panel.location.path, item.name))
             return
         }
+        // Spustitelný shell skript na lokálním disku: spustit v Terminalu v adresáři
+        // panelu (⌘Enter ho naopak otevře podle přípony).
+        if let path = panel.localPath(of: item.name), isShellScript(atPath: path) {
+            runInTerminal("./" + shellQuote(item.name), in: parentPath(path))
+            return
+        }
         withLocalFile(item, in: panel) { [weak self] path in
             guard let self else { return }
             if let archive = self.openArchive(path) {
@@ -975,8 +981,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             NSSound.beep()
             return
         }
-        withLocalFile(item, in: panel) { path in
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        withLocalFile(item, in: panel) { [weak self] path in
+            // Spustitelný skript bez přípony by macOS spustil v Terminalu – otevřít
+            // ho v textovém editoru (skript s příponou otevře aplikace podle přípony).
+            if splitExtension(item.name).ext.isEmpty, scriptInterpreter(atPath: path) != nil {
+                self?.openInEditor(path)
+            } else {
+                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            }
         }
     }
 
@@ -1746,7 +1758,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// F1 – přehled ovládání.
     private func showHelp() {
         let text = """
-        Panely: ↑↓ PgUp PgDn Home End – pohyb, Enter – otevřít (adresář, archiv, soubor),
+        Panely: ↑↓ PgUp PgDn Home End – pohyb, Enter – otevřít (adresář, archiv, soubor; shell skript spustit v Terminalu),
         ⌘Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
         ⌫ – nadřazený adresář, Tab – druhý panel, ⌘Tab (⌃Tab) – příkazová řádka
         (v ní Enter spustí s výstupem v prohlížeči, ⌘Enter / ⌃Enter v Terminalu),
@@ -2041,6 +2053,35 @@ enum KeyLog {
             FileManager.default.createFile(atPath: path, contents: Data(line.utf8))
         }
     }
+}
+
+/// Interprety, jejichž skripty Enter v panelu spouští v Terminalu.
+private let shellInterpreters: Set<String> = ["sh", "bash", "zsh", "dash", "ksh"]
+
+/// Interpret spustitelného skriptu podle shebangu (`#!/bin/bash` → „bash“,
+/// `#!/usr/bin/env python3` → „python3“); nil = soubor není spustitelný nebo
+/// nezačíná `#!`. Přípona nerozhoduje.
+/// - Parameter path: lokální cesta souboru
+func scriptInterpreter(atPath path: String) -> String? {
+    guard FileManager.default.isExecutableFile(atPath: path),
+          let handle = FileHandle(forReadingAtPath: path) else { return nil }
+    defer { try? handle.close() }
+    // Stačí první řádek (shebang) – čte se nejvýš 256 bajtů.
+    guard let head = try? handle.read(upToCount: 256), head.starts(with: Array("#!".utf8)),
+          let line = String(data: head.dropFirst(2).prefix { $0 != 0x0A }, encoding: .utf8) else { return nil }
+    // Interpret = první slovo; u „env“ první slovo, které není přepínač (env -S …).
+    let words = line.split(whereSeparator: \.isWhitespace).map(String.init)
+    guard let first = words.first else { return nil }
+    let name = lastComponent(first) == "env"
+        ? words.dropFirst().first { !$0.hasPrefix("-") && !$0.contains("=") }
+        : first
+    return name.map(lastComponent)
+}
+
+/// Je soubor spustitelný shell skript (shebang sh/bash/zsh/dash/ksh)?
+/// - Parameter path: lokální cesta souboru
+func isShellScript(atPath path: String) -> Bool {
+    scriptInterpreter(atPath: path).map(shellInterpreters.contains) ?? false
 }
 
 /// Zapíše text do systémové schránky (nahradí její obsah).
