@@ -6,8 +6,8 @@ s jádrem v Rustu a tenkým UI ve Swift/AppKit. Licence GPL-2.0-or-later.
 ## Prvotni zadani
 
 Prepis aplikaci, zatim bez pluginu, do:
-Jádro (souborové operace, virtuální souborové systémy, archivy, FTP/SFTP, hledání) napíšete jednou v Rustu. 
-Nad ním postavíte tenké UI: Swift/AppKit na Macu, WinUI nebo Win32 na Windows.
+Jádro (souborové operace, virtuální souborové systémy, archivy, FTP/SFTP, hledání) napíšete jednou v Rustu.
+Nad ním postavíte tenké UI: Swift/AppKit na Macu, WinUI nebo Win32 na Windows a GTK 4 (přes gtk4-rs) na Linuxu.
 Zatim chci verzi pro MAC OS, tenke UI delej tedy pouze pro tuto platformu.
 Puvodni zdrojove kody pro windows jsou v adresari `samandarin`.
 
