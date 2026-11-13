@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Open Samandarin Authors
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// Dialogy: průběh operace s cancel, připojení FTP/SFTP, hledání.
+// Dialogy: průběh operace s cancel, správa a připojení FTP/SFTP serverů, hledání.
 
 import AppKit
 
@@ -54,6 +54,8 @@ final class ProgressDialog: NSWindowController {
     }
 
     private var timer: Timer?
+    /// Volitelná akce po stisku Zrušit (beginProgress s dismissOnCancel dialog hned zavře).
+    var onCancel: (() -> Void)?
 
     /// Zobrazí dialog jako sheet nad hlavním oknem.
     func begin() {
@@ -94,14 +96,17 @@ final class ProgressDialog: NSWindowController {
 
     @objc private func cancelClicked(_ sender: Any?) {
         state.cancel()
+        onCancel?()
     }
 }
 
-/// Dialog připojení k FTP/SFTP. U SFTP lze zvolit ověření: heslo, soubor se
-/// soukromým klíčem (s volitelným heslem ke klíči) nebo ssh-agent.
-/// Poslední server, port, uživatel, způsob ověření a cesta ke klíči se pamatují
-/// (hesla nikdy).
-final class ConnectWindowController: NSWindowController {
+/// Správa FTP/SFTP serverů: seznam uložených serverů vlevo (přidat +, odebrat −),
+/// formulář vybraného serveru vpravo. Úpravy se ukládají průběžně (přepnutí
+/// serveru, Připojit, Zavřít). U SFTP lze zvolit ověření: heslo, soubor se
+/// soukromým klíčem (s volitelným heslem ke klíči) nebo ssh-agent. Hesla se
+/// ukládají jen na přání, a to do Klíčenky.
+final class ConnectWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
+    private let nameField = NSTextField()
     private let kindFtp = NSButton(radioButtonWithTitle: "FTP", target: nil, action: nil)
     private let kindSftp = NSButton(radioButtonWithTitle: "SFTP", target: nil, action: nil)
     private let hostField = NSTextField()
@@ -112,20 +117,38 @@ final class ConnectWindowController: NSWindowController {
     private let keyField = NSTextField()
     private let keyButton = NSButton(title: "Vybrat…", target: nil, action: nil)
     private let passphraseField = NSSecureTextField()
+    private let saveSecretCheckbox = NSButton(checkboxWithTitle: "Uložit heslo do Klíčenky", target: nil, action: nil)
     private let noteLabel = NSTextField(wrappingLabelWithString: "")
     private let connectButton = NSButton(title: "Připojit", target: nil, action: nil)
+    private let removeButton = NSButton()
+    private let tableView = NSTableView()
     private var grid: NSGridView!
+    /// Řádky mřížky skrývané podle protokolu a ověření.
+    private var authRow: NSGridRow!
+    private var passwordRow: NSGridRow!
+    private var keyRow: NSGridRow!
+    private var passphraseRow: NSGridRow!
+    private var saveSecretRow: NSGridRow!
     private weak var mainController: MainWindowController?
+    /// Panel, ve kterém se server otevře (nil = aktivní panel).
+    private weak var targetPanel: PanelController?
 
-    /// Způsob ověření u SFTP (index v nabídce).
-    private enum AuthMethod: Int {
-        case password = 0, keyFile = 1, agent = 2
-    }
+    /// Uložené servery (pracovní kopie; ukládá se přes persist()).
+    private var servers: [ServerProfile] = []
+    /// Index serveru, jehož hodnoty jsou ve formuláři (nil = žádný).
+    private var editingIndex: Int?
+    /// Heslo z Klíčenky při načtení formuláře (zápis jen při změně).
+    private var loadedSecret = ""
+    /// Měl upravovaný server uložené heslo (při vypnutí volby se smaže)?
+    private var hadStoredSecret = false
 
-    /// Zobrazí dialog jako sheet nad hlavním oknem.
-    static func show(parent: MainWindowController) {
+    /// Zobrazí správu serverů jako sheet nad hlavním oknem.
+    /// - Parameters:
+    ///   - panel: panel, ve kterém se server otevře (nil = aktivní)
+    ///   - selecting: server, který se má předvybrat (nil = první)
+    static func show(parent: MainWindowController, panel: PanelController? = nil, selecting: UUID? = nil) {
         // Kontroler musí žít po celou dobu sheetu (jinak tlačítka nereagují).
-        let controller = ConnectWindowController(owner: parent)
+        let controller = ConnectWindowController(owner: parent, panel: panel, selecting: selecting)
         parent.sheetController = controller
         parent.window!.beginSheet(controller.window!) { [weak parent] _ in
             parent?.sheetController = nil
@@ -133,23 +156,34 @@ final class ConnectWindowController: NSWindowController {
         }
     }
 
-    init(owner: MainWindowController) {
+    init(owner: MainWindowController, panel: PanelController? = nil, selecting: UUID? = nil) {
         self.mainController = owner
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 330),
+        self.targetPanel = panel
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 380),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "Připojit vzdálený disk"
+        window.title = "FTP/SFTP servery"
         super.init(window: window)
         buildLayout()
-        restoreValues()
-        updateVisibility()
-        window.initialFirstResponder = hostField.stringValue.isEmpty ? hostField : (kindSftp.state == .on ? userField : passField)
+        servers = ServerStore.load()
+        tableView.reloadData()
+        let initial = selecting.flatMap { id in servers.firstIndex { $0.id == id } } ?? 0
+        if servers.isEmpty {
+            loadForm(nil)
+        } else {
+            select(initial)
+        }
+        // Fokus do seznamu (šipky vyberou server, Enter připojí); u serveru bez adresy do pole Server.
+        window.initialFirstResponder = editingIndex != nil && hostField.stringValue.isEmpty ? hostField : tableView
     }
 
     required init?(coder: NSCoder) {
         fatalError("Není podporováno")
     }
 
-    /// Mřížka popisek + pole; řádky pro heslo/klíč se skrývají podle volby ověření.
+    // MARK: - Rozvržení
+
+    /// Seznam serverů s tlačítky +/− vlevo, mřížka popisek + pole vpravo;
+    /// řádky pro heslo/klíč se skrývají podle volby ověření.
     private func buildLayout() {
         for button in [kindFtp, kindSftp] {
             button.target = self
@@ -161,115 +195,277 @@ final class ConnectWindowController: NSWindowController {
         keyButton.target = self
         keyButton.action = #selector(chooseKey(_:))
         keyButton.bezelStyle = .rounded
+        nameField.placeholderString = "uživatel@server"
         keyField.placeholderString = "~/.ssh/id_ed25519"
         keyField.lineBreakMode = .byTruncatingHead
         passphraseField.placeholderString = "jen u klíče chráněného heslem"
         noteLabel.font = NSFont.systemFont(ofSize: 11)
         noteLabel.textColor = .secondaryLabelColor
-        for field in [hostField, portField, userField, passField, keyField, passphraseField] {
+        for field in [nameField, hostField, portField, userField, passField, keyField, passphraseField] {
             field.usesSingleLineMode = true
             field.cell?.isScrollable = true
+        }
+        // Název v seznamu se mění průběžně s poli název/server/uživatel.
+        for field in [nameField, hostField, userField] {
+            field.delegate = self
         }
 
         let kindRow = NSStackView(views: [kindFtp, kindSftp])
         kindRow.spacing = 16
-        let keyRow = NSStackView(views: [keyField, keyButton])
-        keyRow.spacing = 6
-        keyField.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
+        let keyStack = NSStackView(views: [keyField, keyButton])
+        keyStack.spacing = 6
+        keyField.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
         grid = NSGridView(views: [
+            [NSTextField(labelWithString: "Název:"), nameField],
             [NSTextField(labelWithString: "Protokol:"), kindRow],
             [NSTextField(labelWithString: "Server:"), hostField],
             [NSTextField(labelWithString: "Port:"), portField],
             [NSTextField(labelWithString: "Uživatel:"), userField],
             [NSTextField(labelWithString: "Ověření:"), authPopup],
             [NSTextField(labelWithString: "Heslo:"), passField],
-            [NSTextField(labelWithString: "Soubor s klíčem:"), keyRow],
+            [NSTextField(labelWithString: "Soubor s klíčem:"), keyStack],
             [NSTextField(labelWithString: "Heslo ke klíči:"), passphraseField],
+            [NSGridCell.emptyContentView, saveSecretCheckbox],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.rowSpacing = 8
         grid.columnSpacing = 8
         grid.rowAlignment = .firstBaseline
-        hostField.widthAnchor.constraint(equalToConstant: 310).isActive = true
+        // Řádek mřížky podle pole v něm (nezávisí na pořadí řádků).
+        func row(of view: NSView) -> NSGridRow { grid.cell(for: view)!.row! }
+        authRow = row(of: authPopup)
+        passwordRow = row(of: passField)
+        keyRow = row(of: keyStack)
+        passphraseRow = row(of: passphraseField)
+        saveSecretRow = row(of: saveSecretCheckbox)
+        hostField.widthAnchor.constraint(equalToConstant: 300).isActive = true
         portField.widthAnchor.constraint(equalToConstant: 70).isActive = true
 
-        let cancelButton = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
-        cancelButton.keyEquivalent = "\u{1b}"
+        // Seznam serverů (jeden sloupec bez záhlaví), dvojklik = připojit.
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("server"))
+        tableView.addTableColumn(column)
+        tableView.headerView = nil
+        tableView.rowHeight = 34
+        tableView.style = .plain
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.target = self
+        tableView.doubleAction = #selector(connectClicked(_:))
+        let scroll = NSScrollView()
+        scroll.documentView = tableView
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        column.width = 200
+
+        let addButton = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: "Přidat")!,
+                                 target: self, action: #selector(addClicked(_:)))
+        removeButton.image = NSImage(systemSymbolName: "minus", accessibilityDescription: "Odebrat")
+        removeButton.target = self
+        removeButton.action = #selector(removeClicked(_:))
+        for button in [addButton, removeButton] {
+            button.bezelStyle = .smallSquare
+            button.widthAnchor.constraint(equalToConstant: 26).isActive = true
+        }
+        addButton.toolTip = "Přidat server"
+        removeButton.toolTip = "Odebrat vybraný server"
+        let listButtons = NSStackView(views: [addButton, removeButton])
+        listButtons.spacing = 0
+
+        let closeButton = NSButton(title: "Zavřít", target: self, action: #selector(closeClicked(_:)))
+        closeButton.keyEquivalent = "\u{1b}"
         connectButton.target = self
         connectButton.action = #selector(connectClicked(_:))
         connectButton.keyEquivalent = "\r"
-        let buttons = NSStackView(views: [cancelButton, connectButton])
+        let buttons = NSStackView(views: [closeButton, connectButton])
         buttons.spacing = 10
 
         let content = NSView()
-        for view in [grid!, noteLabel, buttons] as [NSView] {
+        for view in [scroll, listButtons, grid!, noteLabel, buttons] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
         }
         NSLayoutConstraint.activate([
+            scroll.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
+            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            scroll.widthAnchor.constraint(equalToConstant: 210),
+            listButtons.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: -1),
+            listButtons.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            listButtons.bottomAnchor.constraint(equalTo: buttons.bottomAnchor),
             grid.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
-            grid.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            grid.leadingAnchor.constraint(equalTo: scroll.trailingAnchor, constant: 18),
             grid.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -18),
             noteLabel.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 10),
-            noteLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            noteLabel.leadingAnchor.constraint(equalTo: grid.leadingAnchor),
             noteLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
-            buttons.topAnchor.constraint(equalTo: noteLabel.bottomAnchor, constant: 12),
+            buttons.topAnchor.constraint(greaterThanOrEqualTo: noteLabel.bottomAnchor, constant: 12),
             buttons.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
             buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16),
-            content.widthAnchor.constraint(equalToConstant: 480),
+            content.widthAnchor.constraint(equalToConstant: 760),
+            content.heightAnchor.constraint(greaterThanOrEqualToConstant: 380),
         ])
         window?.contentView = content
     }
 
-    /// Obnoví poslední hodnoty dialogu (bez hesel); výchozí klíč = první existující v ~/.ssh.
-    private func restoreValues() {
-        let defaults = UserDefaults.standard
-        let sftp = defaults.bool(forKey: "connectSftp")
-        kindSftp.state = sftp ? .on : .off
-        kindFtp.state = sftp ? .off : .on
-        hostField.stringValue = defaults.string(forKey: "connectHost") ?? ""
-        portField.stringValue = defaults.string(forKey: "connectPort") ?? (sftp ? "22" : "21")
-        userField.stringValue = defaults.string(forKey: "connectUser") ?? (sftp ? NSUserName() : "anonymous")
-        authPopup.selectItem(at: defaults.integer(forKey: "connectAuth"))
-        let savedKey = defaults.string(forKey: "connectKey")
-        keyField.stringValue = savedKey ?? ConnectWindowController.defaultKeyPath() ?? ""
+    // MARK: - Seznam serverů
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        servers.count
     }
 
-    /// Uloží hodnoty dialogu pro příště (hesla se neukládají).
-    private func saveValues() {
-        let defaults = UserDefaults.standard
-        defaults.set(kindSftp.state == .on, forKey: "connectSftp")
-        defaults.set(hostField.stringValue, forKey: "connectHost")
-        defaults.set(portField.stringValue, forKey: "connectPort")
-        defaults.set(userField.stringValue, forKey: "connectUser")
-        defaults.set(authPopup.indexOfSelectedItem, forKey: "connectAuth")
-        defaults.set(keyField.stringValue, forKey: "connectKey")
+    /// Řádek seznamu: název tučně, pod ním adresa šedě.
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        // Upravovaný server se kreslí z formuláře (název se mění při psaní).
+        let server = row == editingIndex ? readForm(into: servers[row]) : servers[row]
+        let text = NSMutableAttributedString(string: server.displayName,
+                                             attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium)])
+        text.append(NSAttributedString(string: "\n" + server.urlString,
+                                       attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
+        let label = NSTextField(labelWithAttributedString: text)
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 2
+        let cell = NSTableCellView()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        cell.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -6),
+            label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+        ])
+        return cell
     }
 
-    /// První existující běžný klíč v ~/.ssh (zkráceně s „~“).
-    static func defaultKeyPath() -> String? {
-        let home = NSHomeDirectory()
-        for name in ["id_ed25519", "id_ecdsa", "id_rsa"] {
-            if FileManager.default.fileExists(atPath: home + "/.ssh/" + name) {
-                return "~/.ssh/" + name
-            }
+    /// Přepnutí serveru: uložit rozpracovaný formulář a načíst vybraný server.
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        let row = tableView.selectedRow
+        guard row != editingIndex else { return }
+        commitForm()
+        loadForm(row >= 0 ? row : nil)
+    }
+
+    /// Vybere server v seznamu a načte ho do formuláře (nil = nic, formulář se zakáže).
+    /// Vybere server v seznamu; formulář načte delegát výběru. Pokud se výběr
+    /// nezměnil (např. po odebrání zůstal stejný index), načte se ručně.
+    private func select(_ index: Int) {
+        tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        tableView.scrollRowToVisible(index)
+        if editingIndex != index {
+            commitForm()
+            loadForm(index)
         }
-        return nil
     }
 
-    /// Zvolený způsob ověření (FTP vždy heslo).
-    private var authMethod: AuthMethod {
-        kindSftp.state == .on ? (AuthMethod(rawValue: authPopup.indexOfSelectedItem) ?? .password) : .password
+    /// Průběžná aktualizace názvu v seznamu při psaní.
+    func controlTextDidChange(_ obj: Notification) {
+        refreshEditingRow()
+    }
+
+    /// Překreslí řádek upravovaného serveru podle formuláře.
+    private func refreshEditingRow() {
+        guard let index = editingIndex else { return }
+        tableView.reloadData(forRowIndexes: IndexSet(integer: index), columnIndexes: IndexSet(integer: 0))
+    }
+
+    // MARK: - Formulář
+
+    /// Naplní formulář hodnotami serveru (heslo z Klíčenky, je-li uložené).
+    private func loadForm(_ index: Int?) {
+        editingIndex = index
+        let server = index.map { servers[$0] } ?? ServerProfile()
+        hadStoredSecret = server.savePassword
+        nameField.stringValue = server.name
+        kindSftp.state = server.isSftp ? .on : .off
+        kindFtp.state = server.isSftp ? .off : .on
+        hostField.stringValue = server.host
+        portField.stringValue = String(server.port)
+        userField.stringValue = server.user
+        authPopup.selectItem(at: server.auth.rawValue)
+        keyField.stringValue = server.keyPath
+        saveSecretCheckbox.state = server.savePassword ? .on : .off
+        loadedSecret = server.savePassword ? (ServerKeychain.secret(for: server.id) ?? "") : ""
+        passField.stringValue = server.effectiveAuth == .password ? loadedSecret : ""
+        passphraseField.stringValue = server.effectiveAuth == .keyFile ? loadedSecret : ""
+        // Bez vybraného serveru je formulář neaktivní.
+        let enabled = index != nil
+        for control in [nameField, kindFtp, kindSftp, hostField, portField, userField, authPopup,
+                        passField, keyField, keyButton, passphraseField, saveSecretCheckbox,
+                        connectButton, removeButton] as [NSControl] {
+            control.isEnabled = enabled
+        }
+        updateVisibility()
+    }
+
+    /// Hodnoty formuláře přenesené do profilu (id zůstává).
+    private func readForm(into server: ServerProfile) -> ServerProfile {
+        var result = server
+        result.name = nameField.stringValue.trimmingCharacters(in: .whitespaces)
+        result.isSftp = kindSftp.state == .on
+        result.host = hostField.stringValue.trimmingCharacters(in: .whitespaces)
+        result.port = UInt16(portField.stringValue.trimmingCharacters(in: .whitespaces))
+            ?? ServerProfile.defaultPort(sftp: result.isSftp)
+        result.user = userField.stringValue.trimmingCharacters(in: .whitespaces)
+        result.auth = ServerAuth(rawValue: authPopup.indexOfSelectedItem) ?? .password
+        result.keyPath = keyField.stringValue.trimmingCharacters(in: .whitespaces)
+        result.savePassword = saveSecretCheckbox.state == .on
+        return result
+    }
+
+    /// Tajný údaj z formuláře podle ověření (heslo, nebo heslo ke klíči).
+    private var formSecret: String {
+        switch authMethod {
+        case .password: return passField.stringValue
+        case .keyFile: return passphraseField.stringValue
+        case .agent: return ""
+        }
+    }
+
+    /// Uloží formulář do vybraného serveru (seznam do UserDefaults jen při změně);
+    /// heslo zapíše do Klíčenky (jen při změně), bez volby „Uložit heslo“ ho smaže.
+    private func commitForm() {
+        guard let index = editingIndex else { return }
+        let server = readForm(into: servers[index])
+        if server != servers[index] {
+            servers[index] = server
+            ServerStore.save(servers)
+        }
+        if server.savePassword && server.effectiveAuth != .agent {
+            let secret = formSecret
+            if secret != loadedSecret {
+                if secret.isEmpty {
+                    ServerKeychain.removeSecret(for: server.id)
+                } else {
+                    ServerKeychain.setSecret(secret, for: server.id)
+                }
+                loadedSecret = secret
+            }
+            hadStoredSecret = true
+        } else if hadStoredSecret {
+            ServerKeychain.removeSecret(for: server.id)
+            loadedSecret = ""
+            hadStoredSecret = false
+        }
+    }
+
+    /// Zvolený způsob ověření podle formuláře (FTP vždy heslo).
+    private var authMethod: ServerAuth {
+        readForm(into: ServerProfile()).effectiveAuth
     }
 
     /// Zobrazí jen řádky, které platí pro protokol a způsob ověření; poznámka vysvětlí volbu.
     private func updateVisibility() {
         let sftp = kindSftp.state == .on
         let method = authMethod
-        grid.row(at: 4).isHidden = !sftp
-        grid.row(at: 5).isHidden = method != .password
-        grid.row(at: 6).isHidden = method != .keyFile
-        grid.row(at: 7).isHidden = method != .keyFile
+        authRow.isHidden = !sftp
+        passwordRow.isHidden = method != .password
+        keyRow.isHidden = method != .keyFile
+        passphraseRow.isHidden = method != .keyFile
+        saveSecretRow.isHidden = method == .agent
+        saveSecretCheckbox.title = method == .keyFile ? "Uložit heslo ke klíči do Klíčenky" : "Uložit heslo do Klíčenky"
+        if editingIndex == nil {
+            noteLabel.stringValue = servers.isEmpty
+                ? "Seznam serverů je prázdný – server přidáte tlačítkem +."
+                : "Vyberte server v seznamu."
+            return
+        }
         switch (sftp, method) {
         case (true, .keyFile):
             noteLabel.stringValue = "Soukromý klíč OpenSSH/PEM (ed25519, ECDSA, RSA). Veřejný klíč musí být na serveru v ~/.ssh/authorized_keys."
@@ -285,13 +481,15 @@ final class ConnectWindowController: NSWindowController {
     @objc private func kindChanged(_ sender: Any?) {
         // Změna protokolu přednastaví výchozí port a uživatele.
         let sftp = kindSftp.state == .on
-        if portField.stringValue == "21" || portField.stringValue == "22" || portField.stringValue.isEmpty {
-            portField.stringValue = sftp ? "22" : "21"
+        let defaultPorts = [ServerProfile.defaultPort(sftp: true), ServerProfile.defaultPort(sftp: false)].map(String.init)
+        if defaultPorts.contains(portField.stringValue) || portField.stringValue.isEmpty {
+            portField.stringValue = String(ServerProfile.defaultPort(sftp: sftp))
         }
         if sftp && userField.stringValue == "anonymous" {
             userField.stringValue = NSUserName()
         }
         updateVisibility()
+        refreshEditingRow()
     }
 
     @objc private func authChanged(_ sender: Any?) {
@@ -329,31 +527,67 @@ final class ConnectWindowController: NSWindowController {
         }
     }
 
-    @objc private func cancelClicked(_ sender: Any?) {
+    // MARK: - Tlačítka
+
+    /// Nový server (FTP, výchozí hodnoty, klíč = první běžný v ~/.ssh) na konec seznamu.
+    @objc private func addClicked(_ sender: Any?) {
+        var server = ServerProfile()
+        server.keyPath = ConnectWindowController.defaultKeyPath() ?? ""
+        servers.append(server)
+        tableView.reloadData()
+        // Výběr uloží rozpracovaný server, nový se uloží s prvním commitem.
+        select(servers.count - 1)
+        ServerStore.save(servers)
+        window?.makeFirstResponder(hostField)
+    }
+
+    /// Odebrání vybraného serveru po potvrzení (smaže i heslo v Klíčence).
+    @objc private func removeClicked(_ sender: Any?) {
+        guard let index = editingIndex, let window else { return }
+        let server = servers[index]
+        let alert = NSAlert()
+        alert.messageText = "Odebrat server „\(server.displayName)“?"
+        alert.informativeText = "Server zmizí ze seznamu i z nabídky disků; uložené heslo se smaže z Klíčenky."
+        alert.addButton(withTitle: "Odebrat")
+        alert.addCancelButton()
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            ServerKeychain.removeSecret(for: server.id)
+            self.servers.remove(at: index)
+            ServerStore.save(self.servers)
+            // Upravovaný server už neexistuje – nic se z formuláře neukládá.
+            self.editingIndex = nil
+            self.tableView.reloadData()
+            if self.servers.isEmpty {
+                self.loadForm(nil)
+            } else {
+                self.select(min(index, self.servers.count - 1))
+            }
+        }
+    }
+
+    /// Zavření: rozpracované úpravy se uloží.
+    @objc private func closeClicked(_ sender: Any?) {
+        commitForm()
         window?.sheetParent?.endSheet(window!)
     }
 
     @objc private func connectClicked(_ sender: Any?) {
-        guard let mainController else { return }
-        let isSftp = kindSftp.state == .on
-        let host = hostField.stringValue.trimmingCharacters(in: .whitespaces)
-        let port = UInt16(portField.stringValue) ?? (isSftp ? 22 : 21)
-        let user = userField.stringValue
-        let password = passField.stringValue
-        let method = authMethod
-        let keyPath = (keyField.stringValue.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
-        let passphrase = passphraseField.stringValue
-        guard !host.isEmpty else {
+        guard let mainController, let index = editingIndex else { return }
+        commitForm()
+        let server = servers[index]
+        guard !server.host.isEmpty else {
             window?.makeFirstResponder(hostField)
+            NSSound.beep()
             return
         }
         // Klíč: kontrola souboru a hesla ke klíči ještě před připojením.
-        if method == .keyFile {
-            switch sshKeyEncrypted(path: keyPath) {
+        if server.effectiveAuth == .keyFile {
+            switch sshKeyEncrypted(path: server.expandedKeyPath) {
             case nil:
-                showError("Soubor s klíčem „\(keyField.stringValue)“ nelze přečíst.")
+                showError("Soubor s klíčem „\(server.keyPath)“ nelze přečíst.")
                 return
-            case true? where passphrase.isEmpty:
+            case true? where formSecret.isEmpty:
                 noteLabel.stringValue = "Klíč je chráněný heslem – zadejte heslo ke klíči."
                 window?.makeFirstResponder(passphraseField)
                 NSSound.beep()
@@ -362,45 +596,25 @@ final class ConnectWindowController: NSWindowController {
                 break
             }
         }
-        saveValues()
-        connectButton.isEnabled = false
-        connectButton.title = "Připojuji…"
-
-        // Připojení běží na pozadí (síť), pak se lokace otevře v aktivním panelu.
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            do {
-                let vfs: Vfs
-                switch (isSftp, method) {
-                case (false, _):
-                    vfs = try Vfs.connectFtp(host: host, port: port, user: user, password: password, timeout: 15)
-                case (true, .password):
-                    vfs = try Vfs.connectSftp(host: host, port: port, user: user, password: password, timeout: 15)
-                case (true, .keyFile):
-                    vfs = try Vfs.connectSftpKey(host: host, port: port, user: user, keyPath: keyPath,
-                                                 passphrase: passphrase, timeout: 15)
-                case (true, .agent):
-                    vfs = try Vfs.connectSftpAgent(host: host, port: port, user: user, timeout: 15)
-                }
-                DispatchQueue.main.async {
-                    guard let self, let sheet = self.window else { return }
-                    self.window?.sheetParent?.endSheet(sheet)
-                    let panel = mainController.activePanel
-                    panel.navigate(Location(vfs: vfs, path: "/"), nested: true,
-                                   focus: panel.currentItem?.name)
-                    mainController.activate(panel)
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    guard let self else { return }
-                    self.connectButton.isEnabled = true
-                    self.connectButton.title = "Připojit"
-                    self.showError(error.localizedDescription)
-                }
-            }
-        }
+        // Dialog se zavře, připojení s průběhem a chybami řeší hlavní okno.
+        let secret = formSecret
+        let panel = targetPanel ?? mainController.activePanel
+        window?.sheetParent?.endSheet(window!)
+        mainController.connect(server: server, secret: secret, in: panel)
     }
 
-    /// Chyba připojení jako sheet nad dialogem (dialog zůstane otevřený k opravě).
+    /// První existující běžný klíč v ~/.ssh (zkráceně s „~“).
+    static func defaultKeyPath() -> String? {
+        let home = NSHomeDirectory()
+        for name in ["id_ed25519", "id_ecdsa", "id_rsa"] {
+            if FileManager.default.fileExists(atPath: home + "/.ssh/" + name) {
+                return "~/.ssh/" + name
+            }
+        }
+        return nil
+    }
+
+    /// Chyba jako sheet nad dialogem (dialog zůstane otevřený k opravě).
     private func showError(_ text: String) {
         guard let sheet = window else { return }
         let alert = NSAlert()
@@ -867,7 +1081,7 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
 
     private var entries: [Entry]
     private let onChoose: (Int) -> Void
-    /// Kolik položek od začátku lze přesouvat (disky; „Připojit FTP“ zůstává na konci).
+    /// Kolik položek od začátku lze přesouvat (disky; servery a „FTP/SFTP servery…“ se nepřesouvají).
     var movableCount = 0
     /// Přesun položky (z indexu, na index) – volající uloží nové pořadí.
     var onMove: ((Int, Int) -> Void)?

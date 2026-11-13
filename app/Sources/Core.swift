@@ -309,6 +309,13 @@ final class ProgressState {
         lock.unlock()
     }
 
+    /// Byla operace zrušena?
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelledFlag
+    }
+
     /// Aktuální stav progresu pro zobrazení.
     func snapshot() -> (done: UInt64, total: UInt64) {
         lock.lock()

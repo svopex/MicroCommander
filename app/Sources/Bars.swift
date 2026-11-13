@@ -183,7 +183,7 @@ final class DriveBar: NSView {
         ftp.isBordered = false
         ftp.imagePosition = .imageLeading
         ftp.font = NSFont.systemFont(ofSize: 11)
-        ftp.toolTip = "Připojit FTP/SFTP (F11)"
+        ftp.toolTip = "FTP/SFTP servery – přidat, upravit, připojit (F11)"
         stack.addArrangedSubview(ftp)
     }
 

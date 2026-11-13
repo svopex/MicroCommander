@@ -126,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Hledat…", .find, "f", [.command]),
             ("Terminál v adresáři", .terminal, KeyCode.functionKeyString(9), []),
             nil,
-            ("Připojit FTP/SFTP…", .connect, KeyCode.functionKeyString(11), []),
+            ("FTP/SFTP servery…", .connect, KeyCode.functionKeyString(11), []),
             ("Odpojit / zavřít archiv", .disconnect, KeyCode.functionKeyString(12), []),
             nil,
             ("Nápověda ke klávesám", .help, KeyCode.functionKeyString(1), []),

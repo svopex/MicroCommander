@@ -53,13 +53,13 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   implementace `core/crates/salcore/src/ffi.rs`. Handle = neprůhledný ukazatel,
   chyby jako kódy + text, panika jádra se zachycuje (nepřechází přes FFI).
 - **UI** (Swift/AppKit) rozvržené podle originálu (help: `main.png`, `panel.png`):
-  horní nástrojová lišta, lišta disků (kořen, domov, připojené svazky, FTP/SFTP),
+  horní nástrojová lišta, lišta disků (kořen, domov, připojené svazky, FTP/SFTP servery),
   dva panely s prostřední svislou lištou operací, příkazová řádka `cesta>`
   a spodní lišta F-kláves (popisky se mění podle držených Shift/Ctrl/Alt).
   Panel má řádek adresáře (aktivní panel zvýrazněný barvou, tlačítko disku,
   volné místo), sloupce Jméno/Přípona/Velikost/Datum/Čas/Atr, řádek „..“
   (UP-DIR), kurzor oddělený od označení (označené položky červeně) a informační
-  řádek. Dialogy: progress se zrušením, připojení FTP/SFTP, hledání, interní
+  řádek. Dialogy: progress se zrušením, správa FTP/SFTP serverů, hledání, interní
   prohlížeč (text/hex/obrázek).
 
 ### Struktura projektu
@@ -95,7 +95,10 @@ app/                        # tenké UI pro macOS
   Sources/Bars.swift        # nástrojová lišta, disky, prostřední lišta,
                             #   příkazová řádka, lišta F-kláves
   Sources/WindowController.swift  # hlavní okno, příkazy, směrování kláves
-  Sources/Dialogs.swift     # progress, FTP/SFTP, hledání, interní prohlížeč
+  Sources/Dialogs.swift     # progress, správa FTP/SFTP serverů, hledání,
+                            #   interní prohlížeč, nabídka disků
+  Sources/Servers.swift     # uložené FTP/SFTP servery (UserDefaults),
+                            #   hesla v Klíčence, připojení serveru v panelu
   Sources/SelfTest.swift    # self-test UI (SAL_SELFTEST=1)
   Sources/main.swift        # NSApplication, hlavní menu
   Info.plist
@@ -159,26 +162,39 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   shoda, Escape konec.
 - **F-klávesy:** F1 nápověda, F2 přejmenovat, F3 prohlížeč, F4 editor, F5
   kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 smazat,
-  F9 terminál v adresáři, F10 ukončit, F11 připojit FTP/SFTP, F12 odpojit /
+  F9 terminál v adresáři, F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
   zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌃F3–⌃F6 řazení podle
   jména/přípony/času/velikosti (opakovaně obrací), ⌃F9 obnovit, ⌃F10 porovnat
   adresáře (označí odlišné soubory); ⌥F1/⌥F2 disk vlevo/vpravo, ⌥F5 zabalit do
   ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat, ⌥F10 obsazené místo.
 - **Nabídka disků** (⌥F1 levý / ⌥F2 pravý panel, tlačítko disku na řádku
-  adresáře): kořen, domov, připojené svazky a FTP/SFTP; kurzor začíná na disku,
+  adresáře): kořen, domov, připojené svazky, **uložené FTP/SFTP servery**
+  (výběr serveru ho připojí v daném panelu) a „FTP/SFTP servery…“ (správa);
+  kurzor začíná na disku,
   kde panel je. ↑/↓ cyklí (z poslední položky na první a obráceně), Home/End,
   číslice 1–9 vyberou přímo, Enter potvrdí, Escape nebo klik mimo zavře.
   **Pořadí disků** je výchozí Domů, „/“, svazky; mění se v nabídce klávesami
   ⌥↑ / ⌥↓ (⌘↑ / ⌘↓) nebo pravým tlačítkem na disku v liště disků (Na první
   místo / Posunout doleva / doprava). Pořadí se pamatuje a platí pro lištu
   i nabídku; nově připojené svazky se řadí na konec.
-- **Připojení FTP/SFTP** (F11, lišta disků, nabídka disků): u SFTP volba
+- **FTP/SFTP servery** (F11, tlačítko FTP/SFTP v liště disků, poslední položka
+  nabídky disků): seznam libovolného počtu uložených serverů – **+** přidá,
+  **−** odebere (po potvrzení), vybraný server se upravuje ve formuláři vpravo
+  (název, protokol, server, port, uživatel, ověření). Úpravy se ukládají
+  průběžně (přepnutí serveru, Připojit, Zavřít/Escape); Enter nebo dvojklik
+  připojí vybraný server v panelu, odkud byl dialog otevřen. Každý panel může
+  být připojený k jinému serveru zároveň; F12 spojení zavře. U SFTP volba
   ověření – Heslo / **Soubor s klíčem** / Klíče ze ssh-agenta. Soubor s klíčem
   se předvyplní prvním z `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`; tlačítko
   Vybrat… otevře `~/.ssh` (i skryté soubory). Klíč chráněný heslem aplikace
   pozná sama a vyzve k zadání hesla ke klíči; chyby rozlišují chybné heslo ke
-  klíči, klíč odmítnutý serverem a chybějící soubor. Dialog si pamatuje server,
-  port, uživatele, způsob ověření a cestu ke klíči – hesla nikdy.
+  klíči, klíč odmítnutý serverem a chybějící soubor. Heslo (heslo ke klíči) se
+  ukládá jen se zaškrtnutým „Uložit heslo do Klíčenky“ – do macOS Klíčenky
+  (služba „MicroCommander FTP/SFTP“), jinak se při připojení z nabídky disků
+  vyžádá. Seznam serverů je v předvolbách (`servers`, JSON bez hesel); dříve
+  zapamatovaný server z jednoduchého dialogu se při prvním spuštění převezme.
+  Neúspěšné připojení nabídne „Upravit server…“, Zrušit v průběhu připojování
+  dialog hned zavře.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, ⌘F hledat, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (Finder, kopírovat cestu).
 - **Příkazová řádka** (⌃Tab): Enter spustí příkaz v login shellu v adresáři
@@ -223,7 +239,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   přečte jádro
 - `make selftest` – UI self-test: aplikace si posílá skutečné klávesové události
   a ověřuje kurzor, Space, Tab, rychlé hledání, F7/F5/F8 dialogy (žádné
-  zamrznutí), ⌫ s návratem kurzoru, ⌘U, ⌥F7 a F11 se zavřením Escapem
+  zamrznutí), ⌫ s návratem kurzoru, ⌘U, ⌥F7 a F11 (správa serverů) se zavřením Escapem
   a zaheslovaný AES-256 ZIP (Enter do archivu, F5, chybné → správné heslo),
   Home/End, ⌥↑/⌥↓, ⌃H (skryté soubory), ⌥1/⌥3/⌥6/⌥2 (režimy) se šipkami;
   test otevírá okno aplikace a posílá jí klávesy – při současné práci
@@ -231,7 +247,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - `make keycheck` – Home/End, ⌥↑/⌥↓ a systémové příkazy začátek/konec
   dokumentu ve všech šesti režimech s 500 soubory v okně skutečné velikosti
   (kurzor na „..“ / poslední položku a zůstane vidět), cyklení a změna pořadí
-  v nabídce disků;
+  v nabídce disků, uložené FTP/SFTP servery (název, adresa, potřeba hesla,
+  uložení do JSON);
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`
   zapíše každý stisk (kód klávesy, znak, modifikátory, fokus) do

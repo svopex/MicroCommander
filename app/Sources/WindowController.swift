@@ -69,7 +69,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             (.toggleHidden, "eye", "Zobrazovat skryté soubory (⌃H)"),
             (.viewMenu, "square.grid.2x2", "Režim zobrazení panelu (⌥1–⌥6)"),
             nil,
-            (.connect, "network", "Připojit FTP/SFTP (F11)"),
+            (.connect, "network", "FTP/SFTP servery (F11)"),
             (.disconnect, "eject", "Odpojit / zavřít archiv (F12)"),
             (.terminal, "terminal", "Terminál v adresáři (F9)"),
         ], vertical: false)
@@ -685,32 +685,55 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         return menu
     }
 
-    /// Nabídka disků pro panel (⌥F1/⌥F2, tlačítko disku): kořen, domov, svazky, FTP/SFTP.
-    /// Výchozí řádek = disk, na kterém panel právě je.
+    /// Akce položky nabídky disků.
+    enum DriveChoice {
+        case drive(path: String)
+        case server(ServerProfile)
+        case manageServers
+    }
+
+    /// Položky nabídky disků: kořen, domov, svazky (v uloženém pořadí), uložené
+    /// FTP/SFTP servery a na konci správa serverů. Sdílí nabídka i self-test.
+    static func driveChooserItems() -> [(entry: DriveChooser.Entry, choice: DriveChoice)] {
+        // Cestu ukážeme jen tam, kde se liší od názvu (kořen „/“ by byl dvakrát).
+        var items = DriveBar.listDrives().map {
+            (entry: DriveChooser.Entry(title: $0.title, detail: $0.title == $0.path ? "" : $0.path, icon: $0.icon),
+             choice: DriveChoice.drive(path: $0.path))
+        }
+        let serverIcon = NSImage(systemSymbolName: "server.rack", accessibilityDescription: nil)
+        items += ServerStore.load().map {
+            (entry: DriveChooser.Entry(title: $0.displayName, detail: $0.urlString, icon: serverIcon),
+             choice: DriveChoice.server($0))
+        }
+        items.append((entry: DriveChooser.Entry(title: "FTP/SFTP servery…", detail: "",
+                                                icon: NSImage(systemSymbolName: "network", accessibilityDescription: nil)),
+                      choice: .manageServers))
+        return items
+    }
+
+    /// Nabídka disků pro panel (⌥F1/⌥F2, tlačítko disku). Výchozí řádek = disk,
+    /// na kterém panel právě je; přesouvat (⌥↑/⌥↓) lze jen disky.
     func panelViewShowDriveChooser(_ view: PanelView, anchor: NSView) {
         let panel = view.panel
         let drives = DriveBar.listDrives()
-        // Cestu ukážeme jen tam, kde se liší od názvu (kořen „/“ by byl dvakrát).
-        var entries = drives.map {
-            DriveChooser.Entry(title: $0.title, detail: $0.title == $0.path ? "" : $0.path, icon: $0.icon)
-        }
-        entries.append(DriveChooser.Entry(title: "Připojit FTP/SFTP…", detail: "",
-                                          icon: NSImage(systemSymbolName: "network", accessibilityDescription: nil)))
-        // `drives` se při přesunu v nabídce mění – výběr pak odpovídá novému pořadí.
-        var currentDrives = drives
-        let chooser = DriveChooser.show(entries: entries, selected: currentDriveIndex(drives, panel: panel), below: anchor) { [weak self] index in
+        // Položky se při přesunu v nabídce prohazují – výběr pak odpovídá novému pořadí.
+        var items = MainWindowController.driveChooserItems()
+        let chooser = DriveChooser.show(entries: items.map(\.entry), selected: currentDriveIndex(drives, panel: panel),
+                                        below: anchor) { [weak self] index in
             guard let self else { return }
             self.activate(panel)
-            if index < currentDrives.count {
-                self.openDrive(currentDrives[index].path, in: panel)
-            } else {
-                self.perform(.connect)
+            switch items[index].choice {
+            case .drive(let path): self.openDrive(path, in: panel)
+            case .server(let server): self.connect(server: server, in: panel)
+            case .manageServers: ConnectWindowController.show(parent: self, panel: panel)
             }
         }
         chooser.movableCount = drives.count
         chooser.onMove = { from, to in
-            currentDrives.swapAt(from, to)
-            DriveBar.saveOrder(currentDrives.map(\.path))
+            items.swapAt(from, to)
+            DriveBar.saveOrder(items.prefix(drives.count).compactMap {
+                if case .drive(let path) = $0.choice { return path } else { return nil }
+            })
         }
     }
 
@@ -854,23 +877,37 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     /// Dialog s heslem k archivu (zadané heslo platí pro celý otevřený archiv).
     private func askPassword(for vfs: Vfs, wrong: Bool) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = wrong ? "Chybné heslo" : "Zaheslovaný archiv"
-        alert.informativeText = wrong
+        let text = wrong
             ? "Heslo k archivu „\(vfs.label)“ není správné. Zadejte ho znovu:"
             : "Archiv „\(vfs.label)“ obsahuje šifrované soubory (AES nebo ZipCrypto). Zadejte heslo:"
-        alert.alertStyle = wrong ? .warning : .informational
+        guard let password = askSecretText(title: wrong ? "Chybné heslo" : "Zaheslovaný archiv", text: text,
+                                           style: wrong ? .warning : .informational) else { return false }
+        vfs.setPassword(password)
+        return true
+    }
+
+    /// Modální dotaz na heslo (skryté pole, Enter = potvrdit, Escape = zrušit).
+    /// - Parameters:
+    ///   - title: nadpis dialogu
+    ///   - text: vysvětlující text
+    ///   - okTitle: popisek potvrzovacího tlačítka
+    ///   - style: styl dialogu
+    /// - Returns: zadané heslo, nil = zrušeno
+    func askSecretText(title: String, text: String, okTitle: String = "OK",
+                       style: NSAlert.Style = .informational) -> String? {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = text
+        alert.alertStyle = style
         let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
         input.usesSingleLineMode = true
         alert.accessoryView = input
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: okTitle)
         alert.addCancelButton()
         alert.window.initialFirstResponder = input
         let response = alert.runModal()
         focusActivePanel()
-        guard response == .alertFirstButtonReturn else { return false }
-        vfs.setPassword(input.stringValue)
-        return true
+        return response == .alertFirstButtonReturn ? input.stringValue : nil
     }
 
     // MARK: - Příkazy
@@ -1476,15 +1513,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     // MARK: - Dialogy operací
 
     /// Otevře progress dialog a spustí operaci na pozadí.
-    func beginProgress(title: String, operation: @escaping (ProgressState) throws -> Void,
+    /// - Parameter dismissOnCancel: Zrušit dialog hned zavře a výsledek operace
+    ///   (doběhne na pozadí) se zahodí – pro operace, které zrušit nejdou (připojení).
+    func beginProgress(title: String, dismissOnCancel: Bool = false,
+                       operation: @escaping (ProgressState) throws -> Void,
                        completion: @escaping (Result<Void, Error>) -> Void) {
         let dialog = ProgressDialog(title: title, parentWindow: window)
         progressDialog = dialog
         dialog.begin()
         let state = dialog.state
+        if dismissOnCancel {
+            dialog.onCancel = { [weak self] in self?.endProgress() }
+        }
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Result { try operation(state) }
             DispatchQueue.main.async {
+                if dismissOnCancel && state.isCancelled { return }
                 completion(result)
             }
         }

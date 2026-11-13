@@ -184,6 +184,13 @@ README.md       # zadání (aktualizovat na konci)
 
 ## Poslední aktualizace
 
+- 2026-11-13 (23): Více FTP/SFTP serverů: Servers.swift (ServerProfile Codable
+  s decodeIfPresent, ServerStore = UserDefaults „servers“ + převod starých
+  klíčů connect*, ServerKeychain = hesla v Klíčence), ConnectWindowController
+  přepsán na správu serverů (seznam +/−, formulář, průběžné ukládání),
+  nabídka disků ⌥F1/⌥F2 ukazuje servery (DriveChoice, driveChooserItems),
+  beginProgress(dismissOnCancel:), sdílený askSecretText. Keycheck OK.
+
 - 2026-11-13 (22): /simplify před prvním commitem: sloučená obsluha vstupu
   tabulky a mřížky (PanelView.handle*, edgeCommands + doCommand), Command:
   CaseIterable + Command.viewMode, rowTextColor, NSAlert.addCancelButton,

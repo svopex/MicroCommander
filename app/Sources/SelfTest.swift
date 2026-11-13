@@ -431,6 +431,7 @@ final class UIKeyCheck {
                 self.check(panel.cursor == last, "\(mode.title): příkaz konec dokumentu → poslední")
             }
             self.checkDriveChooser()
+            self.checkServerProfiles()
             self.probeMenuPeriod(dir: dir)
             self.checkSameDir(dir: dir, then: { self.finish(dir: dir) })
         }
@@ -598,17 +599,14 @@ final class UIKeyCheck {
         self.check(moves.count == 2, "nabídka disků: první disk výš neposune")
         reorder.select(3)
         _ = reorder.handleKey(event(KeyCode.up, NSUpArrowFunctionKey, [.option, .function]))
-        self.check(moves.count == 2, "nabídka disků: „Připojit FTP/SFTP“ se nepřesouvá")
+        self.check(moves.count == 2, "nabídka disků: „FTP/SFTP servery…“ se nepřesouvá")
         // Výchozí pořadí (jen pokud uživatel ještě nic neuložil): Domů první.
         if UserDefaults.standard.object(forKey: "driveOrder") == nil {
             self.check(DriveBar.listDrives().first?.path == NSHomeDirectory(), "výchozí pořadí disků: Domů první")
         }
         // Volitelný snímek skutečné nabídky (vykreslení mimo obrazovku, bez zobrazení okna).
         if let path = ProcessInfo.processInfo.environment["SAL_CHOOSER_SNAPSHOT"] {
-            let drives = DriveBar.listDrives()
-            var real = drives.map { DriveChooser.Entry(title: $0.title, detail: $0.path, icon: $0.icon) }
-            real.append(DriveChooser.Entry(title: "Připojit FTP/SFTP…", detail: "",
-                                           icon: NSImage(systemSymbolName: "network", accessibilityDescription: nil)))
+            let real = MainWindowController.driveChooserItems().map(\.entry)
             let snapshot = DriveChooser(entries: real, selected: 1) { _ in }
             // Okno mimo obrazovku se samo nerozvrhne – vynutit layout před snímkem.
             snapshot.window?.contentView?.layoutSubtreeIfNeeded()
@@ -619,6 +617,33 @@ final class UIKeyCheck {
                 try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
             }
         }
+    }
+
+    /// Uložené servery: zobrazovaný název, adresa, potřeba hesla a převod do/z JSON
+    /// (bez zápisu do UserDefaults a Klíčenky).
+    private func checkServerProfiles() {
+        var ftp = ServerProfile()
+        ftp.host = "ftp.example.org"
+        self.check(ftp.displayName == "anonymous@ftp.example.org", "server: název bez vyplnění = uživatel@server")
+        self.check(ftp.urlString == "ftp://anonymous@ftp.example.org", "server: výchozí port se v adrese vynechá")
+        self.check(!ftp.needsSecret, "server: anonymní FTP heslo nevyžaduje")
+        var sftp = ftp
+        sftp.name = "  Produkce "
+        sftp.isSftp = true
+        sftp.port = 2222
+        sftp.user = "deploy"
+        sftp.auth = .agent
+        self.check(sftp.displayName == "Produkce", "server: vlastní název (bez mezer okolo)")
+        self.check(sftp.urlString == "sftp://deploy@ftp.example.org:2222", "server: jiný port je v adrese")
+        self.check(!sftp.needsSecret, "server: ssh-agent heslo nevyžaduje")
+        sftp.auth = .password
+        self.check(sftp.needsSecret, "server: SFTP s heslem heslo vyžaduje")
+        ftp.isSftp = false
+        ftp.auth = .keyFile
+        self.check(ftp.effectiveAuth == .password, "server: FTP ověřuje vždy heslem")
+        let list = [ftp, sftp]
+        let decoded = (try? JSONEncoder().encode(list)).flatMap { try? JSONDecoder().decode([ServerProfile].self, from: $0) }
+        self.check(decoded == list, "server: seznam se uloží a načte beze změny (JSON)")
     }
 
     /// Počká (časovač run loopu) na splnění podmínky, max. 10 s.
