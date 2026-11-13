@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addSubmenu(makeMenu("Označit", markEntries, controller), title: "Označit", to: mainMenu)
 
         let commandEntries: [Entry] = [
-            ("Hledat…", .find, "f", [.command]),
+            ("Vyhledat soubory a adresáře…", .find, "f", [.command]),
             ("Terminál v adresáři", .terminal, KeyCode.functionKeyString(9), []),
             nil,
             ("FTP/SFTP servery…", .connect, KeyCode.functionKeyString(11), []),

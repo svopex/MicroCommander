@@ -19,7 +19,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::error::{SalError, SalResult};
-use crate::find::find_items;
+use crate::find::{find_items, find_items_ex, find_mask_string, ContentMatcher, FindOptions};
 use crate::local::LocalFs;
 use crate::mask::MaskGroup;
 use crate::ops::{copy_items, delete_items, move_items, OverwriteMode, ProgressCallback};
@@ -58,6 +58,18 @@ pub struct SalProgress {
 
 /// Zpětné volání hledání (odpovídá SalFoundFn v microcommander.h).
 pub type SalFoundFn = Option<extern "C" fn(*mut c_void, *const c_char, u64, i64, u32)>;
+/// Hlášení prohledávaného adresáře (odpovídá SalFindDirFn v microcommander.h).
+pub type SalFindDirFn = Option<extern "C" fn(*mut c_void, *const c_char)>;
+
+/// Příznaky sal_find_ex (viz SAL_FIND_* v microcommander.h).
+const SAL_FIND_SUBDIRS: u32 = 1;
+const SAL_FIND_INCLUDE_DIRS: u32 = 2;
+const SAL_FIND_CONTENT: u32 = 4;
+const SAL_FIND_CASE: u32 = 8;
+const SAL_FIND_WHOLE_WORDS: u32 = 16;
+const SAL_FIND_REGEX: u32 = 32;
+const SAL_FIND_HEX: u32 = 64;
+const SAL_FIND_NAME_CONTAINS: u32 = 128;
 
 /// Režimy přepsání (odpovídají #define SAL_OVERWRITE_* v microcommander.h).
 pub const SAL_OVERWRITE_ASK: i32 = 0;
@@ -667,6 +679,100 @@ pub unsafe extern "C" fn sal_find(
             },
         )
     });
+    result_to_code(result.map(|_| ()), err, err_len)
+}
+
+/// Hledání s volbami dialogu Find (podadresáře, obsah souborů, pravidlo
+/// „maska bez * ? . = obsahuje“). Počet přeskočených chyb vrací v `errors`.
+///
+/// # Safety
+/// Viz microcommander.h; `content` ukazuje na `content_len` bajtů (smí být NULL
+/// při nulové délce), `errors` smí být NULL.
+#[no_mangle]
+pub unsafe extern "C" fn sal_find_ex(
+    vfs: *mut SalVfs,
+    root: *const c_char,
+    mask: *const c_char,
+    flags: u32,
+    content: *const u8,
+    content_len: usize,
+    progress: *const SalProgress,
+    found: SalFoundFn,
+    dir_cb: SalFindDirFn,
+    user: *mut c_void,
+    errors: *mut u64,
+    err: *mut c_char,
+    err_len: usize,
+) -> i32 {
+    if vfs.is_null() || root.is_null() || mask.is_null() || (content.is_null() && content_len > 0) {
+        write_err(err, err_len, "Neplatné argumenty sal_find_ex.");
+        return crate::error::SAL_ERR_GENERIC;
+    }
+    let root_str = CStr::from_ptr(root).to_string_lossy().into_owned();
+    let mut mask_str = CStr::from_ptr(mask).to_string_lossy().into_owned();
+    if flags & SAL_FIND_NAME_CONTAINS != 0 {
+        mask_str = find_mask_string(&mask_str);
+    }
+    let mask_group = match MaskGroup::new(&mask_str, true) {
+        Ok(group) => group,
+        Err(e) => {
+            write_err(err, err_len, &e.to_string());
+            return e.code();
+        }
+    };
+    // Hledání v obsahu jen se zapnutým příznakem a neprázdným vzorem (jako v Salamanderu).
+    let matcher = if flags & SAL_FIND_CONTENT != 0 && content_len > 0 {
+        let pattern = std::slice::from_raw_parts(content, content_len);
+        match ContentMatcher::new(
+            pattern,
+            flags & SAL_FIND_CASE != 0,
+            flags & SAL_FIND_WHOLE_WORDS != 0,
+            flags & SAL_FIND_REGEX != 0,
+            flags & SAL_FIND_HEX != 0,
+        ) {
+            Ok(matcher) => Some(matcher),
+            Err(e) => {
+                write_err(err, err_len, &e.to_string());
+                return e.code();
+            }
+        }
+    } else {
+        None
+    };
+    let options = FindOptions {
+        subdirs: flags & SAL_FIND_SUBDIRS != 0,
+        include_dirs: flags & SAL_FIND_INCLUDE_DIRS != 0,
+        content: matcher,
+    };
+    let mut progress_cb = progress_from_c(progress);
+    let handle = &*(vfs as *const VfsHandle);
+    let result = catch(|| {
+        find_items_ex(
+            handle.vfs.as_ref(),
+            &root_str,
+            &mask_group,
+            &options,
+            &mut progress_cb,
+            &mut |dir| {
+                if let Some(callback) = dir_cb {
+                    let cdir = CString::new(dir.replace('\0', "_")).unwrap_or_default();
+                    callback(user, cdir.as_ptr());
+                }
+            },
+            &mut |path, item| {
+                if let Some(callback) = found {
+                    let cpath = CString::new(path.replace('\0', "_")).unwrap_or_default();
+                    callback(user, cpath.as_ptr(), item.size, item.mtime, item.flags());
+                }
+                true
+            },
+        )
+    });
+    if let Ok(stats) = &result {
+        if !errors.is_null() {
+            *errors = stats.errors;
+        }
+    }
     result_to_code(result.map(|_| ()), err, err_len)
 }
 

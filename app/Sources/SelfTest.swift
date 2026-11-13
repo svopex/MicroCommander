@@ -33,10 +33,10 @@ final class UISelfTest {
     }
 
     /// Zařadí stisk klávesy do fronty událostí okna.
-    private func key(_ keyCode: UInt16, _ chars: String, _ flags: NSEvent.ModifierFlags = []) {
-        // Cíl = otevřený modální alert / sheet, jinak hlavní okno (aplikace spuštěná
-        // z terminálu nemusí být aktivní, keyWindow proto nelze použít).
-        guard let window = NSApp.modalWindow ?? controller.window?.attachedSheet ?? controller.window,
+    private func key(_ keyCode: UInt16, _ chars: String, _ flags: NSEvent.ModifierFlags = [], to target: NSWindow? = nil) {
+        // Cíl = zadané okno, otevřený modální alert / sheet, jinak hlavní okno (aplikace
+        // spuštěná z terminálu nemusí být aktivní, keyWindow proto nelze použít).
+        guard let window = target ?? NSApp.modalWindow ?? controller.window?.attachedSheet ?? controller.window,
               let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
                                            timestamp: ProcessInfo.processInfo.systemUptime,
                                            windowNumber: window.windowNumber, context: nil,
@@ -199,15 +199,26 @@ final class UISelfTest {
             // Po ⌘U je vlevo původně pravý panel (stojí v kořeni testu), vpravo src.
             self.check(self.controller.leftPanel.location.path == self.root
                        && self.controller.rightPanel.location.path.hasSuffix("/src"), "⌘U prohodil panely")
-            // 10) ⌥F7 otevře hledání (sheet), Escape ho zavře.
-            self.key(KeyCode.functionKeys[6], KeyCode.functionKeyString(7), [.option])
+            // 10) ⌃F otevře okno Vyhledat soubory a adresáře, Enter hledá, Escape zavře.
+            self.controller.focusActivePanel()
+            self.key(3, "f", [.control])
         }))
-        steps.append((ready: { self.controller.window?.attachedSheet != nil }, action: {
-            self.check(self.controller.window?.attachedSheet?.title == "Hledat", "⌥F7 otevře hledání")
-            self.key(KeyCode.escape, "\u{1b}")
+        let findWindow = { FindWindowController.windows.last }
+        steps.append((ready: { findWindow()?.window?.isVisible == true }, action: {
+            self.check(findWindow()?.window?.title == "Vyhledat soubory a adresáře", "⌃F otevře okno hledání")
+            // Název je „*.*“ nebo poslední maska – nastavíme vše a spustíme Najít Enterem.
+            if let window = findWindow()?.window,
+               let combo = window.initialFirstResponder as? NSComboBox ?? (window.firstResponder as? NSTextView)?.delegate as? NSComboBox {
+                combo.stringValue = "*.*"
+            }
+            self.key(KeyCode.returnKey, "\r", to: findWindow()?.window)
         }))
-        steps.append((ready: { self.windowFree }, action: {
-            self.check(self.windowFree, "Escape zavře hledání")
+        steps.append((ready: { (findWindow()?.foundCount ?? 0) >= 5 && findWindow()?.isSearching == false }, action: {
+            self.check((findWindow()?.foundCount ?? 0) >= 5, "hledání najde položky testovacího adresáře")
+            self.key(KeyCode.escape, "\u{1b}", to: findWindow()?.window)
+        }))
+        steps.append((ready: { FindWindowController.windows.isEmpty && self.windowFree }, action: {
+            self.check(FindWindowController.windows.isEmpty, "Escape zavře okno hledání")
             // 11) F11 otevře připojení FTP/SFTP, Escape ho zavře.
             self.key(KeyCode.functionKeys[10], KeyCode.functionKeyString(11))
         }))

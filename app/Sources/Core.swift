@@ -33,6 +33,14 @@ let SAL_FLAG_ENCRYPTED: UInt32 = 16
 let SAL_OVERWRITE_ASK: Int32 = 0
 let SAL_OVERWRITE_OVERWRITE: Int32 = 1
 let SAL_OVERWRITE_SKIP: Int32 = 2
+let SAL_FIND_SUBDIRS: UInt32 = 1
+let SAL_FIND_INCLUDE_DIRS: UInt32 = 2
+let SAL_FIND_CONTENT: UInt32 = 4
+let SAL_FIND_CASE: UInt32 = 8
+let SAL_FIND_WHOLE_WORDS: UInt32 = 16
+let SAL_FIND_REGEX: UInt32 = 32
+let SAL_FIND_HEX: UInt32 = 64
+let SAL_FIND_NAME_CONTAINS: UInt32 = 128
 
 /// Jedna položka výpisu adresáře.
 struct Item {
@@ -485,6 +493,7 @@ struct FindResult {
 final class FindCollector {
     private let lock = NSLock()
     private var items: [FindResult] = []
+    private var dir = ""
 
     func append(_ result: FindResult) {
         lock.lock()
@@ -497,6 +506,50 @@ final class FindCollector {
         defer { lock.unlock() }
         return items
     }
+
+    /// Výsledky od indexu `from` (přírůstkové čtení během hledání).
+    func items(from index: Int) -> [FindResult] {
+        lock.lock()
+        defer { lock.unlock() }
+        return index < items.count ? Array(items[index...]) : []
+    }
+
+    /// Právě prohledávaný adresář (pro stavový řádek dialogu Hledat).
+    var currentDir: String {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return dir
+        }
+        set {
+            lock.lock()
+            dir = newValue
+            lock.unlock()
+        }
+    }
+}
+
+/// Volby hledání odpovídající dialogu Find Salamandera.
+struct FindSpec {
+    /// Maska jmen (skupiny `;`, vyloučení `|`; bez * ? . = „obsahuje“).
+    var mask: String
+    /// Včetně podadresářů.
+    var subdirs: Bool
+    /// Hledaný obsah (nil = bez hledání v souboru); u HEX režimu už bajty.
+    var content: [UInt8]?
+    var caseSensitive: Bool
+    var wholeWords: Bool
+    var regex: Bool
+    var hex: Bool
+}
+
+/// C callback hledání: každou nalezenou položku přidá do sběrače (`user` = FindCollector).
+private let findFoundCallback: @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UInt64, Int64, UInt32) -> Void = { user, path, size, mtime, flags in
+    guard let user, let path else { return }
+    let collector = Unmanaged<FindCollector>.fromOpaque(user).takeUnretainedValue()
+    let pathString = String(cString: path)
+    let name = pathString.split(separator: "/").last.map(String.init) ?? pathString
+    collector.append(FindResult(path: pathString, item: Item(name: name, size: size, mtime: mtime, flags: flags)))
 }
 
 /// Hledání podle masky; výsledky hromadí do předaného sběrače.
@@ -505,28 +558,65 @@ func coreFind(vfs: Vfs, root: String, mask: String, includeDirs: Bool,
     var err = [CChar](repeating: 0, count: 1024)
     var progress = makeProgress(state)
 
-    // C callback: každou nalezenou položku přidá do sběrače.
     let user = Unmanaged.passUnretained(collector).toOpaque()
-    let found: @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UInt64, Int64, UInt32) -> Void = { user, path, size, mtime, flags in
-        guard let user, let path else { return }
-        let collector = Unmanaged<FindCollector>.fromOpaque(user).takeUnretainedValue()
-        let pathString = String(cString: path)
-        let name = pathString.split(separator: "/").last.map(String.init) ?? pathString
-        collector.append(FindResult(
-            path: pathString,
-            item: Item(name: name, size: size, mtime: mtime, flags: flags)
-        ))
-    }
 
     let code = root.withCString { rootC in
         mask.withCString { maskC in
             withUnsafePointer(to: &progress) { progressPtr in
                 sal_find(vfs.ptr, rootC, maskC, includeDirs ? 1 : 0,
-                         progressPtr, found, user, &err, 1024)
+                         progressPtr, findFoundCallback, user, &err, 1024)
             }
         }
     }
     guard code == SAL_OK else { throw CoreError.code(code, String(cString: err)) }
+}
+
+/// Hledání s volbami dialogu Find v jednom výchozím adresáři.
+/// - Parameters:
+///   - vfs: prohledávaný souborový systém
+///   - root: výchozí adresář (VFS cesta)
+///   - spec: maska a volby hledání
+///   - state: progress (zrušení hledání)
+///   - collector: sběrač výsledků a právě prohledávaného adresáře
+/// - Returns: počet přeskočených chyb (nečitelné adresáře/soubory)
+@discardableResult
+func coreFindEx(vfs: Vfs, root: String, spec: FindSpec, state: ProgressState,
+                collector: FindCollector) throws -> UInt64 {
+    var err = [CChar](repeating: 0, count: 1024)
+    var progress = makeProgress(state)
+    var errors: UInt64 = 0
+
+    // Příznaky SAL_FIND_*; adresáře se hlásí vždy (při hledání v obsahu je jádro vynechá).
+    var flags = SAL_FIND_INCLUDE_DIRS | SAL_FIND_NAME_CONTAINS
+    if spec.subdirs { flags |= SAL_FIND_SUBDIRS }
+    let content = spec.content ?? []
+    if !content.isEmpty {
+        flags |= SAL_FIND_CONTENT
+        if spec.caseSensitive { flags |= SAL_FIND_CASE }
+        if spec.wholeWords { flags |= SAL_FIND_WHOLE_WORDS }
+        if spec.regex { flags |= SAL_FIND_REGEX }
+        if spec.hex { flags |= SAL_FIND_HEX }
+    }
+
+    // C callback aktuálního adresáře pro stavový řádek (nálezy viz findFoundCallback).
+    let user = Unmanaged.passUnretained(collector).toOpaque()
+    let dirCallback: @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> Void = { user, path in
+        guard let user, let path else { return }
+        Unmanaged<FindCollector>.fromOpaque(user).takeUnretainedValue().currentDir = String(cString: path)
+    }
+
+    let code = root.withCString { rootC in
+        spec.mask.withCString { maskC in
+            content.withUnsafeBufferPointer { contentPtr in
+                withUnsafePointer(to: &progress) { progressPtr in
+                    sal_find_ex(vfs.ptr, rootC, maskC, flags, contentPtr.baseAddress, content.count,
+                                progressPtr, findFoundCallback, dirCallback, user, &errors, &err, 1024)
+                }
+            }
+        }
+    }
+    guard code == SAL_OK else { throw CoreError.code(code, String(cString: err)) }
+    return errors
 }
 
 /// Detekce archivu podle obsahu souboru (pro otevírání Enterem).

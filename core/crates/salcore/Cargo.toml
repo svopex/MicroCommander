@@ -23,3 +23,5 @@ suppaftp = { version = "6", default-features = false }
 ssh2 = { version = "0.9", features = ["vendored-openssl"] }
 # Volání systových API (statfs pro volné místo na disku).
 libc = "0.2"
+# Hledání v obsahu souborů (text, HEX, celá slova, regulární výrazy) nad bajty.
+regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }

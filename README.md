@@ -43,7 +43,10 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   ze ssh-agenta). Souborové operace (copy/move/delete) pracují mezi libovolnou
   dvojicí VFS streamovaně po 256 KiB blocích, s hlášením průběhu a zrušením.
   Hledání nad libovolným VFS s maskami ve stylu Salamandera (`*`, `?`, `#`,
-  skupiny oddělené `;`, vyloučení za `|`). Vytváření ZIP archivů (`pack_zip`)
+  skupiny oddělené `;`, vyloučení za `|`; maska bez `*`, `?` a `.` hledá jména,
+  která ji obsahují), volitelně bez podadresářů a s hledáním v obsahu souborů
+  (text, HEX, rozlišení velikosti písmen, celá slova, regulární výraz – crate
+  `regex`); nečitelné adresáře a soubory se přeskočí a spočítají. Vytváření ZIP archivů (`pack_zip`)
   včetně adresářové struktury. **Zaheslované ZIP:** čtení AES-128/192/256
   (WinZip AE-1/AE-2) i ZipCrypto; vytváření s AES-256 (doporučeno) nebo
   ZipCrypto (`pack_zip_encrypted`, FFI `sal_pack_zip_ex`). Výpis šifrovaného
@@ -60,7 +63,7 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   Panel má řádek adresáře (aktivní panel zvýrazněný barvou, tlačítko disku,
   volné místo), sloupce Jméno/Přípona/Velikost/Datum/Čas/Atr, řádek „..“
   (UP-DIR), kurzor oddělený od označení (označené položky červeně) a informační
-  řádek. Dialogy: progress se zrušením, správa FTP/SFTP serverů, hledání, interní
+  řádek. Dialogy: progress se zrušením, správa FTP/SFTP serverů, okno hledání, interní
   prohlížeč (text/hex/obrázek).
 
 ### Struktura projektu
@@ -80,7 +83,8 @@ core/                       # Rust workspace
     src/sftp.rs             # SFTP VFS (ssh2, serializace přístupu zámkem)
     src/mask.rs             # masky ve stylu Salamandera (port myšlenky masks.cpp)
     src/ops.rs              # copy/move/delete mezi VFS, progress, cancel
-    src/find.rs             # rekurzivní hledání nad VFS
+    src/find.rs             # rekurzivní hledání nad VFS (maska, podadresáře,
+                            #   obsah souborů: text/HEX/celá slova/regex)
     src/pack.rs             # vytváření ZIP z položek libovolného VFS
                             #   (bez hesla / AES-256 / ZipCrypto)
     src/error.rs            # SalError + kódy pro FFI
@@ -96,8 +100,10 @@ app/                        # tenké UI pro macOS
   Sources/Bars.swift        # nástrojová lišta, disky, prostřední lišta,
                             #   příkazová řádka, lišta F-kláves
   Sources/WindowController.swift  # hlavní okno, příkazy, směrování kláves
-  Sources/Dialogs.swift     # progress, správa FTP/SFTP serverů, hledání,
+  Sources/Dialogs.swift     # progress, správa FTP/SFTP serverů,
                             #   interní prohlížeč, nabídka disků
+  Sources/FindWindow.swift  # okno Vyhledat soubory a adresáře (⌃F/⌥F7)
+                            #   a dialog Upřesnit možnosti
   Sources/Servers.swift     # uložené FTP/SFTP servery (UserDefaults),
                             #   hesla v Klíčence, připojení serveru v panelu
   Sources/Places.swift      # místa nabídky disků (pořadí, skrytí, vlastní
@@ -178,7 +184,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌃F3–⌃F6 řazení podle
   jména/přípony/času/velikosti (opakovaně obrací), ⌃F9 obnovit, ⌃F10 porovnat
   adresáře (označí odlišné soubory); ⌥F1/⌥F2 disk vlevo/vpravo, ⌥F5 zabalit do
-  ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat, ⌥F10 obsazené místo.
+  ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat (také ⌃F), ⌥F10 obsazené místo.
 - **Nabídka disků** (⌥F1 levý / ⌥F2 pravý panel, tlačítko disku na řádku
   adresáře): kořen, domov, připojené svazky, **vlastní adresáře** a **uložené
   FTP/SFTP servery** (výběr serveru ho připojí v daném panelu), na konci
@@ -230,7 +236,34 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   zapamatovaný server z jednoduchého dialogu se při prvním spuštění převezme.
   Neúspěšné připojení nabídne „Upravit server…“, Zrušit v průběhu připojování
   dialog hned zavře.
-- **Další:** ⌘R obnovit, ⌘U prohodit panely, ⌘F hledat, klik na záhlaví sloupce
+- **Vyhledat soubory a adresáře** (⌃F, ⌘F, ⌥F7 – podle dialogu Find
+  Salamandera): nemodální okno, lze jich otevřít víc a během hledání pracovat
+  v panelech. **Název** (masky, poprvé `*.*`; maska bez `*`, `?` a `.` hledá
+  jména obsahující text – `dog` najde `hotdog.jpg`, `dog.` jen `dog`), **Hledat
+  v** (předvyplněno adresářem panelu, víc adresářů oddělených `;`, **Přidat** ›
+  Procházet… / Všechny místní jednotky), **Včetně podadresářů**, **Hledat
+  v souboru** – rozbalí část **Obsahující** s volbami Šestnáctkový režim
+  (`01 02 "text" 00`), Rozlišovat malá a velká písmena, Celá slova a Regulární
+  výraz (vyhodnocuje se po řádcích; tlačítko › vkládá konstrukce),
+  **Upřesnit…** (atributy R/H/E/adresář třístavově, velikost nejméně/nejvýše,
+  změněno během / od–do). Pole mají historii. **Najít** (Enter, ⌃F) se během
+  hledání mění na **Zastavit** (Escape, ⌥P); šipka vedle nabízí Vytřídit –
+  Průnik (⌃I), Vytřídit – Odečíst (⌃S) a Připojit k nalezeným položkám (⌃W).
+  Titulek ukazuje hledanou masku, stavový řádek prohledávaný adresář, po
+  skončení označení (velikost, počty), „Zastaveno.“, „Nenalezeny žádné soubory
+  nebo adresáře.“ a počet přeskočených nečitelných položek. Seznam **Nalezené
+  položky: (N)** se sloupci Název, Cesta, Velikost, Datum, Čas, Atributy (klik
+  na záhlaví řadí, znovu obrací; adresáře nahoře, pokud není Možnosti › Řadit
+  soubory a adresáře dohromady). V seznamu: Enter otevřít (adresář v panelu),
+  ⇧Enter otevřít všechny označené, mezerník Ukázat (panel přejde na položku),
+  F3 zobrazit, F4 upravit, F8 / Delete odstranit, ⌃H skrýt, ⌃⇧H skrýt duplicity,
+  ⌘C / ⌃C kopírovat soubory do schránky (pro Finder), ⌘X vyjmout, ⌥⌘C / ⌥⌘⇧C /
+  ⌃⌘C cestu + název / název / cestu jako text (i ⌥Insert varianty), ⌘A vybrat vše.
+  Dokud je okno aktivní, hlavní menu nahradí menu dialogu (Soubory, Příkazy,
+  Upravit, Zobrazit, Možnosti). V archivu či na FTP/SFTP se hledá ve VFS panelu.
+  Nastavení a historie: předvolby `find*` (`findNamedHistory`,
+  `findLookInHistory`, `findContainingHistory`, `findAdvanced`, …).
+- **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (Finder, kopírovat cestu).
 - **Příkazová řádka** (⌃Tab): Enter spustí příkaz v login shellu v adresáři
   panelu (výstup v prohlížeči), `cd cesta` mění adresář panelu, ↑↓ historie,
@@ -258,13 +291,16 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - SFTP neověřuje klíč serveru proti ~/.ssh/known_hosts (připojí se k jakémukoli
   serveru na dané adrese)
 - kořen FTP/SFTP panelu = domovský adresář po přihlášení
-- progress hledání hlásí prohledané položky (celkový počet není předem známý)
+- hledání: bez hledání uvnitř archivů, hledání duplicit, protokolu hledání,
+  seznamu ignorovaných adresářů a správce uložených nastavení (Windows-only
+  atributy a tagy v Upřesnit chybí)
 - vzdálené VFS (FTP/SFTP) nepodporují předměření celkové velikosti přenosu
   (progress běží bez procent)
 
 ### Testy
 
-- `make test` – 25 unit testů jádra (masky, cesty, operace, hledání, ZIP,
+- `make test` – 28 unit testů jádra (masky, cesty, operace, hledání včetně
+  obsahu souborů, HEX a regulárních výrazů, ZIP,
   TAR plain i TAR.GZ včetně rekurzivního rozbalení, balení s adresářovou
   strukturou, AES-256 a ZipCrypto: bez hesla / chybné / správné heslo)
 - `make smoke` – end-to-end test vazby Swift↔Rust: otevření VFS, list, copy,
@@ -274,7 +310,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   přečte jádro
 - `make selftest` – UI self-test: aplikace si posílá skutečné klávesové události
   a ověřuje kurzor, Space, Tab, rychlé hledání, F7/F5/F8 dialogy (žádné
-  zamrznutí), ⌫ s návratem kurzoru, ⌘U, ⌥F7 a F11 (správa serverů) se zavřením Escapem
+  zamrznutí), ⌫ s návratem kurzoru, ⌘U, ⌃F (okno hledání: Enter najde položky, Escape zavře) a F11 (správa serverů) se zavřením Escapem
   a zaheslovaný AES-256 ZIP (Enter do archivu, F5, chybné → správné heslo),
   Home/End, ⌥↑/⌥↓, ⌃H (skryté soubory), ⌥1/⌥3/⌥6/⌥2 (režimy) se šipkami;
   test otevírá okno aplikace a posílá jí klávesy – při současné práci

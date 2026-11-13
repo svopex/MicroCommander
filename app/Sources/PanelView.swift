@@ -426,35 +426,37 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         panel.delegate?.panelWantsActivation(panel)
     }
 
-    /// Atributy ve stylu Salamandera (R = jen pro čtení, H = skrytý, L = odkaz,
-    /// E = šifrovaná položka archivu).
-    private func attributes(of item: Item) -> String {
-        var text = ""
-        if item.isReadonly { text += "R" }
-        if item.isHidden { text += "H" }
-        if item.isLink { text += "L" }
-        if item.isEncrypted { text += "E" }
-        return text
-    }
-
     /// Ikona položky: systémová ikona podle přípony (cache), „..“ šipka nahoru.
     func icon(for row: Row) -> NSImage? {
-        if row.isParent {
-            return parentIcon
-        }
-        if row.item.isDir {
-            return row.item.isLink ? folderLinkIcon : folderIcon
-        }
-        let ext = row.ext.lowercased()
-        if let cached = iconCache[ext] {
-            return cached
-        }
-        let type = ext.isEmpty ? UTType.data : (UTType(filenameExtension: ext) ?? .data)
-        let image = NSWorkspace.shared.icon(for: type)
-        image.size = NSSize(width: 16, height: 16)
-        iconCache[ext] = image
-        return image
+        row.isParent ? parentIcon : listIcon(for: row.item)
     }
+}
+
+/// Atributy ve stylu Salamandera (R = jen pro čtení, H = skrytý, L = odkaz,
+/// E = šifrovaná položka archivu); sdílí panel i okno hledání.
+func attributes(of item: Item) -> String {
+    var text = ""
+    if item.isReadonly { text += "R" }
+    if item.isHidden { text += "H" }
+    if item.isLink { text += "L" }
+    if item.isEncrypted { text += "E" }
+    return text
+}
+
+/// Ikona položky seznamu: adresář / odkaz na adresář, soubor podle přípony (cache).
+func listIcon(for item: Item) -> NSImage {
+    if item.isDir {
+        return item.isLink ? folderLinkIcon : folderIcon
+    }
+    let ext = splitExtension(item.name).ext.lowercased()
+    if let cached = iconCache[ext] {
+        return cached
+    }
+    let type = ext.isEmpty ? UTType.data : (UTType(filenameExtension: ext) ?? .data)
+    let image = NSWorkspace.shared.icon(for: type)
+    image.size = NSSize(width: 16, height: 16)
+    iconCache[ext] = image
+    return image
 }
 
 /// Barva textu položky (sdílí tabulka i mřížka): označené červeně (na kurzoru

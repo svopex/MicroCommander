@@ -63,7 +63,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             (.unselectMask, "minus.square", "Odznačit podle masky (Num −)"),
             (.invertMarks, "plusminus", "Invertovat označení (Num *)"),
             nil,
-            (.find, "magnifyingglass", "Hledat (⌥F7)"),
+            (.find, "magnifyingglass", "Vyhledat soubory a adresáře (⌥F7, ⌃F)"),
             (.compare, "rectangle.split.2x1", "Porovnat adresáře (⌃F10)"),
             (.calcSize, "sum", "Spočítat velikost (⌥F10)"),
             (.toggleHidden, "eye", "Zobrazovat skryté soubory (⌃H)"),
@@ -559,6 +559,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 }
                 return true
             case "h" where flags.contains(.control): perform(.toggleHidden); return true
+            // Ctrl+F (jako v Salamanderu) = Vyhledat soubory a adresáře; ⌘F řeší menu.
+            case "f": perform(.find); return true
             case "q" where flags.contains(.control): perform(.calcSize); return true
             case "[":
                 commandLine.insert(shellQuote(leftPanel.displayPath)); return true
@@ -810,6 +812,41 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         NSPasteboard.general.setString(path, forType: .string)
     }
 
+    /// Ukáže položku v panelu (Ukázat v okně Hledat): aktivní panel přejde do
+    /// jejího adresáře a kurzor na ni. Lokální položky jdou do aktivního panelu,
+    /// položky archivu/FTP do panelu, který má daný VFS otevřený.
+    /// - Parameters:
+    ///   - vfs: souborový systém položky
+    ///   - path: VFS cesta položky
+    func showItem(vfs: Vfs, path: String) {
+        let dir = parentPath(path)
+        let name = lastComponent(path)
+        if vfs.kind == SAL_VFS_LOCAL, let localDir = vfs.realPath(dir) {
+            let panel = activePanel
+            if panel.location.vfs.kind == SAL_VFS_LOCAL && panel.location.vfs.label == "/" {
+                panel.closeNested()
+                panel.changePath(localDir, focus: name)
+            } else if let disk = Vfs.openLocal(root: nil) {
+                panel.navigate(Location(vfs: disk, path: localDir))
+                panel.focus(name: name)
+            }
+            activate(panel)
+        } else if let panel = [activePanel, leftPanel, rightPanel].first(where: { $0.location.vfs === vfs }) {
+            panel.changePath(dir, focus: name)
+            activate(panel)
+        } else {
+            NSSound.beep()
+            return
+        }
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Znovu načte oba panely (po změnách z okna Hledat).
+    func reloadPanels() {
+        leftPanel.reload()
+        rightPanel.reload()
+    }
+
     /// Otevře lokální svazek v panelu (na lokálním disku jen změní cestu).
     private func openDrive(_ path: String, in panel: PanelController?) {
         guard let panel else { return }
@@ -866,10 +903,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Zavolá akci s lokální cestou položky: na disku přímo, z archivu / FTP
     /// po rozbalení do dočasného adresáře.
     private func withLocalFile(_ item: Item, in panel: PanelController, action: @escaping (String) -> Void) {
-        if let path = panel.localPath(of: item.name) {
+        withLocalFile(item, vfs: panel.location.vfs, dir: panel.location.path, action: action)
+    }
+
+    /// Zavolá akci s lokální cestou položky libovolného VFS (i mimo panel –
+    /// např. nalezené položky okna Hledat).
+    /// - Parameters:
+    ///   - item: položka
+    ///   - vfs: souborový systém položky
+    ///   - dir: adresář položky (VFS cesta)
+    ///   - action: akce s lokální cestou
+    func withLocalFile(_ item: Item, vfs: Vfs, dir: String, action: @escaping (String) -> Void) {
+        if let path = vfs.realPath(joinPath(dir, item.name)) {
             action(path)
         } else {
-            extractToTemp(item, from: panel, completion: action)
+            extractToTemp(item, vfs: vfs, dir: dir, completion: action)
         }
     }
 
@@ -882,8 +930,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
     }
 
-    /// Zkopíruje položku z nelokálního VFS do dočasného adresáře (s progresem).
-    private func extractToTemp(_ item: Item, from panel: PanelController, completion: @escaping (String) -> Void) {
+    /// Zkopíruje položku z nelokálního VFS (adresář `dir`) do dočasného adresáře (s progresem).
+    private func extractToTemp(_ item: Item, vfs src: Vfs, dir: String, completion: @escaping (String) -> Void) {
         let tempDir = (NSTemporaryDirectory() as NSString).appendingPathComponent("microcommander-\(UUID().uuidString)")
         do {
             try FileManager.default.createDirectory(atPath: tempDir, withIntermediateDirectories: true)
@@ -892,8 +940,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             return
         }
         guard let disk = Vfs.openLocal(root: nil) else { return }
-        let src = panel.location.vfs
-        let dir = panel.location.path
         // Šifrovaná položka: heslo se zeptá předem (jen poprvé pro daný archiv).
         if item.isEncrypted, !ensurePassword(src) { return }
         func extract() {
@@ -1007,7 +1053,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .driveRight: activate(rightPanel); rightView.showDriveMenu()
         case .pack: commandPack()
         case .unpack: commandUnpack()
-        case .find: FindWindowController.show(parent: self)
+        case .find: FindWindowController.show(owner: self)
         case .calcSize: commandCalcSize()
         case .back: panel.goBack()
         case .forward: panel.goForward()
@@ -1209,7 +1255,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             ViewerWindowController.open(path: path, title: path)
         } else {
             let title = panel.displayPath + "/" + item.name
-            extractToTemp(item, from: panel) { localPath in
+            extractToTemp(item, vfs: panel.location.vfs, dir: panel.location.path) { localPath in
                 ViewerWindowController.open(path: localPath, title: title)
             }
         }
@@ -1227,7 +1273,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     }
 
     /// Otevře soubor ve výchozím textovém editoru systému.
-    private func openInEditor(_ path: String) {
+    func openInEditor(_ path: String) {
         let url = URL(fileURLWithPath: path)
         if let editor = NSWorkspace.shared.urlForApplication(toOpen: .plainText) {
             NSWorkspace.shared.open([url], withApplicationAt: editor, configuration: NSWorkspace.OpenConfiguration())

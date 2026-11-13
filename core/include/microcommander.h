@@ -155,6 +155,26 @@ int32_t sal_find(SalVfs *vfs, const char *root, const char *mask, int32_t includ
                  const SalProgress *progress, SalFoundFn found, void *found_user,
                  char *err, size_t err_len);
 
+/* Příznaky sal_find_ex (odpovídají volbám dialogu Find Salamandera). */
+#define SAL_FIND_SUBDIRS 1        /* Včetně podadresářů */
+#define SAL_FIND_INCLUDE_DIRS 2   /* hlásit i adresáře odpovídající masce */
+#define SAL_FIND_CONTENT 4        /* Hledat v souboru (content = hledaný vzor) */
+#define SAL_FIND_CASE 8           /* Rozlišovat malá a velká písmena */
+#define SAL_FIND_WHOLE_WORDS 16   /* Celá slova */
+#define SAL_FIND_REGEX 32         /* Regulární výraz (vyhodnocuje se po řádcích) */
+#define SAL_FIND_HEX 64           /* content jsou syrové bajty (Šestnáctkový režim) */
+#define SAL_FIND_NAME_CONTAINS 128 /* maska bez * ? . hledá jména, která ji obsahují */
+
+/* Hlášení právě prohledávaného adresáře (stavový řádek dialogu). */
+typedef void (*SalFindDirFn)(void *user, const char *path);
+
+/* Hledání s volbami (SAL_FIND_*). Nečitelné podadresáře a soubory se přeskočí,
+ * jejich počet vrátí `errors` (smí být NULL). `found` i `dir_cb` dostávají `user`. */
+int32_t sal_find_ex(SalVfs *vfs, const char *root, const char *mask, uint32_t flags,
+                    const uint8_t *content, size_t content_len, const SalProgress *progress,
+                    SalFoundFn found, SalFindDirFn dir_cb, void *user, uint64_t *errors,
+                    char *err, size_t err_len);
+
 /* Detekce archivu podle obsahu souboru: 0 = není, SAL_VFS_ZIP, SAL_VFS_TAR. */
 int32_t sal_probe_archive(const char *path);
 
