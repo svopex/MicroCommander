@@ -110,7 +110,9 @@ app/                        # tenké UI pro macOS
   Sources/Places.swift      # místa nabídky disků (pořadí, skrytí, vlastní
                             #   adresáře, zkratky ⌘0–⌘9) a dialog Upravit
                             #   nabídku disků
-  Sources/Settings.swift    # Nastavení (⌘,): volby vzhledu v UserDefaults
+  Sources/Settings.swift    # Nastavení (⌘,): kategorie, volby v UserDefaults,
+                            #   editor klávesových zkratek
+  Sources/KeyBindings.swift # klávesové zkratky příkazů (výchozí + uživatelské)
   Sources/SelfTest.swift    # self-test UI (SAL_SELFTEST=1)
   Sources/main.swift        # NSApplication, hlavní menu
   Info.plist
@@ -244,13 +246,27 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   v předvolbách: `placesOrder` (pořadí), `hiddenPlaces` (skryté),
   `customFolders` (adresáře), `placeShortcuts` (zkratky); dřívější
   `driveOrder` se převezme.
-- **Nastavení** (⌘, v aplikačním menu): **Zobrazovat lištu příkazů mezi
-  panely** – svislá lišta s ikonami operací; výchozí je vypnutá, mezi panely
-  je jen úzký dělicí pruh jako v Salamanderu. Změna platí hned (předvolba
-  `showMiddleBar`). **Označit vše (⌘A) a Invertovat označení i s adresáři** –
-  výchozí zapnuto (vypnuté = ⌘A označí a Num * invertuje jen soubory); zrušení
-  označení platí vždy i pro adresáře
-  (předvolba `selectAllIncludesDirs`).
+- **Nastavení** (⌘, v aplikačním menu) ve stylu dialogu Konfigurace
+  Salamandera: vlevo kategorie, vpravo stránka s nadpisem, změny se uloží až
+  tlačítkem **OK** (Zrušit je zahodí).
+  - **Obecné:** Před ukončením uložit adresáře panelů (výchozí zapnuto,
+    předvolba `savePanelPaths`; vypnuté = po spuštění domov a „/“).
+  - **Panely:** Zobrazovat skryté soubory a adresáře (jako ⌃H); Označit vše (⌘A)
+    a Invertovat označení i s adresáři – výchozí zapnuto (vypnuté = ⌘A označí
+    a Num * invertuje jen soubory), zrušení označení platí vždy i pro adresáře
+    (předvolba `selectAllIncludesDirs`).
+  - **Hlavní okno:** Zobrazovat lištu příkazů mezi panely – výchozí vypnuto,
+    mezi panely je jen úzký dělicí pruh jako v Salamanderu (`showMiddleBar`).
+  - **Klávesnice:** klávesové zkratky všech příkazů (tabulka Příkaz / Klávesové
+    zkratky s hledáním). Přidat zkratku… (nebo dvojklik) zaznamená stisk klávesy –
+    zkratka používaná jiným příkazem se po potvrzení přeřadí, písmeno bez
+    modifikátoru se odmítne (blokovalo by rychlé hledání); Odebrat zkratku…,
+    Výchozí (vybraný příkaz) a Obnovit vše. Podle zkratek se řídí obsluha kláves,
+    zkratky v menu i popisky lišty F-kláves. V textových polích (příkazová
+    řádka, úprava cesty) se nepoužijí zkratky potřebné pro psaní (⌘A/⌘C/⌘V/⌘X/⌘Z,
+    ⌃písmeno, šipky). Pevné zůstávají navigační klávesy (šipky, Enter, Tab,
+    mezerník, psaní), ⌘Enter / ⌃Enter, ⌘Tab a ⌘0–⌘9 míst. Uloží se jen změny
+    oproti výchozím (předvolba `keyBindings`).
 - **FTP/SFTP servery** (F11, tlačítko FTP/SFTP v liště disků, poslední položka
   nabídky disků): seznam libovolného počtu uložených serverů – **+** přidá,
   **−** odebere (po potvrzení), **Duplikovat** vytvoří kopii vybraného serveru

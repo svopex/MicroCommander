@@ -74,10 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
-    /// Popis položky menu: titulek, příkaz, klávesa a modifikátory.
-    private typealias Entry = (title: String, command: Command, key: String, modifiers: NSEvent.ModifierFlags)?
-
-    /// F-klávesa jako keyEquivalent (zobrazení v menu; obsluhu dělá monitor okna).
+    /// Položka menu: titulek a příkaz; zkratku dodá KeyBindings (Nastavení › Klávesnice).
+    private typealias Entry = (title: String, command: Command)?
 
     /// Sestaví hlavní menu podle Salamandera (Soubory, Příkazy, Panel, Označit, Zobrazení).
     private func buildMenu(_ controller: MainWindowController) {
@@ -103,93 +101,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Vložit", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(.separator())
         // Cesta aktuálního adresáře aktivního panelu (Ctrl+Alt+Insert v Salamanderu).
-        editMenu.addItem(makeItem(("Kopírovat cestu adresáře", .copyDirPath, "c", [.command, .option]), controller))
+        editMenu.addItem(makeItem(("Kopírovat cestu adresáře", .copyDirPath), controller))
 
         let fileEntries: [Entry] = [
-            ("Zobrazit", .view, KeyCode.functionKeyString(3), []),
-            ("Upravit", .edit, KeyCode.functionKeyString(4), []),
-            ("Nový soubor…", .newFile, KeyCode.functionKeyString(4), [.shift]),
+            ("Zobrazit", .view),
+            ("Upravit", .edit),
+            ("Nový soubor…", .newFile),
             nil,
-            ("Kopírovat…", .copy, KeyCode.functionKeyString(5), []),
-            ("Přesunout…", .move, KeyCode.functionKeyString(6), []),
-            ("Přejmenovat…", .rename, KeyCode.functionKeyString(2), []),
-            ("Změnit atributy…", .changeAttributes, KeyCode.functionKeyString(2), [.command]),
-            ("Vlastnosti…", .properties, "i", [.command]),
-            ("Oprávnění…", .properties, "p", [.control]),
-            ("Smazat…", .delete, KeyCode.functionKeyString(8), []),
-            ("Nový adresář…", .mkdir, KeyCode.functionKeyString(7), []),
+            ("Kopírovat…", .copy),
+            ("Přesunout…", .move),
+            ("Přejmenovat…", .rename),
+            ("Změnit atributy…", .changeAttributes),
+            ("Vlastnosti…", .properties),
+            ("Oprávnění…", .permissions),
+            ("Smazat…", .delete),
+            ("Nový adresář…", .mkdir),
             nil,
-            ("Zabalit do ZIP…", .pack, KeyCode.functionKeyString(5), [.option]),
-            ("Rozbalit…", .unpack, KeyCode.functionKeyString(6), [.option]),
-            ("Spočítat velikost", .calcSize, KeyCode.functionKeyString(10), [.option]),
+            ("Zabalit do ZIP…", .pack),
+            ("Rozbalit…", .unpack),
+            ("Spočítat velikost", .calcSize),
         ]
         addSubmenu(makeMenu("Soubory", fileEntries, controller), title: "Soubory", to: mainMenu)
         addSubmenu(editMenu, title: "Úpravy", to: mainMenu)
 
         let markEntries: [Entry] = [
-            ("Zrušit označení", .unselectAll, "d", [.command]),
-            ("Označit podle masky…", .selectMask, "=", [.command]),
-            ("Odznačit podle masky…", .unselectMask, "-", [.command]),
-            ("Invertovat označení (Num *)", .invertMarks, "*", [.command]),
+            ("Zrušit označení", .unselectAll),
+            ("Označit podle masky…", .selectMask),
+            ("Odznačit podle masky…", .unselectMask),
+            ("Invertovat označení (Num *)", .invertMarks),
             nil,
-            ("Porovnat adresáře", .compare, KeyCode.functionKeyString(10), [.control]),
+            ("Porovnat adresáře", .compare),
         ]
         let markMenu = makeMenu("Označit", markEntries, controller)
         // ⌘A přes responder chain (cíl nil): v panelu označí vše (selectAll: →
         // příkaz Označit vše), v textových polích a dialozích vybere text.
-        markMenu.insertItem(withTitle: "Označit vše", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a", at: 0)
+        let selectAllItem = markMenu.insertItem(withTitle: "Označit vše", action: #selector(NSText.selectAll(_:)),
+                                                keyEquivalent: "", at: 0)
+        AppDelegate.applyShortcut(to: selectAllItem)
         addSubmenu(markMenu, title: "Označit", to: mainMenu)
 
         let commandEntries: [Entry] = [
-            ("Vyhledat soubory a adresáře…", .find, "f", [.command]),
-            ("Terminál v adresáři", .terminal, KeyCode.functionKeyString(9), []),
+            ("Vyhledat soubory a adresáře…", .find),
+            ("Terminál v adresáři", .terminal),
             nil,
-            ("FTP/SFTP servery…", .connect, KeyCode.functionKeyString(11), []),
-            ("Odpojit / zavřít archiv", .disconnect, KeyCode.functionKeyString(12), []),
+            ("FTP/SFTP servery…", .connect),
+            ("Odpojit / zavřít archiv", .disconnect),
             nil,
-            ("Nápověda ke klávesám", .help, KeyCode.functionKeyString(1), []),
+            ("Nápověda ke klávesám", .help),
         ]
         addSubmenu(makeMenu("Příkazy", commandEntries, controller), title: "Příkazy", to: mainMenu)
 
         let panelEntries: [Entry] = [
-            ("Zpět", .back, "[", [.command]),
-            ("Vpřed", .forward, "]", [.command]),
-            ("Nadřazený adresář", .up, String(UnicodeScalar(NSUpArrowFunctionKey)!), [.command]),
-            ("Kořenový adresář", .root, "\\", [.command]),
-            ("Domovský adresář", .home, "h", [.command, .shift]),
-            ("Změnit adresář…", .changeDir, "g", [.command]),
-            // Menu ukazuje ⌘ zkratky; ⌃ varianty fungují stejně (viz periodShortcutCommand).
-            ("Poslat adresář do druhého panelu (také ⌃.)", .sameDirOther, ".", [.command]),
-            ("Převzít adresář z druhého panelu (také ⌃⇧.)", .sameDir, ".", [.command, .shift]),
+            ("Zpět", .back),
+            ("Vpřed", .forward),
+            ("Nadřazený adresář", .up),
+            ("Kořenový adresář", .root),
+            ("Domovský adresář", .home),
+            ("Změnit adresář…", .changeDir),
+            ("Poslat adresář do druhého panelu", .sameDirOther),
+            ("Převzít adresář z druhého panelu", .sameDir),
             nil,
-            ("Disk v levém panelu…", .driveLeft, KeyCode.functionKeyString(1), [.option]),
-            ("Disk v pravém panelu…", .driveRight, KeyCode.functionKeyString(2), [.option]),
-            ("Upravit nabídku disků…", .editPlaces, "", []),
+            ("Disk v levém panelu…", .driveLeft),
+            ("Disk v pravém panelu…", .driveRight),
+            ("Upravit nabídku disků…", .editPlaces),
             nil,
-            ("Řadit podle jména", .sortName, KeyCode.functionKeyString(3), [.control]),
-            ("Řadit podle přípony", .sortExt, KeyCode.functionKeyString(4), [.control]),
-            ("Řadit podle času", .sortTime, KeyCode.functionKeyString(5), [.control]),
-            ("Řadit podle velikosti", .sortSize, KeyCode.functionKeyString(6), [.control]),
+            ("Řadit podle jména", .sortName),
+            ("Řadit podle přípony", .sortExt),
+            ("Řadit podle času", .sortTime),
+            ("Řadit podle velikosti", .sortSize),
             nil,
-            ("Obnovit", .refresh, "r", [.command]),
-            ("Prohodit panely", .swap, "u", [.command]),
+            ("Obnovit", .refresh),
+            ("Prohodit panely", .swap),
         ]
         addSubmenu(makeMenu("Panel", panelEntries, controller), title: "Panel", to: mainMenu)
 
         // Zobrazení – režimy panelu jako v Salamanderu (Alt+1..6 → ⌥1..⌥6) a skryté soubory.
         let viewEntries: [Entry] = [
-            ("Stručný", .viewBrief, "1", [.option]),
-            ("Podrobný", .viewDetailed, "2", [.option]),
-            ("Ikony", .viewIcons, "3", [.option]),
-            ("Miniatury", .viewThumbnails, "4", [.option]),
-            ("Dlaždice", .viewTiles, "5", [.option]),
-            ("Typy", .viewTypes, "6", [.option]),
+            ("Stručný", .viewBrief),
+            ("Podrobný", .viewDetailed),
+            ("Ikony", .viewIcons),
+            ("Miniatury", .viewThumbnails),
+            ("Dlaždice", .viewTiles),
+            ("Typy", .viewTypes),
             nil,
-            ("Zobrazovat skryté soubory", .toggleHidden, "h", [.control]),
+            ("Zobrazovat skryté soubory", .toggleHidden),
         ]
         addSubmenu(makeMenu("Zobrazení", viewEntries, controller), title: "Zobrazení", to: mainMenu)
 
         NSApplication.shared.mainMenu = mainMenu
+        // Změna zkratek v Nastavení › Klávesnice se hned projeví v menu.
+        NotificationCenter.default.addObserver(forName: KeyBindings.changed, object: nil, queue: .main) { _ in
+            AppDelegate.applyShortcuts(to: mainMenu)
+        }
     }
 
     /// Sestaví menu z popisů (cíl = okno, tag = index příkazu).
@@ -207,16 +210,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Položka menu volající příkaz hlavního okna (tag = index příkazu).
     /// - Parameters:
-    ///   - entry: titulek, příkaz, klávesa a modifikátory
+    ///   - entry: titulek a příkaz (zkratku dodá KeyBindings)
     ///   - controller: hlavní okno, které příkaz provede
-    private func makeItem(_ entry: (title: String, command: Command, key: String, modifiers: NSEvent.ModifierFlags),
-                          _ controller: MainWindowController) -> NSMenuItem {
+    private func makeItem(_ entry: (title: String, command: Command), _ controller: MainWindowController) -> NSMenuItem {
         let item = NSMenuItem(title: entry.title, action: #selector(MainWindowController.menuCommand(_:)),
-                              keyEquivalent: entry.key)
-        item.keyEquivalentModifierMask = entry.modifiers
+                              keyEquivalent: "")
         item.tag = MainWindowController.menuCommandIndex(entry.command)
         item.target = controller
+        AppDelegate.applyShortcut(to: item)
         return item
+    }
+
+    /// Zkratka položky menu podle KeyBindings: příkaz z tagu (položky příkazů)
+    /// nebo Označit vše (akce selectAll: přes responder chain).
+    static func applyShortcut(to item: NSMenuItem) {
+        let command: Command
+        if item.action == #selector(MainWindowController.menuCommand(_:)) {
+            command = MainWindowController.menuCommands[item.tag]
+        } else if item.action == #selector(NSText.selectAll(_:)) {
+            command = .selectAll
+        } else {
+            return
+        }
+        let shortcut = KeyBindings.menuShortcut(for: command)
+        item.keyEquivalent = shortcut?.menuKey ?? ""
+        item.keyEquivalentModifierMask = shortcut?.menuModifiers ?? []
+    }
+
+    /// Po změně zkratek v Nastavení obnoví zkratky všech položek hlavního menu.
+    static func applyShortcuts(to menu: NSMenu) {
+        for item in menu.items {
+            applyShortcut(to: item)
+            if let submenu = item.submenu { applyShortcuts(to: submenu) }
+        }
     }
 
     private func addSubmenu(_ menu: NSMenu, title: String, to mainMenu: NSMenu) {

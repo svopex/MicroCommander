@@ -102,7 +102,8 @@ final class UISelfTest {
         setvbuf(stdout, nil, _IOLBF, 0)
         // Test mění uložené volby (režimy zobrazení, skryté soubory) – po skončení je vrátíme.
         let defaults = UserDefaults.standard
-        let savedSettings = ["showHiddenFiles", "viewModeLeft", "viewModeRight", "selectAllIncludesDirs"].map { ($0, defaults.object(forKey: $0)) }
+        let savedSettings = ["showHiddenFiles", "viewModeLeft", "viewModeRight", "selectAllIncludesDirs", "keyBindings"]
+            .map { ($0, defaults.object(forKey: $0)) }
         restoreSettings = {
             for (key, value) in savedSettings {
                 if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
@@ -111,6 +112,8 @@ final class UISelfTest {
             // jinak by se (hlavně odstranění klíče) nemusely stihnout uložit.
             CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
         }
+        // Test počítá s výchozími klávesovými zkratkami (uživatelské se po testu vrátí).
+        if defaults.object(forKey: "keyBindings") != nil { KeyBindings.overrides = [:] }
         prepareFiles()
         var steps: [(ready: () -> Bool, action: () -> Void)] = []
         var copiedBefore = false
@@ -476,6 +479,43 @@ final class UIKeyCheck {
         if !condition { failures += 1 }
     }
 
+    /// Vlastní klávesové zkratky (Nastavení › Klávesnice): Prohodit panely na ⌘K,
+    /// F5 (Kopírovat) na ⌃F11 – staré klávesy přestanou platit, nové fungují,
+    /// lišta F-kláves a menu se přizpůsobí. Uložené zkratky se nakonec vrátí.
+    private func checkKeyBindings() {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "keyBindings")
+        defer {
+            if let saved { defaults.set(saved, forKey: "keyBindings") } else { defaults.removeObject(forKey: "keyBindings") }
+            KeyBindings.reload()
+            CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
+        }
+        KeyBindings.overrides = [
+            KeyBindings.name(of: .swap): [.char("k", keyCode: 40, .command)],
+            KeyBindings.name(of: .copy): [.function(11, .control)],
+        ]
+        let cmdK = event(40, Int(("k" as UnicodeScalar).value), [.command])
+        let cmdU = event(32, Int(("u" as UnicodeScalar).value), [.command])
+        let f5 = event(KeyCode.functionKeys[4], NSF5FunctionKey, [])
+        let ctrlF11 = event(KeyCode.functionKeys[10], NSF11FunctionKey, [.control])
+        check(KeyBindings.command(for: cmdK) == .swap && KeyBindings.command(for: cmdU) == nil,
+              "vlastní zkratka: ⌘K = Prohodit panely, ⌘U už nic")
+        check(KeyBindings.command(for: ctrlF11) == .copy && KeyBindings.command(for: f5) == nil,
+              "vlastní zkratka: ⌃F11 = Kopírovat, F5 už nic")
+        check(FunctionKeyBar.entries(for: .control)[10] == .copy && FunctionKeyBar.entries(for: .plain)[4] == nil,
+              "lišta F-kláves podle vlastních zkratek")
+        let swapItem = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items)
+            .first { $0.action == #selector(MainWindowController.menuCommand(_:))
+                && $0.tag == MainWindowController.menuCommandIndex(.swap) }
+        check(swapItem?.keyEquivalent == "k" && swapItem?.keyEquivalentModifierMask == .command,
+              "menu ukazuje vlastní zkratku (\(swapItem?.keyEquivalent ?? "-"))")
+        // V textovém poli se ⌘C (kopírování textu) příkazu nepřiřadí.
+        let cmdC = event(8, Int(("c" as UnicodeScalar).value), [.command])
+        KeyBindings.overrides = [KeyBindings.name(of: .refresh): [.char("c", keyCode: 8, .command)]]
+        check(KeyBindings.command(for: cmdC) == .refresh && KeyBindings.command(for: cmdC, textEditing: true) == nil,
+              "⌘C v textovém poli zůstane kopírování textu")
+    }
+
     func run() {
         setvbuf(stdout, nil, _IOLBF, 0)
         // Testovací adresář s podadresářem (aby první položka byla „..“) a 40 soubory.
@@ -548,6 +588,7 @@ final class UIKeyCheck {
             self.checkDriveChooser()
             self.checkServerProfiles()
             self.probeMenuPeriod(dir: dir)
+            self.checkKeyBindings()
             self.checkSameDir(dir: dir, then: { self.finish(dir: dir) })
         }
     }
@@ -624,7 +665,7 @@ final class UIKeyCheck {
             let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
                                          windowNumber: 0, context: nil, characters: chars,
                                          charactersIgnoringModifiers: chars, isARepeat: false, keyCode: 47)!
-            let command = controller.periodShortcutCommand(event)
+            let command = KeyBindings.command(for: event)
             self.check(command == expected, "monitor kláves: \(label) → \(String(describing: command))")
         }
         // ⌃H přes hlavní menu přepne skryté soubory (a druhé ⌃H je vrátí).

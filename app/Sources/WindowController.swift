@@ -192,9 +192,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                queue: .main) { [weak self] _ in
             guard let self else { return }
+            // Nastavení › Obecné: bez ukládání se příště otevřou výchozí adresáře.
+            let save = Settings.savePanelPaths
             let defaults = UserDefaults.standard
-            defaults.set(Self.restorableDirectory(of: self.leftPanel), forKey: "leftPanelPath")
-            defaults.set(Self.restorableDirectory(of: self.rightPanel), forKey: "rightPanelPath")
+            defaults.set(save ? Self.restorableDirectory(of: self.leftPanel) : nil, forKey: "leftPanelPath")
+            defaults.set(save ? Self.restorableDirectory(of: self.rightPanel) : nil, forKey: "rightPanelPath")
         }
     }
 
@@ -255,19 +257,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             }
             guard let self, let window = self.window, event.window === window,
                   window.attachedSheet == nil, NSApp.modalWindow == nil else { return event }
-            // Zkratky s tečkou dřív než menu: AppKit by ⌃⇧. přiřadil položce ⌃.
-            // (Shift ignoruje) a akce by se prohodily.
-            if let command = self.periodShortcutCommand(event) {
-                self.perform(command)
-                return nil
-            }
             // ⌘0–⌘9: místo z nabídky disků se zkratkou do aktivního panelu.
             if let digit = KeyCode.commandDigit(event), let place = PlaceStore.place(forShortcut: digit) {
                 self.open(place, in: self.activePanel)
                 return nil
             }
-            // F1–F12 fungují odkudkoli z hlavního okna (i z příkazové řádky).
-            if let command = self.functionKeyCommand(event) {
+            // Klávesové zkratky příkazů (Nastavení › Klávesnice) dřív než menu a panel:
+            // F-klávesy fungují odkudkoli, v textovém poli se nepoužijí zkratky
+            // potřebné pro psaní (viz Shortcut.isTextEditing).
+            if let command = self.command(forKey: event) {
                 self.perform(command)
                 return nil
             }
@@ -336,36 +334,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         return editor.delegate as? NSTextField === commandLine.field
     }
 
-    /// Zkratky na klávese tečky podle kódu klávesy (rozložení i znak nerozhodují):
-    /// ⌃. / ⌘. poslat aktuální adresář do druhého panelu, ⌃⇧. / ⌘⇧. převzít adresář
-    /// z druhého panelu. nil = není to zkratka s tečkou.
-    func periodShortcutCommand(_ event: NSEvent) -> Command? {
-        guard event.keyCode == KeyCode.period else { return nil }
-        let flags = event.modifierFlags.intersection([.shift, .control, .option, .command])
-        switch flags {
-        case [.control], [.command]: return .sameDirOther
-        case [.control, .shift], [.command, .shift]: return .sameDir
-        default: return nil
-        }
-    }
-
-    /// Převod F-klávesy + modifikátorů na příkaz podle lišty F-kláves.
-    private func functionKeyCommand(_ event: NSEvent) -> Command? {
-        guard let index = KeyCode.functionKeys.firstIndex(of: event.keyCode) else { return nil }
-        let flags = event.modifierFlags.intersection([.shift, .control, .option, .command])
-        let layer: FunctionKeyBar.Layer
-        if flags.isEmpty {
-            layer = .plain
-        } else if flags == .shift {
-            layer = .shift
-        } else if flags == .control || flags == .command {
-            layer = .control
-        } else if flags == .option {
-            layer = .option
-        } else {
-            return nil
-        }
-        return FunctionKeyBar.layers[layer]?[index].1
+    /// Příkaz pro stisknutou klávesu podle platných zkratek; v textovém poli
+    /// (příkazová řádka, úprava cesty či jména) bez zkratek potřebných pro psaní.
+    func command(forKey event: NSEvent) -> Command? {
+        KeyBindings.command(for: event, textEditing: !isPanelResponder(window?.firstResponder))
     }
 
     // MARK: - Aktivní panel
@@ -512,13 +484,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             }
         }
 
-        // ⌥1–⌥6: režim zobrazení aktivního panelu (jako Alt+1..6 v Salamanderu).
-        if flags == .option, let digit = KeyCode.digits.firstIndex(of: event.keyCode),
-           let mode = ViewMode(rawValue: digit + 1) {
-            setViewMode(mode, for: panel)
-            return true
-        }
-
         switch event.keyCode {
         case KeyCode.up:
             if flags.contains(.command) { panel.goUp(); return true }
@@ -563,8 +528,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.endQuickSearch()
             // ⌘↩ spustí položku systémově (aplikaci .app místo vstupu do ní).
             if flags.contains(.command) { launchRow(panel.cursor, in: panel); return true }
-            // ⌥↩ (Alt+Enter v Salamanderu): vlastnosti položky.
-            if flags.contains(.option) { perform(.properties); return true }
             openRow(panel.cursor, in: panel)
             return true
         case KeyCode.backspace:
@@ -580,33 +543,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             if panel.quickSearch != nil { panel.endQuickSearch(); return true }
             commandLine.field.stringValue = ""
             return true
-        case KeyCode.insert where flags == [.control, .option]:
-            // Ctrl+Alt+Insert (Salamander): cesta aktuálního adresáře do schránky.
-            perform(.copyDirPath)
-            return true
         case KeyCode.space where flags.isEmpty && panel.quickSearch == nil,
              KeyCode.insert:
             // Space/Insert: označit položku a posunout kurzor (Insert z Windows).
             panel.toggleMark(row: panel.cursor)
             panel.setCursor(panel.cursor + 1)
             return true
-        case KeyCode.keypadPlus:
-            perform(ctrlOrCmd ? .selectAll : .selectMask)
-            return true
-        case KeyCode.keypadMinus:
-            perform(ctrlOrCmd ? .unselectAll : .unselectMask)
-            return true
-        case KeyCode.keypadMultiply:
-            perform(.invertMarks)
-            return true
         default:
             break
         }
 
-        // Klávesa tečky podle kódu (47), ne znaku: na české klávesnici dává ⇧. dvojtečku.
-        // Záložní cesta (normálně to vyřídí monitor kláves): stejné přiřazení
-        // jako periodShortcutCommand.
-        if let command = periodShortcutCommand(event) {
+        // Zkratky příkazů (KeyBindings). Normálně je vyřídí už monitor kláves okna;
+        // tady jako záložní cesta pro klávesy předané panelu jinak (z příkazové
+        // řádky, kontrola kláves bez okna).
+        if let command = command(forKey: event) {
             perform(command)
             return true
         }
@@ -614,29 +564,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         // Zkratky s Ctrl/⌘ a písmenem (Ctrl varianty Salamandera).
         let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
         if ctrlOrCmd && !flags.contains(.option) {
+            // Příkazy se zkratkami řeší KeyBindings v monitoru kláves; tady zůstává
+            // jen vkládání cest panelů do příkazové řádky.
             switch chars {
-            case "d": perform(.unselectAll); return true
-            case "r": perform(.refresh); return true
-            case "u": perform(.swap); return true
-            case "g": perform(.changeDir); return true
-            case "\\": perform(.root); return true
-            case "=", "+": perform(.selectMask); return true
-            case "-": perform(.unselectMask); return true
-            case "*": perform(.invertMarks); return true
-            case ".":
-                // (Záložní cesta podle znaku – stejné přiřazení jako u kódu klávesy výše.)
-                if flags.contains(.shift) {
-                    perform(.sameDir)
-                } else {
-                    perform(.sameDirOther)
-                }
-                return true
-            case "h" where flags.contains(.control): perform(.toggleHidden); return true
-            // Ctrl+F (jako v Salamanderu) = Vyhledat soubory a adresáře; ⌘F řeší menu.
-            case "f": perform(.find); return true
-            case "q" where flags.contains(.control): perform(.calcSize); return true
-            // Ctrl+P (Salamander: Zabezpečení / Oprávnění).
-            case "p" where flags.contains(.control): perform(.properties); return true
             case "[":
                 commandLine.insert(shellQuote(leftPanel.displayPath)); return true
             case "]":
@@ -695,8 +625,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let menu = NSMenu()
         let current = view(of: activePanel).viewMode
         for mode in ViewMode.allCases {
-            let item = NSMenuItem(title: mode.title, action: #selector(viewModeSelected(_:)), keyEquivalent: "\(mode.rawValue)")
-            item.keyEquivalentModifierMask = [.option]
+            // Zkratka režimu podle Nastavení › Klávesnice (výchozí ⌥1–⌥6).
+            let shortcut = Command.allCases.first { $0.viewMode == mode }.flatMap(KeyBindings.menuShortcut(for:))
+            let item = NSMenuItem(title: mode.title, action: #selector(viewModeSelected(_:)), keyEquivalent: shortcut?.menuKey ?? "")
+            item.keyEquivalentModifierMask = shortcut?.menuModifiers ?? []
             item.tag = mode.rawValue
             item.state = mode == current ? .on : .off
             item.target = self
@@ -743,19 +675,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         open.target = self
         menu.addItem(open)
         menu.addItem(.separator())
-        let entries: [(String, Command)?] = [
-            ("Zobrazit (F3)", .view), ("Upravit (F4)", .edit), nil,
-            ("Kopírovat (F5)", .copy), ("Přesunout (F6)", .move), ("Přejmenovat (F2)", .rename), ("Smazat (F8)", .delete), nil,
-            ("Zabalit do ZIP (⌥F5)", .pack), ("Rozbalit (⌥F6)", .unpack), ("Spočítat velikost (⌥F10)", .calcSize), nil,
-            ("Změnit atributy (⌘F2)", .changeAttributes), ("Vlastnosti (⌥↩)", .properties),
+        let entries: [Command?] = [
+            .view, .edit, nil, .copy, .move, .rename, .delete, nil,
+            .pack, .unpack, .calcSize, nil, .changeAttributes, .properties,
         ]
         for entry in entries {
             guard let entry else {
                 menu.addItem(.separator())
                 continue
             }
-            let item = NSMenuItem(title: entry.0, action: #selector(menuCommand(_:)), keyEquivalent: "")
-            item.tag = MainWindowController.menuCommandIndex(entry.1)
+            // Název příkazu se zkratkou podle Nastavení › Klávesnice.
+            let title = KeyBindings.shortcuts(for: entry).first.map { "\(entry.title) (\($0.display))" } ?? entry.title
+            let item = NSMenuItem(title: title, action: #selector(menuCommand(_:)), keyEquivalent: "")
+            item.tag = MainWindowController.menuCommandIndex(entry)
             item.target = self
             menu.addItem(item)
         }
@@ -1157,7 +1089,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .sameDirOther: commandSameDirOther()
         case .toggleHidden: toggleHiddenFiles()
         case .changeAttributes: commandChangeAttributes()
-        case .properties: commandShowInfo()
+        case .properties, .permissions: commandShowInfo()
         // Cesta tak, jak ji ukazuje řádek adresáře (u archivu/FTP i s popiskem VFS).
         case .copyDirPath: copyTextToPasteboard(activePanel.displayPath)
         case .viewMenu: showViewModeMenu()
@@ -1805,6 +1737,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Položky menu jsou neaktivní, dokud je otevřený sheet (progress, dialog);
     /// zaškrtnutí ukazuje aktuální režim zobrazení a skryté soubory.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        // Zkratku potřebnou pro psaní (⌃písmeno, ⌘C…) nechá menu textovému poli –
+        // stejné pravidlo jako monitor kláves (KeyBindings.isTextEditingKey).
+        if let event = NSApp.currentEvent, event.type == .keyDown, event.window === window,
+           !isPanelResponder(window?.firstResponder), KeyBindings.isTextEditingKey(event) {
+            return false
+        }
         if menuItem.action == #selector(menuCommand(_:)),
            menuItem.tag >= 0, menuItem.tag < MainWindowController.menuCommands.count {
             let command = MainWindowController.menuCommands[menuItem.tag]

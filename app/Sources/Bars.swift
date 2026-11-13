@@ -15,7 +15,7 @@ enum Command: CaseIterable {
     case sortName, sortExt, sortTime, sortSize, refresh, compare
     case driveLeft, driveRight, editPlaces, pack, unpack, find, calcSize
     case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden, copyDirPath, changeAttributes
-    case properties
+    case properties, permissions
     case selectMask, unselectMask, invertMarks, selectAll, unselectAll
     case viewMenu, viewBrief, viewDetailed, viewIcons, viewThumbnails, viewTiles, viewTypes
 
@@ -396,21 +396,20 @@ final class FunctionKeyBar: NSView {
         case plain, shift, control, option
     }
 
-    /// Popisky a příkazy pro F1–F12 v jednotlivých vrstvách.
-    static let layers: [Layer: [(String, Command?)]] = [
-        .plain: [("Nápověda", .help), ("Přejmen.", .rename), ("Zobrazit", .view), ("Upravit", .edit),
-                 ("Kopírovat", .copy), ("Přesunout", .move), ("Nový adr.", .mkdir), ("Smazat", .delete),
-                 ("Terminál", .terminal), ("Ukončit", .quit), ("Připojit", .connect), ("Odpojit", .disconnect)],
-        .shift: [("", nil), ("", nil), ("", nil), ("Nový soub.", .newFile),
-                 ("", nil), ("Přejmen.", .rename), ("Změnit adr.", .changeDir), ("Smazat", .delete),
-                 ("", nil), ("", nil), ("", nil), ("", nil)],
-        .control: [("", nil), ("Atributy", .changeAttributes), ("Jméno", .sortName), ("Přípona", .sortExt),
-                   ("Čas", .sortTime), ("Velikost", .sortSize), ("", nil), ("", nil),
-                   ("Obnovit", .refresh), ("Porovnat", .compare), ("", nil), ("", nil)],
-        .option: [("Levý disk", .driveLeft), ("Pravý disk", .driveRight), ("Zobrazit", .view), ("Ukončit", .quit),
-                  ("Zabalit", .pack), ("Rozbalit", .unpack), ("Hledat", .find), ("", nil),
-                  ("Rozbalit", .unpack), ("Velikost", .calcSize), ("", nil), ("", nil)],
-    ]
+    /// Modifikátory vrstvy (vrstvu Ctrl vyvolá ⌃ i ⌘).
+    private static func modifiers(of layer: Layer) -> [NSEvent.ModifierFlags] {
+        switch layer {
+        case .plain: return [[]]
+        case .shift: return [.shift]
+        case .control: return [.control, .command]
+        case .option: return [.option]
+        }
+    }
+
+    /// Příkazy F1–F12 vrstvy podle platných klávesových zkratek (Nastavení › Klávesnice).
+    static func entries(for layer: Layer) -> [Command?] {
+        (1...12).map { KeyBindings.functionKeyCommand(number: $0, modifiers: modifiers(of: layer)) }
+    }
 
     private var buttons: [FunctionKeyButton] = []
     private(set) var currentLayer: Layer = .plain
@@ -439,6 +438,11 @@ final class FunctionKeyBar: NSView {
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
         ])
         setLayer(.plain)
+        // Změna zkratek v Nastavení přepíše popisky lišty.
+        NotificationCenter.default.addObserver(forName: KeyBindings.changed, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.setLayer(self.currentLayer)
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -447,31 +451,32 @@ final class FunctionKeyBar: NSView {
 
     /// Přepne popisky podle modifikátorů (volá monitor flagsChanged).
     func update(modifiers: NSEvent.ModifierFlags) {
-        let flags = modifiers.intersection([.shift, .control, .option, .command])
+        let flags = Shortcut.relevantModifiers(modifiers)
+        let layer: Layer
         if flags == .shift {
-            setLayer(.shift)
+            layer = .shift
         } else if flags == .control || flags == .command {
-            setLayer(.control)
+            layer = .control
         } else if flags == .option {
-            setLayer(.option)
+            layer = .option
         } else {
-            setLayer(.plain)
+            layer = .plain
         }
+        // Překreslit jen při změně vrstvy (flagsChanged chodí i pro Caps Lock, fn…).
+        if layer != currentLayer { setLayer(layer) }
     }
 
     private func setLayer(_ newLayer: Layer) {
         currentLayer = newLayer
-        let entries = FunctionKeyBar.layers[newLayer] ?? []
+        let entries = FunctionKeyBar.entries(for: newLayer)
         for (index, button) in buttons.enumerated() {
-            let title = index < entries.count ? entries[index].0 : ""
-            button.title = title
-            button.isEnabled = index < entries.count && entries[index].1 != nil
+            button.title = entries[index]?.shortTitle ?? ""
+            button.isEnabled = entries[index] != nil
         }
     }
 
     private func keyClicked(_ index: Int) {
-        guard let entries = FunctionKeyBar.layers[currentLayer], index < entries.count,
-              let command = entries[index].1 else { return }
+        guard let command = FunctionKeyBar.entries(for: currentLayer)[index] else { return }
         onCommand?(command)
     }
 }
