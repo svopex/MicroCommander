@@ -25,7 +25,7 @@ use crate::find::{find_items, find_items_ex, find_mask_string, ContentMatcher, F
 use crate::local::LocalFs;
 use crate::mask::MaskGroup;
 use crate::ops::{copy_items, delete_items, move_items, OverwriteMode, ProgressCallback};
-use crate::pack::{pack_zip, pack_zip_encrypted, PackEncryption};
+use crate::pack::{pack_zip, PackEncryption};
 use crate::sftp::{SftpAuth, SftpFs};
 use crate::tarfs::TarFs;
 use crate::vfs::{Vfs, VfsItem};
@@ -778,6 +778,39 @@ pub unsafe extern "C" fn sal_find_ex(
     result_to_code(result.map(|_| ()), err, err_len)
 }
 
+/// Vyhodnotí skupinu masek (stejná pravidla jako hledání: `*`, `?`, `#`,
+/// skupiny `;`, vyloučení `|`) nad polem jmen; do `out_matches[i]` zapíše
+/// 1, pokud jméno `names[i]` masce vyhovuje, jinak 0.
+///
+/// # Safety
+/// `mask` platný C řetězec, `names` pole `count` C řetězců, `out_matches`
+/// pole `count` bajtů, `err` buffer délky `err_len`.
+#[no_mangle]
+pub unsafe extern "C" fn sal_mask_select(
+    mask: *const c_char,
+    names: *const *const c_char,
+    count: usize,
+    out_matches: *mut u8,
+    err: *mut c_char,
+    err_len: usize,
+) -> i32 {
+    if mask.is_null() || (count > 0 && (names.is_null() || out_matches.is_null())) {
+        write_err(err, err_len, "Neplatné argumenty sal_mask_select.");
+        return crate::error::SAL_ERR_GENERIC;
+    }
+    let mask_str = CStr::from_ptr(mask).to_string_lossy().into_owned();
+    let result = catch(|| MaskGroup::new(&mask_str, true));
+    if let Ok(group) = &result {
+        // Maska se parsuje jednou, jména se jen porovnávají.
+        let name_list = names_from_c(names, count);
+        let matches = std::slice::from_raw_parts_mut(out_matches, count);
+        for (matched, name) in matches.iter_mut().zip(&name_list) {
+            *matched = u8::from(group.matches(name));
+        }
+    }
+    result_to_code(result, err, err_len)
+}
+
 /// # Safety
 /// `path` platný C řetězec.
 #[no_mangle]
@@ -800,44 +833,9 @@ pub unsafe extern "C" fn sal_probe_archive(path: *const c_char) -> i32 {
 }
 
 /// # Safety
-/// Viz microcommander.h.
+/// Viz microcommander.h – vytvoření ZIP, volitelně se šifrováním (AES-256 / ZipCrypto).
 #[no_mangle]
 pub unsafe extern "C" fn sal_pack_zip(
-    src: *mut SalVfs,
-    src_dir: *const c_char,
-    names: *const *const c_char,
-    count: usize,
-    dest_zip: *const c_char,
-    progress: *const SalProgress,
-    err: *mut c_char,
-    err_len: usize,
-) -> i32 {
-    if src.is_null() || src_dir.is_null() || dest_zip.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_pack_zip.");
-        return crate::error::SAL_ERR_GENERIC;
-    }
-    let src_dir_str = CStr::from_ptr(src_dir).to_string_lossy().into_owned();
-    let dest_str = CStr::from_ptr(dest_zip).to_string_lossy().into_owned();
-    let name_list = names_from_c(names, count);
-    let name_refs: Vec<&str> = name_list.iter().map(String::as_str).collect();
-    let mut progress_cb = progress_from_c(progress);
-    let src_handle = &*(src as *const VfsHandle);
-    let result = catch(|| {
-        pack_zip(
-            src_handle.vfs.as_ref(),
-            &src_dir_str,
-            &name_refs,
-            Path::new(&dest_str),
-            &mut progress_cb,
-        )
-    });
-    result_to_code(result.map(|_| ()), err, err_len)
-}
-
-/// # Safety
-/// Viz microcommander.h – vytvoření ZIP se šifrováním (AES-256 / ZipCrypto).
-#[no_mangle]
-pub unsafe extern "C" fn sal_pack_zip_ex(
     src: *mut SalVfs,
     src_dir: *const c_char,
     names: *const *const c_char,
@@ -850,7 +848,7 @@ pub unsafe extern "C" fn sal_pack_zip_ex(
     err_len: usize,
 ) -> i32 {
     if src.is_null() || src_dir.is_null() || dest_zip.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_pack_zip_ex.");
+        write_err(err, err_len, "Neplatné argumenty sal_pack_zip.");
         return crate::error::SAL_ERR_GENERIC;
     }
     let password_str = opt_string(password).unwrap_or_default();
@@ -871,7 +869,7 @@ pub unsafe extern "C" fn sal_pack_zip_ex(
     let mut progress_cb = progress_from_c(progress);
     let src_handle = &*(src as *const VfsHandle);
     let result = catch(|| {
-        pack_zip_encrypted(
+        pack_zip(
             src_handle.vfs.as_ref(),
             &src_dir_str,
             &name_refs,

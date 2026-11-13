@@ -520,7 +520,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         // Lokální panel: hledá se přes kořen disku (skutečné cesty, Hledat v lze
         // libovolně měnit); jinak ve VFS panelu (archiv, FTP/SFTP).
         let panelVfs = panel.location.vfs
-        let localRoot = panelVfs.kind == SAL_VFS_LOCAL ? Vfs.openLocal(root: nil) : nil
+        let localRoot = panelVfs.kind == SAL_VFS_LOCAL ? Vfs.localDisk : nil
         vfs = localRoot ?? panelVfs
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 520),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],

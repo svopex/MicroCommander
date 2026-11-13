@@ -811,6 +811,10 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
         didSet { pathLabel.stringValue = path }
     }
 
+    /// Cesta nabízená k úpravě (cesta ve VFS panelu). Zobrazený text ji u
+    /// archivu a serveru doplňuje o popisek, který do zadávané cesty nepatří.
+    var editablePath: String = ""
+
     /// Text volného místa (prázdný = nezobrazovat).
     var freeSpace: String = "" {
         didSet { freeLabel.stringValue = freeSpace }
@@ -921,7 +925,7 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
 
     /// Zobrazí editační pole s cestou (Shift+F7 / ⌘G, dvojklik).
     func beginEditing() {
-        editField.stringValue = path
+        editField.stringValue = editablePath
         editField.isHidden = false
         pathLabel.isHidden = true
         freeLabel.isHidden = true

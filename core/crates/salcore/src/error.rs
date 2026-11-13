@@ -24,8 +24,6 @@ pub enum SalError {
     NotEmpty,
     /// Přístup odepřen / nedostatečná práva.
     PermissionDenied,
-    /// Adresář se nepodařilo vytvořit.
-    CreateDirFailed,
     /// Šifrovaná položka archivu – je potřeba zadat heslo.
     PasswordRequired,
     /// Zadané heslo k archivu je chybné.
@@ -43,7 +41,8 @@ pub const SAL_ERR_NOT_FOUND: i32 = -2;
 pub const SAL_ERR_EXISTS: i32 = -3;
 pub const SAL_ERR_NOT_EMPTY: i32 = -4;
 pub const SAL_ERR_PERMISSION: i32 = -5;
-pub const SAL_ERR_CREATE_DIR: i32 = -6;
+// Kód -6 se nepoužívá (dřívější chyba vytvoření adresáře); čísla ostatních
+// kódů se kvůli tomu neposouvají.
 pub const SAL_ERR_PASSWORD_REQUIRED: i32 = -7;
 pub const SAL_ERR_BAD_PASSWORD: i32 = -8;
 
@@ -56,7 +55,6 @@ impl SalError {
             SalError::AlreadyExists => SAL_ERR_EXISTS,
             SalError::NotEmpty => SAL_ERR_NOT_EMPTY,
             SalError::PermissionDenied => SAL_ERR_PERMISSION,
-            SalError::CreateDirFailed => SAL_ERR_CREATE_DIR,
             SalError::PasswordRequired => SAL_ERR_PASSWORD_REQUIRED,
             SalError::InvalidPassword => SAL_ERR_BAD_PASSWORD,
             SalError::Io(_) => SAL_ERR_GENERIC,
@@ -72,7 +70,6 @@ impl fmt::Display for SalError {
             SalError::AlreadyExists => write!(f, "Cíl už existuje."),
             SalError::NotEmpty => write!(f, "Adresář není prázdný."),
             SalError::PermissionDenied => write!(f, "Přístup odepřen."),
-            SalError::CreateDirFailed => write!(f, "Adresář se nepodařilo vytvořit."),
             SalError::PasswordRequired => write!(f, "Soubor v archivu je zaheslovaný – zadejte heslo."),
             SalError::InvalidPassword => write!(f, "Chybné heslo k archivu."),
             SalError::Io(msg) => write!(f, "{}", msg),

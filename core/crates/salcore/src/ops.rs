@@ -16,6 +16,10 @@ use crate::vfs::{join_path, normalize_vfs_path, Vfs, VfsItem, VfsItemKind, VfsRe
 
 /// Velikost přenosového bufferu pro streamované kopírování.
 const COPY_BUFFER_SIZE: usize = 256 * 1024;
+/// Kolik odkazů na adresář smí být zanořeno v sobě, když se odkazy přenášejí
+/// obsahem (cíl odkazy neumí). Odkaz na nadřazený adresář by jinak přenos
+/// zacyklil; skutečné stromy tolik odkazů v jedné cestě nemají.
+const MAX_FOLLOWED_LINKS: u32 = 16;
 
 /// Rozhodnutí při existenci cílového souboru/adresáře.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +100,8 @@ struct Transfer<'a> {
     progress: &'a mut dyn ProgressCallback,
     /// Přenosový buffer společný pro všechny soubory.
     buffer: Vec<u8>,
+    /// Počet právě následovaných odkazů na adresář (zanořených v sobě).
+    followed_links: u32,
 }
 
 impl Transfer<'_> {
@@ -120,11 +126,73 @@ impl Transfer<'_> {
                 return Ok(moved);
             }
         }
+        // Symbolický odkaz se přenáší jako odkaz, pokud zdroj umí přečíst
+        // jeho cíl a úložiště cíle odkazy umí; jinak se přenese to, na co
+        // ukazuje (adresář rekurzivně, soubor obsahem).
+        if item.kind == VfsItemKind::Link {
+            let complete = match self.transfer_link(src_path, dst_path, dst_exists)? {
+                Some(done) => done,
+                None => self.transfer_link_target(item, src_path, dst_path, dst_exists)?,
+            };
+            // Při přesunu se maže jen odkaz sám, ne to, na co ukazuje.
+            if self.remove_source && complete {
+                self.src.delete_known(src_path, false, false)?;
+            }
+            return Ok(complete);
+        }
         if item.kind == VfsItemKind::Dir {
             self.transfer_dir(src_path, dst_path, dst_exists)
         } else {
             self.transfer_file(item, src_path, dst_path, dst_exists)
         }
+    }
+
+    /// Přenese symbolický odkaz jako odkaz se stejným cílem.
+    ///
+    /// Vrací `None`, když to nejde (zdroj cíl odkazu nezná, cílové úložiště
+    /// odkazy neumí) a položku je třeba přenést obsahem; jinak `Some` se
+    /// stejným významem jako `transfer_item`.
+    fn transfer_link(&mut self, src_path: &str, dst_path: &str, dst_exists: bool) -> SalResult<Option<bool>> {
+        if !self.dst.supports_symlinks() {
+            return Ok(None);
+        }
+        let Some(target) = self.src.read_link(src_path)? else {
+            return Ok(None);
+        };
+        if dst_exists {
+            if !self.overwrite_existing()? {
+                return Ok(Some(false));
+            }
+            // Odkaz se přes existující položku vytvořit nedá (neprázdný
+            // adresář v cíli zůstane a vytvoření odkazu ohlásí chybu).
+            let _ = self.dst.delete(dst_path, false);
+        }
+        self.dst.create_symlink(dst_path, &target)?;
+        self.stats.files += 1;
+        Ok(Some(true))
+    }
+
+    /// Přenese to, na co odkaz ukazuje (adresář rekurzivně, soubor obsahem),
+    /// když ho nelze přenést jako odkaz. Zdroj se přitom nemaže – obsah patří
+    /// cíli odkazu, ne přesouvané položce.
+    fn transfer_link_target(&mut self, item: &VfsItem, src_path: &str, dst_path: &str, dst_exists: bool) -> SalResult<bool> {
+        let is_dir = self.src.is_dir(src_path)?;
+        if is_dir && self.followed_links >= MAX_FOLLOWED_LINKS {
+            return Err(SalError::Io(format!(
+                "Odkaz {} vede do sebe sama (odkaz na nadřazený adresář?).",
+                src_path
+            )));
+        }
+        let remove_source = std::mem::replace(&mut self.remove_source, false);
+        self.followed_links += 1;
+        let result = if is_dir {
+            self.transfer_dir(src_path, dst_path, dst_exists)
+        } else {
+            self.transfer_file(item, src_path, dst_path, dst_exists)
+        };
+        self.followed_links -= 1;
+        self.remove_source = remove_source;
+        result
     }
 
     /// Rozhodne konflikt s existujícím cílem podle režimu přepsání.
@@ -200,7 +268,7 @@ impl Transfer<'_> {
         Ok(complete)
     }
 
-    /// Přenese soubor (nebo odkaz – čte se jeho cíl) streamovaným kopírováním.
+    /// Přenese soubor (nebo to, na co ukazuje odkaz) streamovaným kopírováním.
     fn transfer_file(&mut self, item: &VfsItem, src_path: &str, dst_path: &str, dst_exists: bool) -> SalResult<bool> {
         // Existující cílový soubor řeší režim přepsání.
         if dst_exists && !self.overwrite_existing()? {
@@ -216,7 +284,7 @@ impl Transfer<'_> {
         }
         let mut writer = self.dst.open_write(dst_path, Some(item.size))?;
         let result = self.copy_stream(reader.as_mut(), writer.as_mut());
-        // Streamy se zavírají před dalším příkazem (FTP tím uvolní spojení).
+        // Streamy se zavírají dřív, než se sáhne na cíl nebo zdroj (mazání).
         drop(writer);
         drop(reader);
         let copied = match result {
@@ -335,6 +403,7 @@ fn transfer_items(
         stats: TransferStats::default(),
         progress,
         buffer: vec![0u8; COPY_BUFFER_SIZE],
+        followed_links: 0,
     };
     for item in items {
         let src_path = join_path(src_dir, &item.name);
@@ -572,6 +641,42 @@ mod tests {
         assert!(matches!(same, Err(SalError::Io(_))));
         assert_eq!(fs::read(base.join("src/a.txt")).unwrap(), b"aaa");
         fs::remove_dir_all(base).unwrap();
+    }
+
+    /// Symbolické odkazy: mezi úložišti, která je umí, se kopírují jako
+    /// odkazy (i odkaz na adresář a odkaz vedoucí nikam); kam odkaz vytvořit
+    /// nejde, přenese se to, na co ukazuje.
+    #[test]
+    fn test_symlinks() {
+        use std::os::unix::fs::symlink;
+        let (src, dst, src_path, dst_path) = prepare("links");
+        symlink("a.txt", src_path.join("na-soubor")).unwrap();
+        symlink("pod", src_path.join("na-adresar")).unwrap();
+        symlink("neexistuje", src_path.join("nikam")).unwrap();
+        let names = ["na-soubor", "na-adresar", "nikam"];
+        copy_items(&src, "/", &names, &dst, "/", OverwriteMode::Ask, &mut NoProgress).unwrap();
+        for (name, target) in [("na-soubor", "a.txt"), ("na-adresar", "pod"), ("nikam", "neexistuje")] {
+            assert_eq!(fs::read_link(dst_path.join(name)).unwrap().to_str(), Some(target));
+        }
+        // Přesun kopírováním odkaz ve zdroji smaže, jeho cíl ne.
+        let other = dst_path.join("jinam");
+        fs::create_dir(&other).unwrap();
+        move_items(&NotLocal(src), "/", &["na-adresar"], &NotLocal(dst), "/jinam", OverwriteMode::Ask, &mut NoProgress)
+            .unwrap();
+        assert!(fs::symlink_metadata(src_path.join("na-adresar")).is_err());
+        assert_eq!(fs::read(src_path.join("pod/b.txt")).unwrap(), b"bbb");
+        // Cíl bez podpory odkazů (obálka NotLocal ji nepřebírá): obsah cíle odkazu.
+        assert_eq!(fs::read(other.join("na-adresar/b.txt")).unwrap(), b"bbb");
+        assert!(fs::symlink_metadata(other.join("na-adresar")).unwrap().is_dir());
+        // Odkaz na nadřazený adresář přenášený obsahem skončí chybou, nezacyklí se.
+        fs::remove_file(src_path.join("nikam")).unwrap();
+        symlink("..", src_path.join("pod/nahoru")).unwrap();
+        let cycle = fs::canonicalize(&dst_path).unwrap().join("cyklus");
+        fs::create_dir(&cycle).unwrap();
+        let (src, dst) = (NotLocal(LocalFs::new(src_path.to_str()).unwrap()), NotLocal(LocalFs::new(cycle.to_str()).unwrap()));
+        let result = copy_items(&src, "/", &["pod"], &dst, "/", OverwriteMode::Overwrite, &mut NoProgress);
+        assert!(matches!(result, Err(SalError::Io(_))));
+        fs::remove_dir_all(src_path.parent().unwrap()).unwrap();
     }
 
     /// Zrušení uprostřed souboru nenechá v cíli nedokončenou kopii.

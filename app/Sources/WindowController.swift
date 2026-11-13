@@ -34,8 +34,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Pozorovatelé aktivace aplikace (odregistrují se v deinit).
     private var appObservers: [NSObjectProtocol] = []
 
-    /// Jméno automatického ukládání polohy okna (používá i převod nastavení v main.swift).
-    static let frameAutosaveName = "MicroCommanderMain"
+    /// Jméno automatického ukládání polohy okna.
+    private static let frameAutosaveName = "MicroCommanderMain"
+    /// Vazba „oba panely stejně široké“ (po prohození panelů se nahrazuje novou).
+    private var equalWidthConstraint: NSLayoutConstraint?
 
     /// Neaktivní (cílový) panel.
     var inactivePanel: PanelController { activePanel === leftPanel ? rightPanel : leftPanel }
@@ -43,7 +45,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     init() {
         // Oba panely nad celým lokálním diskem – cesty ve VFS jsou reálné cesty.
         // Výchozí adresáře: naposledy otevřené (pokud ještě existují), jinak domov a „/“.
-        let disk = Vfs.openLocal(root: nil)!
+        let disk = Vfs.localDisk
         leftPanel = PanelController(location: Location(vfs: disk, path: Self.savedDirectory("leftPanelPath") ?? NSHomeDirectory()))
         rightPanel = PanelController(location: Location(vfs: disk, path: Self.savedDirectory("rightPanelPath") ?? "/"))
         leftView = PanelView(panel: leftPanel)
@@ -140,8 +142,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         panelStack.addArrangedSubview(leftView)
         panelStack.addArrangedSubview(middleBar)
         panelStack.addArrangedSubview(rightView)
-        // Oba panely stejně široké.
-        leftView.widthAnchor.constraint(equalTo: rightView.widthAnchor).isActive = true
+        pinEqualPanelWidths()
 
         let separators = (0..<3).map { _ -> NSBox in
             let box = NSBox()
@@ -166,6 +167,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         functionBar.bottomAnchor.constraint(equalTo: container.bottomAnchor).isActive = true
         window?.contentView = container
+    }
+
+    /// Oba panely stejně široké. Vazba se váže na konkrétní dvojici pohledů,
+    /// proto se po prohození panelů stará zruší a vytvoří nová (jinak by
+    /// s každým ⌘U jedna přibyla).
+    private func pinEqualPanelWidths() {
+        equalWidthConstraint?.isActive = false
+        let constraint = leftView.widthAnchor.constraint(equalTo: rightView.widthAnchor)
+        constraint.isActive = true
+        equalWidthConstraint = constraint
     }
 
     /// Uložený adresář panelu z předvoleb, pokud stále existuje (jinak nil).
@@ -383,6 +394,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         for panel in [leftPanel, rightPanel] {
             let panelView = view(of: panel)
             panelView.directoryLine.path = panel.displayPath
+            // Úprava cesty pracuje s cestou ve VFS (u archivu a serveru se
+            // liší od zobrazeného textu s popiskem).
+            panelView.directoryLine.editablePath = panel.location.path
             panelView.infoLine.text = infoText(for: panel)
         }
         commandLine.prompt = activePanel.displayPath
@@ -840,11 +854,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let name = lastComponent(path)
         if vfs.kind == SAL_VFS_LOCAL, let localDir = vfs.realPath(dir) {
             let panel = activePanel
-            if panel.location.vfs.kind == SAL_VFS_LOCAL && panel.location.vfs.label == "/" {
-                panel.closeNested()
+            if panel.location.vfs === Vfs.localDisk {
                 panel.changePath(localDir, focus: name)
-            } else if let disk = Vfs.openLocal(root: nil) {
-                panel.navigate(Location(vfs: disk, path: localDir))
+            } else {
+                // Z archivu nebo serveru zpět na disk (zanoření se zavře).
+                panel.navigate(Location(vfs: Vfs.localDisk, path: localDir))
                 panel.focus(name: name)
             }
             activate(panel)
@@ -867,11 +881,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Otevře lokální svazek v panelu (na lokálním disku jen změní cestu).
     private func openDrive(_ path: String, in panel: PanelController?) {
         guard let panel else { return }
-        if panel.location.vfs.kind == SAL_VFS_LOCAL && panel.location.vfs.label == "/" {
-            panel.closeNested()
+        if panel.location.vfs === Vfs.localDisk {
             panel.changePath(path)
-        } else if let disk = Vfs.openLocal(root: nil) {
-            panel.navigate(Location(vfs: disk, path: path))
+        } else {
+            // Z archivu nebo serveru zpět na disk (zanoření se zavře).
+            panel.navigate(Location(vfs: Vfs.localDisk, path: path))
         }
         activate(panel)
     }
@@ -961,14 +975,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     /// Zkopíruje položku z nelokálního VFS (adresář `dir`) do dočasného adresáře (s progresem).
     private func extractToTemp(_ item: Item, vfs src: Vfs, dir: String, completion: @escaping (String) -> Void) {
-        let tempDir = (NSTemporaryDirectory() as NSString).appendingPathComponent("microcommander-\(UUID().uuidString)")
+        let tempDir: String
         do {
-            try FileManager.default.createDirectory(atPath: tempDir, withIntermediateDirectories: true)
+            tempDir = try TempFiles.makeDirectory()
         } catch {
             showAlert(title: "Rozbalení", text: error.localizedDescription)
             return
         }
-        guard let disk = Vfs.openLocal(root: nil) else { return }
+        let disk = Vfs.localDisk
         // Šifrovaná položka: heslo se zeptá předem (jen poprvé pro daný archiv).
         if item.isEncrypted, !ensurePassword(src) { return }
         func extract() {
@@ -1580,9 +1594,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Num +/- – označení/odznačení podle masky.
     private func commandMarkByMask(select: Bool) {
         guard let mask = promptText(title: select ? "Označit" : "Odznačit",
-                                    message: "Maska souborů (např. *.txt;*.md):", value: "*.*",
+                                    message: "Maska souborů (např. *.txt;*.md, vyloučení za |: *.*|*.bak):", value: "*.*",
                                     okTitle: select ? "Označit" : "Odznačit") else { return }
-        activePanel.markByMask(mask, select: select, includeDirs: false)
+        do {
+            try activePanel.markByMask(mask, select: select, includeDirs: false)
+        } catch {
+            // Chybná maska (např. dva oddělovače „|“).
+            showAlert(title: select ? "Označit" : "Odznačit", text: error.localizedDescription)
+        }
     }
 
     /// ⌘U – prohodí panely (levý ↔ pravý) včetně jejich obsahu.
@@ -1590,7 +1609,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         swap(&leftPanel, &rightPanel)
         swap(&leftView, &rightView)
         panelStack.setViews([leftView, middleBar, rightView], in: .leading)
-        leftView.widthAnchor.constraint(equalTo: rightView.widthAnchor).isActive = true
+        pinEqualPanelWidths()
         saveViewModes()
         activate(activePanel)
     }
@@ -1645,7 +1664,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         \(command)
         exec \(shellQuote(shell)) -l
         """
-        let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("microcommander-\(UUID().uuidString).command")
+        let path = TempFiles.newPath(suffix: ".command")
         do {
             try script.write(toFile: path, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
@@ -1872,6 +1891,52 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         guard response == .alertFirstButtonReturn else { return nil }
         let result = input.stringValue.trimmingCharacters(in: .whitespaces)
         return result.isEmpty ? nil : result
+    }
+}
+
+/// Dočasné soubory aplikace: kopie položek rozbalených z archivů a serverů
+/// (F3, Enter, ⌘Enter) a skripty pro Terminal. Kopie vzniklé za běhu se
+/// smažou při ukončení aplikace; co zbylo po pádu, uklidí další spuštění.
+enum TempFiles {
+    /// Společný začátek jmen (podle něj se pozná, co uklízet).
+    private static let prefix = "microcommander-"
+    /// Zbytky starší než tento čas se při spuštění smažou (mladší mohou
+    /// patřit jiné běžící instanci).
+    private static let staleAfter: TimeInterval = 24 * 3600
+    /// Adresáře vytvořené za tohoto běhu (jen z hlavního vlákna).
+    private static var created: [String] = []
+
+    /// Nová jedinečná cesta v dočasném adresáři systému (nic nevytváří).
+    static func newPath(suffix: String = "") -> String {
+        (NSTemporaryDirectory() as NSString).appendingPathComponent(prefix + UUID().uuidString + suffix)
+    }
+
+    /// Vytvoří nový dočasný adresář (při ukončení aplikace se smaže).
+    static func makeDirectory() throws -> String {
+        let path = newPath()
+        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        created.append(path)
+        return path
+    }
+
+    /// Smaže adresáře vytvořené za tohoto běhu (ukončení aplikace).
+    static func removeCreated() {
+        created.forEach { try? FileManager.default.removeItem(atPath: $0) }
+        created.removeAll()
+    }
+
+    /// Smaže staré zbytky po dřívějších bězích (pád, vynucené ukončení).
+    static func removeStale() {
+        let directory = NSTemporaryDirectory()
+        let fileManager = FileManager.default
+        guard let names = try? fileManager.contentsOfDirectory(atPath: directory) else { return }
+        for name in names where name.hasPrefix(prefix) {
+            let path = (directory as NSString).appendingPathComponent(name)
+            let modified = (try? fileManager.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+            if let modified, Date().timeIntervalSince(modified) > staleAfter {
+                try? fileManager.removeItem(atPath: path)
+            }
+        }
     }
 }
 

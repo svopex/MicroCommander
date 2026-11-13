@@ -81,9 +81,12 @@ impl ContentMatcher {
             core
         };
         // HEX režim porovnává bajty přesně (bez Unicode a bez ignorování velikosti).
+        // CRLF režim: `$` a `^` berou jako konec řádku i „\r\n“ (soubory
+        // z Windows), jinak by `$` před „\r“ nikdy neseděl.
         let compiled = RegexBuilder::new(&body)
             .case_insensitive(!case_sensitive && !hex)
             .multi_line(true)
+            .crlf(true)
             .unicode(!hex)
             .build()
             .map_err(|e| SalError::Io(format!("Chybný regulární výraz: {}", e)))?;
@@ -417,6 +420,10 @@ mod tests {
         // Regulární výraz po řádcích.
         assert!(check(ContentMatcher::new(b"^second.*pet$", true, false, true, false).unwrap()));
         assert!(!check(ContentMatcher::new(b"world.second", true, false, true, false).unwrap()));
+        // Konec řádku ve stylu Windows (CRLF) je pro `$` také konec řádku.
+        let crlf = b"prvni radek\r\ndruhy radek\r\n".to_vec();
+        let ends_line = ContentMatcher::new(b"prvni radek$", true, false, true, false).unwrap();
+        assert!(ends_line.matches_stream(&mut crlf.as_slice(), &mut || false).unwrap());
         // HEX vzor (bajty přesně).
         assert!(check(ContentMatcher::new(&[1, 2, b' '], true, false, false, true).unwrap()));
         assert!(!check(ContentMatcher::new(&[2, 1], true, false, false, true).unwrap()));

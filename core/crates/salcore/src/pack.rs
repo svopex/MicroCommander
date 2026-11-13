@@ -35,21 +35,11 @@ pub enum PackEncryption {
     ZipCrypto(String),
 }
 
-/// Zabalí vybrané položky z `src_dir` do nového ZIP archivu (bez hesla).
-/// Existující cílový soubor se přepíše. Adresáře se zabalí včetně obsahu.
+/// Zabalí vybrané položky z `src_dir` do nového ZIP archivu se zvoleným
+/// šifrováním. Existující cílový soubor se přepíše, adresáře se zabalí
+/// včetně obsahu. Prázdné heslo u AES/ZipCrypto je chyba (archiv by byl
+/// nečitelný).
 pub fn pack_zip(
-    src: &dyn Vfs,
-    src_dir: &str,
-    names: &[&str],
-    dest: &Path,
-    progress: &mut dyn ProgressCallback,
-) -> SalResult<TransferStats> {
-    pack_zip_encrypted(src, src_dir, names, dest, &PackEncryption::None, progress)
-}
-
-/// Zabalí vybrané položky do nového ZIP archivu se zvoleným šifrováním.
-/// Prázdné heslo u AES/ZipCrypto je chyba (archiv by byl nečitelný).
-pub fn pack_zip_encrypted(
     src: &dyn Vfs,
     src_dir: &str,
     names: &[&str],
@@ -207,7 +197,7 @@ mod tests {
         let src = LocalFs::new(None).unwrap();
         let dest = base.join("out.zip");
         let src_dir = base.join("src").to_string_lossy().to_string();
-        let stats = pack_zip_encrypted(&src, &src_dir, &["a.txt", "pod"], &dest, encryption, &mut NoProgress).unwrap();
+        let stats = pack_zip(&src, &src_dir, &["a.txt", "pod"], &dest, encryption, &mut NoProgress).unwrap();
         assert_eq!(stats.files, 2);
         assert_eq!(stats.bytes, 7 + 13);
         dest
@@ -268,7 +258,7 @@ mod tests {
         let base = prepare_source("empty");
         let src = LocalFs::new(None).unwrap();
         let src_dir = base.join("src").to_string_lossy().to_string();
-        let result = pack_zip_encrypted(&src, &src_dir, &["a.txt"], &base.join("x.zip"),
+        let result = pack_zip(&src, &src_dir, &["a.txt"], &base.join("x.zip"),
                                         &PackEncryption::Aes256(String::new()), &mut NoProgress);
         assert!(result.is_err());
         assert!(!base.join("x.zip").exists());

@@ -8,8 +8,10 @@
 //! - u TAR.GZ pokračovat v dekompresi tam, kde předchozí čtení skončilo,
 //!   aby rozbalení celého archivu proběhlo jedním průchodem.
 //!
-//! Podporované formáty: ustar (včetně prefixu), GNU longname ('L') a
-//! PAX rozšířené hlavičky ('x' – path, size, mtime).
+//! Podporované formáty: ustar (včetně prefixu), GNU longname ('L') a dlouhý
+//! cíl odkazu ('K') a PAX rozšířené hlavičky ('x' – path, linkpath, size,
+//! mtime). Symbolické odkazy nesou svůj cíl (při rozbalení na disk vzniknou
+//! jako odkazy), pevné odkazy se čtou jako soubor, na který ukazují.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -142,6 +144,12 @@ struct TarIndexEntry {
     kind: VfsItemKind,
     /// Offset dat v (dekomprimovaném) TAR streamu.
     data_offset: u64,
+    /// Cíl odkazu: u symbolického text odkazu; u pevného jméno položky
+    /// archivu, které se při sestavení indexu spotřebuje (v indexu má cíl
+    /// jen symbolický odkaz).
+    link_target: Option<String>,
+    /// Pevný odkaz (typ '1') – při sestavení indexu se nahradí daty cíle.
+    hard_link: bool,
 }
 
 /// Abstrakce zdroje dat pro skenování: plain TAR umí seek (rychlé
@@ -209,6 +217,8 @@ impl<R: Read> TarSource for SeqSource<R> {
 struct PendingMeta {
     /// Jméno z GNU longname ('L').
     long_name: Option<String>,
+    /// Cíl odkazu z GNU longlink ('K') nebo PAX `linkpath`.
+    long_link: Option<String>,
     /// Hodnoty z PAX hlavičky ('x'): path, size, mtime.
     pax_path: Option<String>,
     pax_size: Option<u64>,
@@ -303,9 +313,14 @@ fn scan_tar(source: &mut dyn TarSource) -> io::Result<Vec<TarIndexEntry>> {
                 parse_pax_records(&read_ext_data(source, header_size)?, &mut pending);
                 header_size
             }
-            b'K' | b'g' => {
-                // GNU dlouhý cíl odkazu a globální PAX hlavička: data jen
-                // přeskočíme, odložené jméno následující položky musí zůstat.
+            b'K' => {
+                // GNU longlink: data blok obsahuje cíl následujícího odkazu.
+                pending.long_link = Some(field_string(&read_ext_data(source, header_size)?));
+                header_size
+            }
+            b'g' => {
+                // Globální PAX hlavička: data jen přeskočíme, odložená
+                // metadata následující položky musí zůstat.
                 source.skip(padded_size(header_size))?;
                 header_size
             }
@@ -334,12 +349,17 @@ fn scan_tar(source: &mut dyn TarSource) -> io::Result<Vec<TarIndexEntry>> {
                 let entry_name = canonical_entry_name(&raw_name);
                 // Záznam kořene („./“) má prázdné jméno a do indexu nepatří.
                 if let (Some(kind), false) = (kind, entry_name.is_empty()) {
+                    // Cíl odkazu: z rozšířené hlavičky, jinak pole linkname.
+                    let link_target = (kind == VfsItemKind::Link)
+                        .then(|| meta.long_link.unwrap_or_else(|| field_string(&header[157..257])));
                     entries.push(TarIndexEntry {
                         name: entry_name,
                         size: data_size,
                         mtime: meta.pax_mtime.unwrap_or(mtime),
                         kind,
                         data_offset: pos,
+                        link_target,
+                        hard_link: typeflag == b'1',
                     });
                 }
                 source.skip(padded_size(data_size))?;
@@ -372,6 +392,7 @@ fn parse_pax_records(data: &[u8], pending: &mut PendingMeta) {
         if let Some((key, value)) = record.split_once('=') {
             match key {
                 "path" => pending.pax_path = Some(value.to_string()),
+                "linkpath" => pending.long_link = Some(value.to_string()),
                 "size" => {
                     if let Ok(size) = value.parse::<u64>() {
                         pending.pax_size = Some(size);
@@ -540,8 +561,19 @@ impl TarFs {
 /// Převede seznam položek na index; adresáře zapisované explicitně
 /// se ukládají zvlášť, soubory implikují své rodiče při výpisu.
 fn build_index(entries: Vec<TarIndexEntry>) -> BTreeMap<String, TarIndexEntry> {
-    let mut index = BTreeMap::new();
-    for entry in entries {
+    let mut index: BTreeMap<String, TarIndexEntry> = BTreeMap::new();
+    for mut entry in entries {
+        // Pevný odkaz je další jméno dříve zapsaného souboru: převezme jeho
+        // data a dál se chová jako běžný soubor. Cíl mimo archiv (nebo jiný
+        // než soubor) nechá položku jako odkaz bez dat.
+        if entry.hard_link {
+            let target = entry.link_target.take().as_deref().map(canonical_entry_name).unwrap_or_default();
+            if let Some(file) = index.get(&target).filter(|file| file.kind == VfsItemKind::File) {
+                entry.kind = VfsItemKind::File;
+                entry.size = file.size;
+                entry.data_offset = file.data_offset;
+            }
+        }
         // Poslední výhra vyhrává – u duplicit bereme novější záznam.
         index.insert(entry.name.clone(), entry);
     }
@@ -676,6 +708,11 @@ impl Vfs for TarFs {
 
     fn is_dir(&self, path: &str) -> SalResult<bool> {
         Ok(archive::is_dir(&self.index, path, |entry| entry.kind == VfsItemKind::Dir))
+    }
+
+    fn read_link(&self, path: &str) -> SalResult<Option<String>> {
+        // Cíl má v indexu jen symbolický odkaz (viz build_index).
+        Ok(archive::find_entry(&self.index, path).and_then(|entry| entry.link_target.clone()))
     }
 
     fn writable(&self) -> bool {
@@ -838,6 +875,50 @@ mod tests {
         let gz_path = base.join("ext.tar.gz");
         write_gzip(&gz_path, &fs::read(&tar_path).unwrap());
         check(&TarFs::open(&gz_path).unwrap());
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// Odkazy v archivu: symbolický nese cíl a při rozbalení na disk vznikne
+    /// jako odkaz, pevný se čte jako soubor, na který ukazuje.
+    #[test]
+    fn test_tar_links() {
+        use crate::local::LocalFs;
+        use crate::ops::{copy_items, NoProgress, OverwriteMode};
+        let base = prepare("links");
+        let tar_path = base.join("links.tar");
+        let mut builder = tar::Builder::new(File::create(&tar_path).unwrap());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(5);
+        header.set_mode(0o644);
+        builder.append_data(&mut header, "data/cil.txt", b"obsah".as_slice()).unwrap();
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Symlink);
+        header.set_size(0);
+        builder.append_link(&mut header, "data/symbolicky", "cil.txt").unwrap();
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Link);
+        header.set_size(0);
+        builder.append_link(&mut header, "pevny.txt", "data/cil.txt").unwrap();
+        builder.finish().unwrap();
+        drop(builder);
+
+        let vfs = TarFs::open(&tar_path).unwrap();
+        assert_eq!(vfs.read_link("/data/symbolicky").unwrap().as_deref(), Some("cil.txt"));
+        assert_eq!(vfs.read_link("/data/cil.txt").unwrap(), None);
+        let hard = vfs.list("/").unwrap().into_iter().find(|item| item.name == "pevny.txt").unwrap();
+        assert_eq!((hard.kind, hard.size), (VfsItemKind::File, 5));
+        let mut text = String::new();
+        vfs.open_read("/pevny.txt").unwrap().read_to_string(&mut text).unwrap();
+        assert_eq!(text, "obsah");
+
+        // Rozbalení celého archivu: odkaz zůstane odkazem a vede na rozbalený soubor.
+        let out_dir = base.join("out");
+        fs::create_dir_all(&out_dir).unwrap();
+        let dst = LocalFs::new(out_dir.to_str()).unwrap();
+        copy_items(&vfs, "/", &["data", "pevny.txt"], &dst, "/", OverwriteMode::Ask, &mut NoProgress).unwrap();
+        assert_eq!(fs::read_link(out_dir.join("data/symbolicky")).unwrap().to_str(), Some("cil.txt"));
+        assert_eq!(fs::read_to_string(out_dir.join("data/symbolicky")).unwrap(), "obsah");
+        assert_eq!(fs::read_to_string(out_dir.join("pevny.txt")).unwrap(), "obsah");
         fs::remove_dir_all(&base).unwrap();
     }
 

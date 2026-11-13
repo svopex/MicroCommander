@@ -108,42 +108,17 @@ struct ServerProfile: Codable, Equatable {
 /// Seznam uložených serverů v UserDefaults (JSON pod klíčem „servers“).
 enum ServerStore {
     private static let key = "servers"
-    /// Klíče jediného serveru z dřívějšího dialogu připojení (jen pro převod).
-    private static let legacyKeys = ["connectSftp", "connectHost", "connectPort", "connectUser", "connectAuth", "connectKey"]
 
-    /// Načte servery; při prvním spuštění převezme poslední server ze starého dialogu.
+    /// Načte uložené servery (bez uložených nebo při nečitelných datech prázdný seznam).
     static func load() -> [ServerProfile] {
-        let defaults = UserDefaults.standard
-        if let data = defaults.data(forKey: key) {
-            return (try? JSONDecoder().decode([ServerProfile].self, from: data)) ?? []
-        }
-        return migrateLegacy()
+        guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([ServerProfile].self, from: data)) ?? []
     }
 
     /// Uloží servery.
     static func save(_ servers: [ServerProfile]) {
         guard let data = try? JSONEncoder().encode(servers) else { return }
         UserDefaults.standard.set(data, forKey: key)
-    }
-
-    /// Převod jediného zapamatovaného serveru z dřívějšího dialogu připojení
-    /// (klíče connectHost, connectPort…); bez něj vznikne prázdný seznam.
-    private static func migrateLegacy() -> [ServerProfile] {
-        let defaults = UserDefaults.standard
-        var servers: [ServerProfile] = []
-        if let host = defaults.string(forKey: "connectHost"), !host.isEmpty {
-            var profile = ServerProfile()
-            profile.isSftp = defaults.bool(forKey: "connectSftp")
-            profile.host = host.trimmingCharacters(in: .whitespaces)
-            profile.port = UInt16(defaults.string(forKey: "connectPort") ?? "") ?? ServerProfile.defaultPort(sftp: profile.isSftp)
-            profile.user = defaults.string(forKey: "connectUser") ?? profile.user
-            profile.auth = ServerAuth(rawValue: defaults.integer(forKey: "connectAuth")) ?? .password
-            profile.keyPath = defaults.string(forKey: "connectKey") ?? ""
-            servers.append(profile)
-        }
-        save(servers)
-        legacyKeys.forEach { defaults.removeObject(forKey: $0) }
-        return servers
     }
 }
 

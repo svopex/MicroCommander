@@ -21,6 +21,12 @@ APPDIR := $(BUILD)/MicroCommander.app
 BIN := $(APPDIR)/Contents/MacOS/MicroCommander
 DYLIB := $(CORE)/target/release/libsalcore.dylib
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+# Nejstarší podporovaný macOS se čte z LSMinimumSystemVersion v app/Info.plist
+# (jediné místo, kde se nastavuje). Platí pro Swift (-target) i pro C části
+# jádra (OpenSSL, libssh2), které se sestavují podle MACOSX_DEPLOYMENT_TARGET.
+MACOS_MIN := $(shell /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" $(APP)/Info.plist)
+SWIFT_TARGET := $(shell uname -m)-apple-macos$(MACOS_MIN)
+export MACOSX_DEPLOYMENT_TARGET := $(MACOS_MIN)
 # Identita pro podpis aplikace (viz CODESIGNING.md). Stálý podpis zachová
 # oprávnění macOS (přístup ke Stahování, Dokumentům…) i po novém buildu;
 # bez certifikátu v klíčence zůstane ad-hoc podpis linkeru.
@@ -43,7 +49,7 @@ test:
 # Potřebuje sestavené jádro a adresář build (i po `make clean`).
 smoke: release
 	@mkdir -p $(BUILD)
-	swiftc -O -I $(CORE)/include -L $(CORE)/target/release -lsalcore \
+	swiftc -O -target $(SWIFT_TARGET) -I $(CORE)/include -L $(CORE)/target/release -lsalcore \
 		-Xlinker -rpath -Xlinker $(CORE)/target/release \
 		$(ROOT)/tests/main.swift $(APP)/Sources/Core.swift -o $(BUILD)/ffi-smoke
 	$(BUILD)/ffi-smoke
@@ -57,6 +63,7 @@ app: release
 	cp $(DYLIB) $(APPDIR)/Contents/Frameworks/
 	# Kompilace Swift UI; jádro se linkuje z target/release, runtime přes rpath.
 	swiftc -O \
+		-target $(SWIFT_TARGET) \
 		-I $(CORE)/include \
 		-L $(CORE)/target/release \
 		-lsalcore \

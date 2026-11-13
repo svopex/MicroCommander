@@ -71,8 +71,6 @@ enum PlaceStore {
     private static let hiddenKey = "hiddenPlaces"
     private static let foldersKey = "customFolders"
     private static let shortcutsKey = "placeShortcuts"
-    /// Dřívější pořadí jen disků (pole cest) – převezme se, dokud není nové.
-    private static let legacyOrderKey = "driveOrder"
 
     // MARK: Seznam míst
 
@@ -100,12 +98,10 @@ enum PlaceStore {
         return result
     }
 
-    /// Uložené pořadí klíčů; bez něj dřívější pořadí disků, jinak Domů a „/“ první.
+    /// Uložené pořadí klíčů; bez něj Domů a „/“ první.
     private static func savedOrder() -> [String] {
-        let defaults = UserDefaults.standard
-        if let saved = defaults.stringArray(forKey: orderKey) { return saved }
-        let legacy = defaults.stringArray(forKey: legacyOrderKey) ?? [NSHomeDirectory(), "/"]
-        return legacy.map(Place.key(drive:))
+        UserDefaults.standard.stringArray(forKey: orderKey)
+            ?? [NSHomeDirectory(), "/"].map(Place.key(drive:))
     }
 
     /// Místa v přirozeném pořadí: kořen, domov, svazky, vlastní adresáře, servery.

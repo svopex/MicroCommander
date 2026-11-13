@@ -200,17 +200,6 @@ fn ssh_error(error: ssh2::Error) -> SalError {
 }
 
 impl SftpFs {
-    /// Připojí se k SSH serveru, přihlásí heslem a otevře SFTP kanál.
-    pub fn connect(
-        host: &str,
-        port: u16,
-        username: &str,
-        password: &str,
-        timeout: Duration,
-    ) -> SalResult<SftpFs> {
-        Self::connect_with(host, port, username, &SftpAuth::Password(password.to_string()), timeout)
-    }
-
     /// Připojí se k SSH serveru se zvoleným způsobem přihlášení a otevře SFTP kanál.
     pub fn connect_with(
         host: &str,
@@ -518,6 +507,32 @@ impl Vfs for SftpFs {
         false
     }
 
+    fn read_link(&self, path: &str) -> SalResult<Option<String>> {
+        let server_path = self.server_path(path);
+        let guard = self.lock()?;
+        // Rovnou readlink (jeden dotaz); teprve při chybě se přes lstat rozliší
+        // „položka není odkaz“ od skutečné chyby.
+        match guard.sftp.readlink(Path::new(&server_path)) {
+            Ok(target) => Ok(Some(target.to_string_lossy().into_owned())),
+            Err(err) => match guard.sftp.lstat(Path::new(&server_path)) {
+                Ok(stat) if !stat.file_type().is_symlink() => Ok(None),
+                _ => Err(ssh_error(err)),
+            },
+        }
+    }
+
+    fn supports_symlinks(&self) -> bool {
+        true
+    }
+
+    fn create_symlink(&self, path: &str, target: &str) -> SalResult<()> {
+        // ssh2: první argument je cíl odkazu, druhý místo, kde odkaz vznikne.
+        self.lock()?
+            .sftp
+            .symlink(Path::new(target), Path::new(&self.server_path(path)))
+            .map_err(ssh_error)
+    }
+
     fn dir_identity(&self, dir: &str) -> Option<String> {
         Some(format!("{}{}", self.account, self.server_path(dir)))
     }
@@ -593,11 +608,10 @@ mod tests {
         writer.write_all(b"x").unwrap();
         writer.finish().unwrap();
         drop(writer);
-        fs.lock()
-            .unwrap()
-            .sftp
-            .symlink(Path::new(&fs.server_path(&target)), Path::new(&fs.server_path(&format!("{}/odkaz", relative))))
-            .unwrap();
+        let link = format!("{}/odkaz", relative);
+        fs.create_symlink(&link, &fs.server_path(&target)).unwrap();
+        assert_eq!(fs.read_link(&link).unwrap(), Some(fs.server_path(&target)));
+        assert_eq!(fs.read_link(&kept).unwrap(), None);
         fs.delete(&relative, true).unwrap();
         assert!(!fs.exists(&relative).unwrap_or(true), "pracovní adresář testu zůstal");
         assert!(fs.exists(&kept).unwrap(), "mazání odkazu smazalo obsah cílového adresáře");

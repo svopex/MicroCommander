@@ -72,9 +72,18 @@ final class PanelController: NSObject {
     private(set) var location: Location
     /// Lokace „pod“ archivem/FTP – návrat přes „..“ na kořeni.
     private(set) var parentLocations: [(location: Location, focus: String)] = []
-    /// Historie pro Alt+←/Alt+→.
-    private var backStack: [Location] = []
-    private var forwardStack: [Location] = []
+
+    /// Záznam historie: lokace i se zanořením, ve kterém ležela (návrat do
+    /// archivu či na server obnoví i cestu ven přes „..“).
+    private struct HistoryEntry {
+        let location: Location
+        let parents: [(location: Location, focus: String)]
+    }
+
+    /// Historie pro Alt+←/Alt+→ (nejvýš `historyLimit` kroků zpět).
+    private var backStack: [HistoryEntry] = []
+    private var forwardStack: [HistoryEntry] = []
+    private static let historyLimit = 100
 
     /// Výpis aktuálního adresáře (bez „..“).
     private(set) var items: [Item] = []
@@ -118,18 +127,48 @@ final class PanelController: NSObject {
 
     // MARK: - Navigace
 
+    /// Aktuální lokace jako záznam historie.
+    private var currentEntry: HistoryEntry {
+        HistoryEntry(location: location, parents: parentLocations)
+    }
+
+    /// Zapíše aktuální lokaci do historie před přechodem jinam (nový krok
+    /// ruší historii vpřed; nejstarší kroky nad limit se zahazují).
+    private func pushHistory() {
+        backStack.append(currentEntry)
+        if backStack.count > PanelController.historyLimit {
+            backStack.removeFirst(backStack.count - PanelController.historyLimit)
+        }
+        forwardStack.removeAll()
+    }
+
+    /// Po zavření archivu nebo odpojení serveru vyřadí z historie kroky, které
+    /// do zavřeného VFS vedou. Historie drží VFS naživu – bez toho by spojení
+    /// se serverem zůstalo otevřené i po odpojení (F12).
+    private func dropClosedFromHistory() {
+        forwardStack.removeAll()
+        let open = [location.vfs] + parentLocations.map(\.location.vfs)
+        backStack.removeAll { entry in
+            let used = [entry.location.vfs] + entry.parents.map(\.location.vfs)
+            return !used.allSatisfy { vfs in open.contains { $0 === vfs } }
+        }
+    }
+
     /// Přejde na novou lokaci. Nový VFS (archiv, FTP) se zanoří:
     /// původní lokace se uloží a „..“ na kořeni se do ní vrátí.
     func navigate(_ newLocation: Location, nested: Bool = false, focus: String? = nil) {
-        backStack.append(location)
-        forwardStack.removeAll()
+        pushHistory()
+        // Skok do jiného VFS bez zanoření ruší zanoření (archivy/FTP se zavřou).
+        let leavesNested = !nested && newLocation.vfs !== location.vfs
         if nested {
             parentLocations.append((location, focus ?? ""))
-        } else if newLocation.vfs !== location.vfs {
-            // Skok na jiný disk ruší zanoření (archivy/FTP se zavřou).
+        } else if leavesNested {
             parentLocations.removeAll()
         }
         location = newLocation
+        if leavesNested {
+            dropClosedFromHistory()
+        }
         pendingFocus = nil
         marked.removeAll()
         reload()
@@ -137,25 +176,21 @@ final class PanelController: NSObject {
 
     /// Jde do cesty ve stejném VFS.
     func changePath(_ path: String, focus: String? = nil) {
-        backStack.append(location)
-        forwardStack.removeAll()
+        pushHistory()
         location.path = path
         pendingFocus = focus
         marked.removeAll()
         reload()
     }
 
-    /// Nadřazený adresář; na kořeni archivu/FTP se vrátí do původní lokace.
+    /// Nadřazený adresář; na kořeni archivu/FTP se vrátí do původní lokace
+    /// (archiv se tím zavře, server odpojí).
     func goUp() {
         if location.path != "/" {
             let focus = lastComponent(location.path)
             changePath(parentPath(location.path), focus: focus)
         } else if let previous = parentLocations.popLast() {
-            backStack.append(location)
-            location = previous.location
-            pendingFocus = previous.focus
-            marked.removeAll()
-            reload()
+            leaveNested(to: previous)
         }
     }
 
@@ -163,10 +198,16 @@ final class PanelController: NSObject {
     func closeNested() {
         guard let base = parentLocations.first else { return }
         parentLocations.removeAll()
-        backStack.append(location)
-        location = base.location
-        pendingFocus = base.focus
+        leaveNested(to: base)
+    }
+
+    /// Návrat ze zavíraného VFS do lokace, ze které se do něj vešlo
+    /// (`parentLocations` už zavírané úrovně neobsahují).
+    private func leaveNested(to parent: (location: Location, focus: String)) {
+        location = parent.location
+        pendingFocus = parent.focus
         marked.removeAll()
+        dropClosedFromHistory()
         reload()
     }
 
@@ -175,10 +216,10 @@ final class PanelController: NSObject {
     /// panelu. Kurzor se postaví na položku, na které stojí druhý panel.
     func adoptLocation(of other: PanelController) {
         guard other !== self else { return }
-        backStack.append(location)
-        forwardStack.removeAll()
+        pushHistory()
         location = other.location
         parentLocations = other.parentLocations
+        dropClosedFromHistory()
         pendingFocus = other.currentItem?.name
         marked.removeAll()
         reload()
@@ -198,24 +239,22 @@ final class PanelController: NSObject {
     /// Zpět v historii (Alt+←).
     func goBack() {
         guard let previous = backStack.popLast() else { return }
-        forwardStack.append(location)
-        switchTo(previous)
+        forwardStack.append(currentEntry)
+        restore(previous)
     }
 
     /// Vpřed v historii (Alt+→).
     func goForward() {
         guard let next = forwardStack.popLast() else { return }
-        backStack.append(location)
-        switchTo(next)
+        backStack.append(currentEntry)
+        restore(next)
     }
 
-    /// Přepnutí lokace z historie (bez úpravy zásobníků historie).
-    private func switchTo(_ target: Location) {
-        // Pokud se historie vrací mimo zanořené VFS, zanoření zahodíme.
-        if target.vfs !== location.vfs, !parentLocations.contains(where: { $0.location.vfs === target.vfs }) {
-            if target.vfs.kind == SAL_VFS_LOCAL { parentLocations.removeAll() }
-        }
-        location = target
+    /// Přepnutí na krok historie (lokace i její zanoření; zásobníky historie
+    /// upravuje volající).
+    private func restore(_ entry: HistoryEntry) {
+        location = entry.location
+        parentLocations = entry.parents
         marked.removeAll()
         reload()
     }
@@ -400,16 +439,18 @@ final class PanelController: NSObject {
         delegate?.panelStateChanged(self)
     }
 
-    /// Označí/odznačí položky odpovídající masce (Num +/-); dirs = i adresáře.
-    func markByMask(_ mask: String, select: Bool, includeDirs: Bool) {
-        for row in rows where !row.isParent {
-            if row.item.isDir && !includeDirs { continue }
-            if maskMatches(mask, name: row.item.name) {
-                if select { marked.insert(row.item.name) } else { marked.remove(row.item.name) }
-            }
-        }
-        view?.reloadTable()
-        delegate?.panelStateChanged(self)
+    /// Označí/odznačí položky odpovídající masce (Num +/-). Masku vyhodnocuje
+    /// jádro – platí stejná pravidla jako při hledání; chybná maska hodí chybu.
+    /// - Parameters:
+    ///   - mask: skupina masek (`*.txt;*.md`, vyloučení za `|`)
+    ///   - select: označit (jinak odznačit)
+    ///   - includeDirs: použít masku i na adresáře
+    func markByMask(_ mask: String, select: Bool, includeDirs: Bool) throws {
+        let names = Array(markAllTargets(includeDirs: includeDirs))
+        let matches = try coreMaskSelect(mask: mask, names: names)
+        let matched = zip(names, matches).filter(\.1).map(\.0)
+        if select { marked.formUnion(matched) } else { marked.subtract(matched) }
+        markingChanged()
     }
 
     /// Označí všechny položky včetně adresářů / zruší všechna označení.
@@ -592,35 +633,6 @@ func normalizePath(_ path: String) -> String {
         parts.append(component)
     }
     return "/" + parts.joined(separator: "/")
-}
-
-/// Jednoduchá maska ve stylu Salamandera pro označování (*, ?, skupiny oddělené ";").
-/// Plnohodnotné masky (# a vyloučení „|“) má jádro – zde stačí pro výběr v panelu.
-func maskMatches(_ mask: String, name: String) -> Bool {
-    let groups = mask.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
-    return groups.contains { group in
-        if group == "*" || group == "*.*" { return true }
-        return wildcardMatch(Array(group.lowercased()), Array(name.lowercased()))
-    }
-}
-
-/// Porovnání se zástupnými znaky * a ? (iterativní s návratem k poslední hvězdičce).
-private func wildcardMatch(_ pattern: [Character], _ text: [Character]) -> Bool {
-    var p = 0, t = 0
-    var star = -1, mark = 0
-    while t < text.count {
-        if p < pattern.count, pattern[p] == "?" || pattern[p] == text[t] {
-            p += 1; t += 1
-        } else if p < pattern.count, pattern[p] == "*" {
-            star = p; mark = t; p += 1
-        } else if star >= 0 {
-            p = star + 1; mark += 1; t = mark
-        } else {
-            return false
-        }
-    }
-    while p < pattern.count, pattern[p] == "*" { p += 1 }
-    return p == pattern.count
 }
 
 /// Naformátuje unixový čas na datum „d.M.yyyy“.

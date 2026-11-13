@@ -2,8 +2,9 @@
  * MicroCommander jádro – C ABI pro tenké Swift/AppKit UI.
  *
  * Handle VFS lze používat z více vláken zároveň (UI vypisuje panel na pozadí
- * i během běžící operace) – jádro si přístup ke sdílenému stavu zamyká samo,
- * příkazy nad jedním FTP/SFTP spojením se serializují. Uvolnit handle
+ * i během běžící operace) – jádro si přístup ke sdílenému stavu zamyká samo
+ * (příkazy nad SFTP spojením se serializují, FTP má pro souběžné příkazy
+ * pool spojení). Uvolnit handle
  * (sal_vfs_close) se smí až poté, co ho žádné vlákno nepoužívá.
  *
  * Konvence chyb: návratový kód 0 = úspěch (SAL_OK), 1 = zrušeno uživatelem,
@@ -30,7 +31,7 @@ extern "C" {
 #define SAL_ERR_EXISTS (-3)
 #define SAL_ERR_NOT_EMPTY (-4)
 #define SAL_ERR_PERMISSION (-5)
-#define SAL_ERR_CREATE_DIR (-6)
+/* kód -6 se nepoužívá */
 #define SAL_ERR_PASSWORD_REQUIRED (-7) /* šifrovaná položka archivu, chybí heslo */
 #define SAL_ERR_BAD_PASSWORD (-8)      /* zadané heslo k archivu je chybné */
 
@@ -48,7 +49,7 @@ extern "C" {
 #define SAL_FLAG_READONLY 8
 #define SAL_FLAG_ENCRYPTED 16 /* zašifrovaná položka archivu */
 
-/* Šifrování při vytváření ZIP (sal_pack_zip_ex). */
+/* Šifrování při vytváření ZIP (sal_pack_zip). */
 #define SAL_ZIP_ENC_NONE 0
 #define SAL_ZIP_ENC_AES256 1    /* WinZip AES-256 (AE-2), doporučeno */
 #define SAL_ZIP_ENC_ZIPCRYPTO 2 /* tradiční ZipCrypto – slabé, jen pro kompatibilitu */
@@ -186,14 +187,17 @@ int32_t sal_find_ex(SalVfs *vfs, const char *root, const char *mask, uint32_t fl
  * (TAR i TAR.GZ; samostatný gzip bez TAR uvnitř archiv není). */
 int32_t sal_probe_archive(const char *path);
 
-/* Vytvoření ZIP archivu z vybraných položek libovolného VFS. */
+/* Vytvoření ZIP archivu z vybraných položek libovolného VFS, volitelně se
+ * šifrováním (SAL_ZIP_ENC_*); password se u NONE ignoruje. */
 int32_t sal_pack_zip(SalVfs *src, const char *src_dir, const char *const *names, size_t count,
-                     const char *dest_zip, const SalProgress *progress, char *err, size_t err_len);
+                     const char *dest_zip, int32_t encryption, const char *password,
+                     const SalProgress *progress, char *err, size_t err_len);
 
-/* Vytvoření ZIP archivu se šifrováním (SAL_ZIP_ENC_*); password se u NONE ignoruje. */
-int32_t sal_pack_zip_ex(SalVfs *src, const char *src_dir, const char *const *names, size_t count,
-                        const char *dest_zip, int32_t encryption, const char *password,
-                        const SalProgress *progress, char *err, size_t err_len);
+/* Výběr podle masky (stejná pravidla jako hledání: *, ?, #, skupiny ; a vyloučení |):
+ * do out_matches[i] zapíše 1, pokud names[i] masce vyhovuje, jinak 0.
+ * Chybná maska vrací chybu s textem v err. */
+int32_t sal_mask_select(const char *mask, const char *const *names, size_t count,
+                        uint8_t *out_matches, char *err, size_t err_len);
 
 /* Heslo pro čtení šifrovaných položek archivu (NULL = zapomenout).
  * Vrací 1, pokud VFS hesla podporuje (ZIP), jinak 0. */

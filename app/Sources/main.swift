@@ -23,7 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        AppDelegate.migrateSettingsFromSalamander()
+        // Zbytky dočasných kopií po dřívějším pádu aplikace – na pozadí, mazání
+        // velkých rozbalených souborů nesmí zdržet start.
+        DispatchQueue.global(qos: .utility).async { TempFiles.removeStale() }
         // Vzhled podle barevného schématu ještě před vytvořením okna.
         Settings.applyAppearance()
         let controller = MainWindowController()
@@ -56,20 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Jednorázový převod nastavení z doby, kdy se aplikace jmenovala Salamander
-    /// (jiný bundle identifier = jiná doména předvoleb). Přenese uživatelské volby
-    /// a polohu okna; diagnostický záznam kláves (keyLog) záměrně ne.
-    static func migrateSettingsFromSalamander() {
-        let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: "migratedFromSalamander") else { return }
-        defaults.set(true, forKey: "migratedFromSalamander")
-        guard let old = defaults.persistentDomain(forName: "eu.krtkovo.salamander") else { return }
-        for (key, value) in old where key != "keyLog" && defaults.object(forKey: key) == nil {
-            // Poloha okna se ukládala pod starým jménem automatického ukládání.
-            let newKey = key == "NSWindow Frame SalamanderMain"
-                ? "NSWindow Frame " + MainWindowController.frameAutosaveName : key
-            defaults.set(value, forKey: newKey)
-        }
+    /// Při ukončení se smažou dočasné kopie souborů rozbalených z archivů a serverů.
+    func applicationWillTerminate(_ notification: Notification) {
+        TempFiles.removeCreated()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

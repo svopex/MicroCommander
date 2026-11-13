@@ -8,25 +8,28 @@
 //! šifrovaná), heslo se vyžaduje až při čtení obsahu šifrované položky –
 //! bez hesla vrací jádro `PasswordRequired`, s chybným `InvalidPassword`.
 //!
-//! Metadata položek (jméno, velikost, čas, šifrování) se načtou jednou při
-//! otevření do indexu – výpis adresáře ani test existence pak archiv nečtou.
-//! Pro čtení obsahu se archiv otevírá znovu ze souboru – ZIP je seek-based
-//! formát a více souborů tak lze číst bez globálního zámku. Streamování
-//! obsahu používá self-referenční strukturu (ZipFile půjčuje data
-//! z ZipArchive), řešenou rozšířením lifetime na heap-allocovaném archivu.
+//! Archiv (centrální adresář) se čte jednou při otevření: metadata položek
+//! (jméno, velikost, čas, šifrování) jdou do indexu – výpis adresáře ani
+//! test existence pak archiv nečtou – a naparsovaný archiv si VFS drží.
+//! Pro čtení obsahu dostane každý stream jeho levný klon (sdílená metadata,
+//! vlastní pozice v souboru, viz `SharedFile`), takže víc souborů lze číst
+//! zároveň bez zámku a bez opakovaného čtení centrálního adresáře.
+//! Streamování obsahu používá self-referenční strukturu (ZipFile půjčuje
+//! data z ZipArchive), řešenou rozšířením lifetime na heap-allocovaném archivu.
 
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Read, Seek, SeekFrom};
+use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use zip::read::{ZipArchive, ZipFile};
 use zip::result::ZipError;
 
 use crate::archive::{self, canonical_entry_name};
 use crate::error::{SalError, SalResult};
-use crate::vfs::{Vfs, VfsItem, VfsItemKind, VfsKind, VfsReadStream, VfsWriteStream};
+use crate::vfs::{civil_to_unix, Vfs, VfsItem, VfsItemKind, VfsKind, VfsReadStream, VfsWriteStream};
 
 // Konverze chyb ZIP archivu na jednotný typ jádra; chybějící položka se
 // hlásí jako NotFound (UI podle ní reaguje), zbylé jako text IO chyby.
@@ -40,6 +43,37 @@ impl From<ZipError> for SalError {
             }
             other => SalError::Io(other.to_string()),
         }
+    }
+}
+
+/// Čtenář nad sdíleným souborem archivu s vlastní pozicí. Čte přes `pread`
+/// (bez sdíleného ukazatele v souboru), takže klony – jeden na každý čtecí
+/// stream – se navzájem neovlivňují ani při čtení z více vláken.
+#[derive(Clone)]
+struct SharedFile {
+    file: Arc<File>,
+    pos: u64,
+}
+
+impl Read for SharedFile {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read = self.file.read_at(buf, self.pos)?;
+        self.pos += read as u64;
+        Ok(read)
+    }
+}
+
+impl Seek for SharedFile {
+    fn seek(&mut self, target: SeekFrom) -> io::Result<u64> {
+        // Posun od začátku, od aktuální pozice, nebo od konce souboru.
+        let new_pos = match target {
+            SeekFrom::Start(offset) => Some(offset),
+            SeekFrom::Current(delta) => self.pos.checked_add_signed(delta),
+            SeekFrom::End(delta) => self.file.metadata()?.len().checked_add_signed(delta),
+        };
+        self.pos = new_pos
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Neplatná pozice v souboru archivu."))?;
+        Ok(self.pos)
     }
 }
 
@@ -59,6 +93,8 @@ struct ZipIndexEntry {
 pub struct ZipFs {
     /// Cesta k souboru archivu na lokálním disku.
     archive_path: PathBuf,
+    /// Naparsovaný archiv; čtecí streamy si berou jeho klon.
+    archive: ZipArchive<SharedFile>,
     /// Index položek podle kanonického jména (sestavený při otevření).
     index: BTreeMap<String, ZipIndexEntry>,
     /// Heslo pro šifrované položky (zadává UI, platí pro celý archiv).
@@ -71,7 +107,7 @@ impl ZipFs {
     /// Otevře ZIP archiv a sestaví index položek (obsah souborů se nečte).
     pub fn open(archive_path: &Path) -> SalResult<ZipFs> {
         // Ověření, že jde o čitelný ZIP; selže u poškozených souborů hned.
-        let file = File::open(archive_path)?;
+        let file = SharedFile { file: Arc::new(File::open(archive_path)?), pos: 0 };
         let mut archive = ZipArchive::new(file)?;
         let mut index = BTreeMap::new();
         let mut any_encrypted = false;
@@ -99,6 +135,7 @@ impl ZipFs {
         }
         Ok(ZipFs {
             archive_path: archive_path.to_path_buf(),
+            archive,
             index,
             password: Mutex::new(None),
             any_encrypted,
@@ -119,17 +156,16 @@ impl ZipFs {
 pub struct ZipReadStream {
     // POZOR na pořadí polí: Rust dropuje v pořadí deklarace, takže `file`
     // (půjčená data) se musí uvolnit dříve než vlastnický archiv.
-    file: Option<ZipFile<'static, File>>,
-    _archive: Box<ZipArchive<File>>,
+    file: Option<ZipFile<'static, SharedFile>>,
+    _archive: Box<ZipArchive<SharedFile>>,
 }
 
 impl ZipReadStream {
-    /// Otevře položku číslo `index` z archivu na disku pro streamované čtení.
-    /// Šifrovaná položka (`encrypted`, známo z indexu) se dešifruje zadaným
-    /// heslem; bez hesla → PasswordRequired.
-    fn open(archive_path: &Path, index: usize, encrypted: bool, password: Option<&str>) -> SalResult<ZipReadStream> {
-        let file = File::open(archive_path)?;
-        let mut archive = Box::new(ZipArchive::new(file)?);
+    /// Otevře položku číslo `index` pro streamované čtení nad vlastním klonem
+    /// archivu. Šifrovaná položka (`encrypted`, známo z indexu) se dešifruje
+    /// zadaným heslem; bez hesla → PasswordRequired.
+    fn open(archive: ZipArchive<SharedFile>, index: usize, encrypted: bool, password: Option<&str>) -> SalResult<ZipReadStream> {
+        let mut archive = Box::new(archive);
 
         // SAFETY: Rozšíření lifetime je bezpečné, protože:
         // 1) archiv je vlastněn touto strukturou (Box) a jeho adresa na hromadě
@@ -137,8 +173,8 @@ impl ZipReadStream {
         // 2) ZipFile je uvolněn (drop) dříve než archiv – viz pořadí polí,
         // 3) nikdo jiný nemá k archivu přístup, dokud stream žije.
         let zip_file = unsafe {
-            let archive_ref: &'static mut ZipArchive<File> =
-                &mut *(&mut *archive as *mut ZipArchive<File>);
+            let archive_ref: &'static mut ZipArchive<SharedFile> =
+                &mut *(&mut *archive as *mut ZipArchive<SharedFile>);
             // Heslo předáme jen šifrované položce; nešifrovanou čteme normálně.
             match (encrypted, password) {
                 (true, Some(password)) => archive_ref.by_index_decrypt(index, password.as_bytes())?,
@@ -165,24 +201,15 @@ impl Read for ZipReadStream {
 impl VfsReadStream for ZipReadStream {}
 
 /// Převede datum/čas z metadat ZIP na unixový čas UTC (sekundy).
-/// Používá algoritmus „days from civil“ (Howard Hinnant) bez závislosti
-/// na externí knihovně pro práci s časem.
 pub fn zip_time_to_unix(date_time: zip::DateTime) -> i64 {
-    let (year, month, day) = (date_time.year() as i64, date_time.month() as i64, date_time.day() as i64);
-    let (hour, minute, second) = (
-        date_time.hour() as i64,
-        date_time.minute() as i64,
-        date_time.second() as i64,
-    );
-    // Dny od 1. 1. 1970; měsíc únor a leden patří do předchozího „císařského“ roku.
-    let y = if month <= 2 { year - 1 } else { year };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let mp = (month + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + day - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146097 + doe - 719468;
-    days * 86400 + hour * 3600 + minute * 60 + second
+    civil_to_unix(
+        i64::from(date_time.year()),
+        i64::from(date_time.month()),
+        i64::from(date_time.day()),
+        i64::from(date_time.hour()),
+        i64::from(date_time.minute()),
+        i64::from(date_time.second()),
+    )
 }
 
 impl Vfs for ZipFs {
@@ -216,7 +243,7 @@ impl Vfs for ZipFs {
             .ok_or(SalError::NotFound)?;
         let password = self.current_password();
         Ok(Box::new(ZipReadStream::open(
-            &self.archive_path,
+            self.archive.clone(),
             entry.archive_index,
             entry.encrypted,
             password.as_deref(),

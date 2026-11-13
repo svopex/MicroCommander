@@ -273,6 +273,24 @@ impl Vfs for LocalFs {
         Some(self)
     }
 
+    fn read_link(&self, path: &str) -> SalResult<Option<String>> {
+        let disk_path = self.disk_path(path);
+        // Cíl se čte jen u odkazu (read_link nad běžným souborem je chyba).
+        if !fs::symlink_metadata(&disk_path)?.file_type().is_symlink() {
+            return Ok(None);
+        }
+        Ok(Some(fs::read_link(disk_path)?.to_string_lossy().into_owned()))
+    }
+
+    fn supports_symlinks(&self) -> bool {
+        true
+    }
+
+    fn create_symlink(&self, path: &str, target: &str) -> SalResult<()> {
+        std::os::unix::fs::symlink(target, self.disk_path(path))?;
+        Ok(())
+    }
+
     fn dir_identity(&self, dir: &str) -> Option<String> {
         // Skutečná cesta s rozvinutými odkazy: tentýž adresář může být dosažitelný
         // víc cestami (např. `/tmp` a `/private/tmp`) i přes VFS s jiným kořenem.

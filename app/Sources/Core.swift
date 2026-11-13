@@ -4,8 +4,7 @@
 // Swift obálka nad C ABI jádra salcore (core/include/microcommander.h).
 // Poskytuje bezpečné Swift API: třída Vfs (handle + list), Item, operace
 // s progresem a zrušením. Volání jádra bez zamykání – jeden handle lze
-// používat z více vláken zároveň (jádro si sdílený stav zamyká samo,
-// příkazy nad jedním FTP/SFTP spojením serializuje).
+// používat z více vláken zároveň (jádro si sdílený stav zamyká samo).
 
 import Foundation
 import microcommander
@@ -114,6 +113,11 @@ final class Vfs {
         let label = String(cString: buffer)
         return Vfs(ptr: raw, label: label)
     }
+
+    /// Lokální disk s kořenem „/“ sdílený celou aplikací. Jedna instance pro
+    /// všechny panely: identita VFS pak znamená „totéž úložiště“ (historie
+    /// panelu, sdílení lokace mezi panely).
+    static let localDisk: Vfs = openLocal(root: nil)!
 
     /// Lokální disk; root nil = celý disk.
     static func openLocal(root: String?) -> Vfs? {
@@ -484,7 +488,7 @@ func corePackZip(src: Vfs, srcDir: String, names: [String], dest: String,
             withNameArray(names) { namesPtr, count in
                 withUnsafePointer(to: &progress) { progressPtr in
                     encryption.password.withCString { passwordC in
-                        sal_pack_zip_ex(src.ptr, srcDirC, namesPtr, count, destC,
+                        sal_pack_zip(src.ptr, srcDirC, namesPtr, count, destC,
                                         encryption.code, passwordC, progressPtr, &err, 1024)
                     }
                 }
@@ -628,6 +632,24 @@ func coreFindEx(vfs: Vfs, root: String, spec: FindSpec, state: ProgressState,
     }
     guard code == SAL_OK else { throw CoreError.code(code, String(cString: err)) }
     return errors
+}
+
+/// Vyhodnotí masku jmen jádrem (stejná pravidla jako hledání: `*`, `?`, `#`,
+/// skupiny `;`, vyloučení `|`, maska končící tečkou = jména bez přípony).
+/// - Parameters:
+///   - mask: skupina masek
+///   - names: testovaná jména
+/// - Returns: pro každé jméno, zda masce vyhovuje; chybná maska hodí chybu
+func coreMaskSelect(mask: String, names: [String]) throws -> [Bool] {
+    var err = [CChar](repeating: 0, count: 1024)
+    var matches = [UInt8](repeating: 0, count: names.count)
+    let code = mask.withCString { maskC in
+        withNameArray(names) { namesPtr, count in
+            sal_mask_select(maskC, namesPtr, count, &matches, &err, 1024)
+        }
+    }
+    guard code == SAL_OK else { throw CoreError.code(code, String(cString: err)) }
+    return matches.map { $0 != 0 }
 }
 
 /// Detekce archivu podle obsahu souboru (pro otevírání Enterem).

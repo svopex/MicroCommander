@@ -10,7 +10,7 @@
 
 use std::io::{Read, Write};
 
-use crate::error::SalResult;
+use crate::error::{SalError, SalResult};
 
 /// Druh souborového systému; přenáší se přes FFI do UI
 /// (např. pro ikonu panelu nebo zakázání zápisu do archivu).
@@ -171,6 +171,22 @@ pub trait Vfs: Send + Sync {
         None
     }
 
+    /// Cíl symbolického odkazu `path` (text, jak je v odkazu uložen).
+    /// `None` = položka není odkaz, nebo VFS cíle odkazů číst neumí.
+    fn read_link(&self, _path: &str) -> SalResult<Option<String>> {
+        Ok(None)
+    }
+
+    /// Umí VFS vytvářet symbolické odkazy (`create_symlink`)?
+    fn supports_symlinks(&self) -> bool {
+        false
+    }
+
+    /// Vytvoří symbolický odkaz `path` ukazující na `target`.
+    fn create_symlink(&self, _path: &str, _target: &str) -> SalResult<()> {
+        Err(SalError::Io("Souborový systém nepodporuje symbolické odkazy.".to_string()))
+    }
+
     /// Identita adresáře `dir` napříč instancemi VFS nad stejným úložištěm
     /// (dva lokální VFS, dvě připojení k témuž serveru): stejný řetězec =
     /// tentýž adresář. Podle ní se odmítá přenos do zdrojového adresáře.
@@ -257,6 +273,22 @@ pub fn remote_path(home: &str, vfs_path: &str) -> String {
     }
 }
 
+/// Převede občanské datum a čas v UTC na unixové sekundy. Používá algoritmus
+/// „days from civil“ (Howard Hinnant) bez závislosti na knihovně pro práci
+/// s časem; měsíc 1–12, den 1–31.
+pub fn civil_to_unix(year: i64, month: i64, day: i64, hour: i64, minute: i64, second: i64) -> i64 {
+    // Leden a únor patří do předchozího „březnového“ roku (přestupný den je
+    // pak na jeho konci).
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe - 719468;
+    days * 86400 + hour * 3600 + minute * 60 + second
+}
+
 /// Převede SystemTime na unixové sekundy (čas před rokem 1970 / neznámý = 0).
 pub fn system_time_to_unix(time: std::time::SystemTime) -> i64 {
     time.duration_since(std::time::UNIX_EPOCH)
@@ -297,5 +329,14 @@ mod tests {
         // Domov v kořeni serveru (home je po oříznutí lomítka prázdný).
         assert_eq!(remote_path("", "/data"), "/data");
         assert_eq!(remote_path("", "/"), "/");
+    }
+
+    #[test]
+    fn test_civil_to_unix() {
+        assert_eq!(civil_to_unix(1970, 1, 1, 0, 0, 0), 0);
+        assert_eq!(civil_to_unix(2024, 1, 2, 3, 4, 5), 1_704_164_645);
+        // Přestupný den a den po něm.
+        assert_eq!(civil_to_unix(2024, 3, 1, 0, 0, 0) - civil_to_unix(2024, 2, 29, 0, 0, 0), 86400);
+        assert_eq!(civil_to_unix(1969, 12, 31, 23, 59, 59), -1);
     }
 }

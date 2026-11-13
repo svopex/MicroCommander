@@ -37,7 +37,10 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
 ```
 
 - **Jádro** (Rust, crate `salcore`): virtuální souborové systémy za společným
-  traitem `Vfs` – lokální disk, archivy ZIP/TAR/TAR.GZ (jen čtení), FTP (suppaftp),
+  traitem `Vfs` – lokální disk, archivy ZIP/TAR/TAR.GZ (jen čtení), FTP (suppaftp;
+  pool spojení – každý přenos a příkaz má vlastní řídicí spojení, takže panel
+  lze vypisovat i během přenosu; výpis přes MLSD včetně skrytých souborů, na
+  starších serverech LIST),
   SFTP (ssh2/libssh2; přihlášení heslem, souborem se soukromým klíčem
   OpenSSH/PEM – ed25519, ECDSA, RSA, i chráněným heslem – nebo klíči
   ze ssh-agenta). Souborové operace (copy/move/delete) pracují mezi libovolnou
@@ -47,14 +50,16 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   smaže hned po potvrzeném zápisu; položky přeskočené kvůli existujícímu cíli
   zůstávají ve zdroji. Kopie či přesun do téhož adresáře a adresáře do sebe
   sama se odmítne, po chybě nebo zrušení nezůstane v cíli nedokončený soubor.
+  Symbolické odkazy se přenášejí jako odkazy tam, kde to cíl umí (lokální
+  disk, SFTP; i při rozbalení TAR), jinak se přenese to, na co ukazují.
   Hledání nad libovolným VFS s maskami ve stylu Salamandera (`*`, `?`, `#`,
   skupiny oddělené `;`, vyloučení za `|`; maska bez `*`, `?` a `.` hledá jména,
   která ji obsahují), volitelně bez podadresářů a s hledáním v obsahu souborů
   (text, HEX, rozlišení velikosti písmen, celá slova, regulární výraz – crate
-  `regex`); nečitelné adresáře a soubory se přeskočí a spočítají. Vytváření ZIP archivů (`pack_zip`)
-  včetně adresářové struktury. **Zaheslované ZIP:** čtení AES-128/192/256
-  (WinZip AE-1/AE-2) i ZipCrypto; vytváření s AES-256 (doporučeno) nebo
-  ZipCrypto (`pack_zip_encrypted`, FFI `sal_pack_zip_ex`). Výpis šifrovaného
+  `regex`); nečitelné adresáře a soubory se přeskočí a spočítají. Vytváření ZIP archivů (`pack_zip`,
+  FFI `sal_pack_zip`) včetně adresářové struktury. **Zaheslované ZIP:** čtení
+  AES-128/192/256 (WinZip AE-1/AE-2) i ZipCrypto; vytváření s AES-256
+  (doporučeno) nebo ZipCrypto. Výpis šifrovaného
   archivu heslo nepotřebuje, heslo se nastavuje na otevřený archiv
   (`sal_vfs_set_password`) a chyby rozlišují „chybí heslo“ / „chybné heslo“.
 - **FFI** (C ABI): `core/include/microcommander.h` + `core/include/module.modulemap`,
@@ -83,12 +88,13 @@ core/                       # Rust workspace
     src/archive.rs          # společné pro archivy: index položek podle jména,
                             #   výpis adresáře z indexu, implikované adresáře
     src/zipfs.rs            # ZIP jako VFS (jen čtení, AES/ZipCrypto s heslem;
-                            #   index položek sestavený při otevření)
+                            #   archiv a index položek načtené jednou při otevření)
     src/tarfs.rs            # TAR/TAR.GZ jako VFS – vlastní parser (ustar,
-                            #   GNU longname, PAX, kontrolní součty hlaviček;
+                            #   GNU longname, PAX, odkazy, kontrolní součty hlaviček;
                             #   tar.gz sdílená dekompresní session pro
                             #   jednoprůchodové rozbalení)
-    src/ftp.rs              # FTP VFS (suppaftp, RETR/STOR streamy, abort)
+    src/ftp.rs              # FTP VFS (suppaftp, pool spojení, MLSD/LIST,
+                            #   RETR/STOR streamy)
     src/sftp.rs             # SFTP VFS (ssh2, serializace přístupu zámkem)
     src/mask.rs             # masky ve stylu Salamandera (port myšlenky masks.cpp)
     src/ops.rs              # copy/move/delete mezi VFS, progress, cancel,
@@ -98,7 +104,7 @@ core/                       # Rust workspace
     src/pack.rs             # vytváření ZIP z položek libovolného VFS
                             #   (bez hesla / AES-256 / ZipCrypto)
     src/error.rs            # SalError + kódy pro FFI
-    src/ffi.rs              # C ABI (handle, list, operace, find, pack, probe)
+    src/ffi.rs              # C ABI (handle, list, operace, find, pack, probe, masky)
   include/microcommander.h  # C hlavička pro UI (přes module.modulemap)
 app/                        # tenké UI pro macOS
   Sources/Core.swift        # Swift obálka nad C ABI (Vfs, operace, progress)
@@ -142,6 +148,8 @@ samandarin/                 # původní Windows zdrojáky (reference, nemění s
 ### Build a spuštění
 
 Vyžaduje Rust (cargo v `~/.cargo/bin`) a Xcode Command Line Tools (swiftc).
+Aplikace se sestavuje pro macOS 13 a novější (Makefile bere minimum
+z `LSMinimumSystemVersion` v `app/Info.plist`).
 
 ```
 make            # sestaví jádro (release) i aplikaci: build/MicroCommander.app
@@ -156,8 +164,7 @@ make clean      # smaže build/
 Nastavení (režimy zobrazení, pořadí disků, skryté soubory, poloha okna, adresáře
 panelů – po dalším spuštění se otevřou stejné adresáře; z archivu či FTP nejbližší
 lokální adresář) se ukládá
-do předvoleb `com.github.svopex.microcommander`; při prvním spuštění se jednorázově
-převezme z dřívější domény `eu.krtkovo.salamander` (z doby názvu Salamander).
+do předvoleb `com.github.svopex.microcommander`.
 
 **Podpis:** `make` podepíše aplikaci certifikátem `MicroCommander Dev` z klíčenky
 (pokud existuje), aby macOS po každém buildu znovu nežádal o přístup ke složkám
@@ -191,14 +198,17 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   příkazové řádky, stejně jako PgUp/PgDn;
   ⌥← / ⌥→ – historie; ⌘\ – kořen; ⌘. (⌃.) – poslat aktuální adresář do druhého panelu (přepne se druhý panel);
   ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní; oba směry fungují
-  i v archivu a na FTP/SFTP – panel převezme i zanoření, „..“ vede ven); ⇧F7 / ⌘G / dvojklik na řádek adresáře – zadat cestu;
+  i v archivu a na FTP/SFTP – panel převezme i zanoření, „..“ vede ven); ⇧F7 / ⌘G / dvojklik na řádek adresáře – zadat cestu
+  (v archivu a na serveru cestu uvnitř něj); historie ⌥← / ⌥→ si pamatuje i zanoření do archivu
+  či serveru, po jeho zavření (F12, „..“ na kořeni) se kroky do něj zahodí a spojení se uzavře;
   pravé tlačítko na řádku adresáře – Kopírovat cestu do schránky / Změnit adresář…;
   ⌥⌘C (Úpravy › Kopírovat cestu adresáře, ⌃⌥Insert) – cesta aktuálního adresáře
   aktivního panelu do schránky (u archivu/FTP tak, jak ji ukazuje řádek adresáře)
 - **Označování:** Space / Insert – označit a posunout; ⇧↑↓, ⇧PgUp/PgDn,
   ⇧Home/End, ⌘klik, ⇧klik; ⌘A – označit vše (opakovaný stisk označení zruší;
   adresáře podle Nastavení, výchozí i adresáře), ⌘D – nic; Num + / Num − (⌘= / ⌘−) –
-  podle masky; Num * – invertovat (adresáře podle Nastavení). Operace pracují s označenými položkami,
+  podle masky (stejné masky jako při hledání: `*`, `?`, `#`, skupiny `;`,
+  vyloučení za `|`); Num * – invertovat (adresáře podle Nastavení). Operace pracují s označenými položkami,
   bez označení s položkou pod kurzorem.
 - **Režimy zobrazení** (⌥1–⌥6, menu Zobrazení, tlačítko na liště, kontextové
   menu): Stručný (sloupce jmen, ←/→ přeskakují sloupec), Podrobný (výchozí),
@@ -258,8 +268,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   odebere; zkratka je vidět i v nabídce disků). Změny platí hned. Lišta disků
   ukazuje disky a vlastní adresáře (servery jen v nabídce). Uložení
   v předvolbách: `placesOrder` (pořadí), `hiddenPlaces` (skryté),
-  `customFolders` (adresáře), `placeShortcuts` (zkratky); dřívější
-  `driveOrder` se převezme.
+  `customFolders` (adresáře), `placeShortcuts` (zkratky).
 - **Nastavení** (⌘, v aplikačním menu) ve stylu dialogu Konfigurace
   Salamandera: vlevo kategorie, vpravo stránka s nadpisem, změny se uloží až
   tlačítkem **OK** (Zrušit je zahodí).
@@ -305,8 +314,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   klíči, klíč odmítnutý serverem a chybějící soubor. Heslo (heslo ke klíči) se
   ukládá jen se zaškrtnutým „Uložit heslo do Klíčenky“ – do macOS Klíčenky
   (služba „MicroCommander FTP/SFTP“), jinak se při připojení z nabídky disků
-  vyžádá. Seznam serverů je v předvolbách (`servers`, JSON bez hesel); dříve
-  zapamatovaný server z jednoduchého dialogu se při prvním spuštění převezme.
+  vyžádá. Seznam serverů je v předvolbách (`servers`, JSON bez hesel).
   Neúspěšné připojení nabídne „Upravit server…“, Zrušit v průběhu připojování
   dialog hned zavře.
 - **Vyhledat soubory a adresáře** (⌃F, ⌘F, ⌥F7 – podle dialogu Find
@@ -317,7 +325,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   Procházet… / Všechny místní jednotky), **Včetně podadresářů**, **Hledat
   v souboru** – rozbalí část **Obsahující** s volbami Šestnáctkový režim
   (`01 02 "text" 00`), Rozlišovat malá a velká písmena, Celá slova a Regulární
-  výraz (vyhodnocuje se po řádcích; tlačítko › vkládá konstrukce),
+  výraz (vyhodnocuje se po řádcích, konec řádku je LF i CRLF; tlačítko › vkládá konstrukce),
   **Upřesnit…** (atributy R/H/E/adresář třístavově, velikost nejméně/nejvýše,
   změněno během / od–do). Pole mají historii. **Najít** (Enter, ⌃F) se během
   hledání mění na **Zastavit** (Escape, ⌥P); šipka vedle nabízí Vytřídit –
@@ -366,17 +374,22 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 ### Funkční omezení první verze
 
 - bez pluginů (podle zadání)
-- archivy jsou jen pro čtení (nové ZIP lze vytvářet přes ⌥F5 / pack_zip)
+- archivy jsou jen pro čtení (nové ZIP lze vytvářet přes ⌥F5 / pack_zip);
+  symbolické odkazy uvnitř ZIP se čtou jako soubor s cílem odkazu
 - šifrování jen u ZIP (TAR šifrování nemá; 7z/RAR nejsou podporované); heslo se
   drží jen v paměti po dobu otevření archivu; AES-256 ZIP neotevře vestavěná
   Archivační utilita macOS (7-Zip, Keka, WinZip, bsdtar ano)
 - F3/Enter nad souborem v archivu či na FTP ho nejprve rozbalí do dočasného
-  adresáře; F4 a příkazová řádka fungují jen na lokálním disku
+  adresáře (smaže se při ukončení aplikace, zbytky po pádu při dalším
+  spuštění); F4 a příkazová řádka fungují jen na lokálním disku
 - mazání je trvalé (bez koše)
 - FTP bez TLS (FTPS není zapojeno)
 - SFTP neověřuje klíč serveru proti ~/.ssh/known_hosts (připojí se k jakémukoli
   serveru na dané adrese)
 - kořen FTP/SFTP panelu = domovský adresář po přihlášení
+- FTP: souběžné příkazy otevírají další spojení (server omezující počet
+  spojení na účet je může odmítnout); symbolické odkazy na FTP vytvářet nelze
+  a odkaz na adresář se ve výpisu chová jako soubor
 - hledání: bez hledání uvnitř archivů, hledání duplicit, protokolu hledání,
   seznamu ignorovaných adresářů a správce uložených nastavení (Windows-only
   atributy a tagy v Upřesnit chybí)
@@ -385,16 +398,18 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 
 ### Testy
 
-- `make test` – 41 unit testů jádra (masky, cesty, operace včetně přesunu
-  v jednom VFS, konfliktů a přeskakování, odmítnutí přenosu do téhož adresáře
-  a úklidu po zrušení, hledání včetně obsahu souborů, HEX a regulárních výrazů,
-  ZIP včetně adresářových záznamů, TAR plain i TAR.GZ včetně rekurzivního
-  rozbalení, dlouhých jmen a PAX hlaviček, rozpoznání ne-archivů, balení
-  s adresářovou strukturou, AES-256 a ZipCrypto: bez hesla / chybné / správné
-  heslo, přihlášení k FTP proti minimálnímu serveru na 127.0.0.1)
+- `make test` – 47 unit testů jádra (masky, cesty, operace včetně přesunu
+  v jednom VFS, konfliktů a přeskakování, symbolických odkazů, odmítnutí
+  přenosu do téhož adresáře a úklidu po zrušení, hledání včetně obsahu
+  souborů, HEX a regulárních výrazů, ZIP včetně adresářových záznamů, TAR
+  plain i TAR.GZ včetně rekurzivního rozbalení, dlouhých jmen, PAX hlaviček
+  a odkazů, rozpoznání ne-archivů, balení s adresářovou strukturou, AES-256
+  a ZipCrypto: bez hesla / chybné / správné heslo, FTP proti minimálnímu
+  serveru na 127.0.0.1: přihlášení, výpis MLSD i LIST, paměť výpisu, příkazy
+  během přenosu na dalším spojení)
 - `make smoke` – end-to-end test vazby Swift↔Rust: otevření VFS, list, copy,
   move (v rámci jednoho VFS jako v aplikaci), mkdir, rename, delete, find,
-  pack ZIP, probe, otevření ZIP, AES-256 ZIP přes
+  výběr podle masky, pack ZIP, probe, otevření ZIP, AES-256 ZIP přes
   FFI (kódy chyb hesla) a kompatibilita s libarchive (`bsdtar`) oběma směry:
   náš AES-256 archiv rozbalí bsdtar, AES-256 i ZipCrypto archiv z bsdtar
   přečte jádro

@@ -102,6 +102,11 @@ func run() throws {
     let found = collector.snapshot()
     expect(found.count == 2, "hledání *.txt našlo 2 soubory, našlo \(found.count)")
 
+    // Výběr podle masky přes FFI (stejné masky jako hledání, včetně vyloučení).
+    let selected = try coreMaskSelect(mask: "*.txt;*.md|b*", names: ["a.txt", "b.txt", "c.md", "d.log"])
+    expect(selected == [true, false, true, false], "výběr podle masky s vyloučením")
+    expect((try? coreMaskSelect(mask: "a|b|c", names: ["a"])) == nil, "chybná maska je chyba")
+
     // Balení do ZIP přes FFI a otevření archivu jako VFS.
     let zipPath = base + "/archiv.zip"
     try corePackZip(src: src, srcDir: "/", names: ["a.txt", "pod"], dest: zipPath, state: state)

@@ -398,8 +398,7 @@ final class UISelfTest {
         // 12) Zaheslovaný ZIP (AES-256): Enter otevře archiv, F5 → cíl → chybné heslo →
         //     správné heslo → soubor rozbalený v druhém panelu.
         steps.append((ready: { self.windowFree }, action: {
-            let disk = Vfs.openLocal(root: nil)!
-            try? corePackZip(src: disk, srcDir: self.root + "/src", names: ["b.txt"],
+            try? corePackZip(src: Vfs.localDisk, srcDir: self.root + "/src", names: ["b.txt"],
                              dest: self.root + "/tajne.zip", encryption: .aes256("Heslo-123"), state: ProgressState())
             try? FileManager.default.removeItem(atPath: self.root + "/dst/b.txt")
             self.controller.activate(self.controller.leftPanel)
@@ -626,8 +625,7 @@ final class UIKeyCheck {
         let left = controller.leftPanel
         let right = controller.rightPanel
         let zipPath = (dir as NSString).appendingPathComponent("archiv.zip")
-        guard let disk = Vfs.openLocal(root: nil) else { done(); return }
-        try? corePackZip(src: disk, srcDir: dir, names: ["soubor1.txt"], dest: zipPath, state: ProgressState())
+        try? corePackZip(src: Vfs.localDisk, srcDir: dir, names: ["soubor1.txt"], dest: zipPath, state: ProgressState())
         guard let zip = Vfs.openZip(path: zipPath) else { done(); return }
         left.changePath(dir)
         poll(until: { left.location.path == dir && !left.isLoading }) {
@@ -790,7 +788,7 @@ final class UIKeyCheck {
         let ordered = PlaceStore.ordered(natural, saved: ["c", "x", "a"]).map(\.key)
         self.check(ordered == ["c", "a", "b"], "nabídka disků: uložené pořadí, nové místo na konec (\(ordered))")
         // Výchozí pořadí (jen pokud uživatel ještě nic neuložil): Domů první.
-        if UserDefaults.standard.object(forKey: "placesOrder") == nil && UserDefaults.standard.object(forKey: "driveOrder") == nil {
+        if UserDefaults.standard.object(forKey: "placesOrder") == nil {
             self.check(PlaceStore.allPlaces().first?.detail == NSHomeDirectory(), "výchozí pořadí disků: Domů první")
         }
         // Volitelný snímek skutečné nabídky (vykreslení mimo obrazovku, bez zobrazení okna).
