@@ -821,6 +821,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         [0..<items.compactMap(\.choice.place).count]
     }
 
+    func panelView(_ view: PanelView, perform command: Command) {
+        activate(view.panel)
+        perform(command)
+    }
+
     /// Nabídka disků pro panel (⌥F1/⌥F2, tlačítko disku). Výchozí řádek = místo,
     /// na kterém panel právě je; místa lze přesouvat (šipky v řádku, ⌥↑/⌥↓).
     func panelViewShowDriveChooser(_ view: PanelView, anchor: NSView) {
@@ -1149,7 +1154,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .selectMask: commandMarkByMask(select: true)
         case .unselectMask: commandMarkByMask(select: false)
         case .invertMarks: panel.invertMarks(includeDirs: false)
-        case .selectAll: panel.markAll(true)
+        // ⌘A / Označit vše: opakovaně přepíná označit vše ↔ zrušit označení;
+        // adresáře podle Nastavení.
+        case .selectAll: panel.toggleMarkAll(includeDirs: Settings.selectAllIncludesDirs)
         case .unselectAll: panel.markAll(false)
         }
     }
@@ -1744,7 +1751,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌫ – nadřazený adresář, Tab – druhý panel, ⌘Tab (⌃Tab) – příkazová řádka
         (v ní Enter spustí s výstupem v prohlížeči, ⌘Enter / ⌃Enter v Terminalu),
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
-        ⌘A / ⌘D – označit vše / nic, psaní písmen – rychlé hledání,
+        ⌘A – označit vše (znovu = zrušit), ⌘D – nic, psaní písmen – rychlé hledání,
         ⌥← / ⌥→ – historie, ⌘\\ – kořen, ⌃H – skryté soubory.
         ⌘. (⌃.) – poslat aktuální adresář do druhého panelu (přepne se druhý panel).
         ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní panel).

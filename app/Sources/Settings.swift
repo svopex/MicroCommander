@@ -11,6 +11,7 @@ enum Settings {
     /// Oznámení o změně nastavení (hlavní okno se překreslí).
     static let changed = Notification.Name("MicroCommanderSettingsChanged")
     private static let middleBarKey = "showMiddleBar"
+    private static let selectAllDirsKey = "selectAllIncludesDirs"
 
     /// Zobrazovat svislou lištu příkazů mezi panely; výchozí ne = jen úzký
     /// dělicí pruh jako v Salamanderu.
@@ -21,6 +22,13 @@ enum Settings {
             NotificationCenter.default.post(name: changed, object: nil)
         }
     }
+
+    /// Označit vše (⌘A) označuje i adresáře; výchozí ne = jen soubory.
+    /// Zrušení označení platí vždy i pro adresáře.
+    static var selectAllIncludesDirs: Bool {
+        get { UserDefaults.standard.bool(forKey: selectAllDirsKey) }
+        set { UserDefaults.standard.set(newValue, forKey: selectAllDirsKey) }
+    }
 }
 
 /// Okno Nastavení (jedno pro celou aplikaci, otevírá se z menu ⌘,).
@@ -30,6 +38,8 @@ final class SettingsWindowController: NSWindowController {
 
     private let middleBarCheckbox = NSButton(checkboxWithTitle: "Zobrazovat lištu příkazů mezi panely",
                                              target: nil, action: nil)
+    private let selectDirsCheckbox = NSButton(checkboxWithTitle: "Označit vše (⌘A) označuje i adresáře",
+                                              target: nil, action: nil)
 
     /// Zobrazí okno Nastavení (vytvoří ho při prvním otevření).
     static func show() {
@@ -40,7 +50,7 @@ final class SettingsWindowController: NSWindowController {
     }
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 150),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 260),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Nastavení"
         window.isReleasedWhenClosed = false
@@ -54,23 +64,38 @@ final class SettingsWindowController: NSWindowController {
         fatalError("Není podporováno")
     }
 
-    /// Skupina „Vzhled“: zaškrtávátko a vysvětlivka pod ním.
+    /// Skupiny „Vzhled“ a „Označování“: zaškrtávátka s vysvětlivkou pod nimi.
     private func buildLayout() {
-        let heading = NSTextField(labelWithString: "Vzhled")
-        heading.font = NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)
+        // Nadpis skupiny a šedá vysvětlivka (sdílený vzhled obou skupin).
+        func heading(_ title: String) -> NSTextField {
+            let label = NSTextField(labelWithString: title)
+            label.font = NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)
+            return label
+        }
+        func note(_ text: String) -> NSTextField {
+            let label = NSTextField(wrappingLabelWithString: text)
+            label.font = NSFont.systemFont(ofSize: 11)
+            label.textColor = .secondaryLabelColor
+            label.widthAnchor.constraint(equalToConstant: 400).isActive = true
+            return label
+        }
         middleBarCheckbox.target = self
         middleBarCheckbox.action = #selector(middleBarToggled(_:))
-        let note = NSTextField(wrappingLabelWithString:
-            "Svislá lišta s ikonami operací (kopírovat, přesunout, smazat…) mezi levým a pravým panelem. "
-            + "Vypnutá lišta zůstane jen jako úzký dělicí pruh.")
-        note.font = NSFont.systemFont(ofSize: 11)
-        note.textColor = .secondaryLabelColor
+        selectDirsCheckbox.target = self
+        selectDirsCheckbox.action = #selector(selectDirsToggled(_:))
+        let middleBarNote = note("Svislá lišta s ikonami operací (kopírovat, přesunout, smazat…) mezi levým a pravým panelem. "
+                                 + "Vypnutá lišta zůstane jen jako úzký dělicí pruh.")
+        let selectDirsNote = note("Bez zaškrtnutí ⌘A označí jen soubory. Opakovaný stisk ⌘A zruší celé označení "
+                                  + "(vždy i adresáře).")
 
-        let stack = NSStackView(views: [heading, middleBarCheckbox, note])
+        let stack = NSStackView(views: [heading("Vzhled"), middleBarCheckbox, middleBarNote,
+                                        heading("Označování"), selectDirsCheckbox, selectDirsNote])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
         stack.setCustomSpacing(4, after: middleBarCheckbox)
+        stack.setCustomSpacing(18, after: middleBarNote)
+        stack.setCustomSpacing(4, after: selectDirsCheckbox)
         stack.translatesAutoresizingMaskIntoConstraints = false
         let content = NSView()
         content.addSubview(stack)
@@ -79,7 +104,6 @@ final class SettingsWindowController: NSWindowController {
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -20),
-            note.widthAnchor.constraint(equalToConstant: 400),
         ])
         window?.contentView = content
     }
@@ -87,9 +111,14 @@ final class SettingsWindowController: NSWindowController {
     /// Načte aktuální hodnoty voleb do ovládacích prvků.
     private func refresh() {
         middleBarCheckbox.state = Settings.showMiddleBar ? .on : .off
+        selectDirsCheckbox.state = Settings.selectAllIncludesDirs ? .on : .off
     }
 
     @objc private func middleBarToggled(_ sender: NSButton) {
         Settings.showMiddleBar = sender.state == .on
+    }
+
+    @objc private func selectDirsToggled(_ sender: NSButton) {
+        Settings.selectAllIncludesDirs = sender.state == .on
     }
 }

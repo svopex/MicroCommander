@@ -385,9 +385,10 @@ final class FileGridView: NSView {
         }
     }
 
-    /// ⌘A (Úpravy › Vybrat vše) označí všechny položky panelu.
+    /// ⌘A (Úpravy › Vybrat vše) = příkaz Označit vše (rozhoduje hlavní okno).
     override func selectAll(_ sender: Any?) {
-        owner?.panel.markAll(true)
+        guard let owner else { return }
+        owner.inputHandler?.panelView(owner, perform: .selectAll)
     }
 
     /// Rozpracované tažení (místo stisku myši).

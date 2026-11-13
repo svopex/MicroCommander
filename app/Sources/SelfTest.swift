@@ -102,7 +102,7 @@ final class UISelfTest {
         setvbuf(stdout, nil, _IOLBF, 0)
         // Test mění uložené volby (režimy zobrazení, skryté soubory) – po skončení je vrátíme.
         let defaults = UserDefaults.standard
-        let savedSettings = ["showHiddenFiles", "viewModeLeft", "viewModeRight"].map { ($0, defaults.object(forKey: $0)) }
+        let savedSettings = ["showHiddenFiles", "viewModeLeft", "viewModeRight", "selectAllIncludesDirs"].map { ($0, defaults.object(forKey: $0)) }
         restoreSettings = {
             for (key, value) in savedSettings {
                 if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
@@ -248,6 +248,28 @@ final class UISelfTest {
             try? applyAttributeChanges(AttributeChanges(readonly: false), to: [path], state: ProgressState())
             self.check(FileManager.default.isWritableFile(atPath: path), "změna atributů: vrácení zápisu")
         }))
+        // 11c) ⌘A označí jen soubory (výchozí Nastavení), druhé ⌘A označení zruší.
+        steps.append((ready: { self.windowFree }, action: {
+            Settings.selectAllIncludesDirs = false
+            try? FileManager.default.createDirectory(atPath: self.root + "/src/podadresar", withIntermediateDirectories: true)
+            self.controller.activate(left())
+            left().changePath(self.root + "/src")
+        }))
+        steps.append((ready: { left().items.contains { $0.name == "podadresar" } && !left().isLoading }, action: {
+            self.controller.focusActivePanel()
+            self.key(0, "a", [.command])
+        }))
+        steps.append((ready: { !left().marked.isEmpty }, action: {
+            let marked = left().marked
+            self.check(marked == ["a.txt", "b.txt", "c.log"], "⌘A označí jen soubory (\(marked.sorted()))")
+            self.key(0, "a", [.command])
+        }))
+        steps.append((ready: { left().marked.isEmpty }, action: {
+            self.check(true, "druhé ⌘A zruší označení")
+            try? FileManager.default.removeItem(atPath: self.root + "/src/podadresar")
+            left().reload()
+        }))
+        steps.append((ready: { !left().items.contains { $0.name == "podadresar" } && !left().isLoading }, action: {}))
         // 11b) F2 přejmenuje položku přímo v panelu (bez dialogu): c.log → renamed.log
         // (pak zpět, další kroky počítají s původními soubory).
         steps.append((ready: { self.windowFree }, action: {

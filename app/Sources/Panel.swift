@@ -419,25 +419,43 @@ final class PanelController: NSObject {
         delegate?.panelStateChanged(self)
     }
 
-    /// Označí všechny položky / zruší všechna označení.
+    /// Označí všechny položky včetně adresářů / zruší všechna označení.
     func markAll(_ on: Bool) {
         if on {
-            marked = Set(rows.filter { !$0.isParent }.map(\.item.name))
+            marked.formUnion(markAllTargets(includeDirs: true))
         } else {
             marked.removeAll()
         }
+        markingChanged()
+    }
+
+    /// ⌘A: je-li už vše (adresáře jen s includeDirs) označené, zruší celé
+    /// označení (vždy včetně adresářů), jinak vše označí (dříve označené zůstanou).
+    func toggleMarkAll(includeDirs: Bool) {
+        let targets = markAllTargets(includeDirs: includeDirs)
+        if targets.isEmpty || !targets.isSubset(of: marked) {
+            marked.formUnion(targets)
+        } else {
+            marked.removeAll()
+        }
+        markingChanged()
+    }
+
+    /// Po změně označení: překreslit panel a oznámit stav (informační řádek).
+    private func markingChanged() {
         view?.reloadTable()
         delegate?.panelStateChanged(self)
     }
 
+    /// Jména položek pro „označit vše“ (bez „..“, adresáře jen s includeDirs).
+    private func markAllTargets(includeDirs: Bool) -> Set<String> {
+        Set(rows.filter { !$0.isParent && (includeDirs || !$0.item.isDir) }.map(\.item.name))
+    }
+
     /// Invertuje označení souborů (Num *); adresáře jen s includeDirs.
     func invertMarks(includeDirs: Bool) {
-        for row in rows where !row.isParent {
-            if row.item.isDir && !includeDirs { continue }
-            if marked.contains(row.item.name) { marked.remove(row.item.name) } else { marked.insert(row.item.name) }
-        }
-        view?.reloadTable()
-        delegate?.panelStateChanged(self)
+        marked.formSymmetricDifference(markAllTargets(includeDirs: includeDirs))
+        markingChanged()
     }
 
     /// Nastaví označení přesně na zadaná jména (porovnání adresářů).
