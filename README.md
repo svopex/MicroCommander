@@ -119,6 +119,7 @@ tools/make-icon.swift       # vykreslí ikonu: oranžový disk s tlapkou mloka
 tests/main.swift            # end-to-end smoke test FFI (Swift CLI)
 Makefile                    # build celé aplikace jedním příkazem
 fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)
+CODESIGNING.md              # vlastní certifikát pro podpis (trvalá oprávnění macOS)
 samandarin/                 # původní Windows zdrojáky (reference, nemění se)
 ```
 
@@ -139,6 +140,11 @@ make clean      # smaže build/
 Nastavení (režimy zobrazení, pořadí disků, skryté soubory, poloha okna) se ukládá
 do předvoleb `com.github.svopex.microcommander`; při prvním spuštění se jednorázově
 převezme z dřívější domény `eu.krtkovo.salamander` (z doby názvu Salamander).
+
+**Podpis:** `make` podepíše aplikaci certifikátem `MicroCommander Dev` z klíčenky
+(pokud existuje), aby macOS po každém buildu znovu nežádal o přístup ke složkám
+(Stahování apod.). Vytvoření certifikátu popisuje [CODESIGNING.md](CODESIGNING.md);
+bez něj zůstane ad-hoc podpis.
 
 Aplikace se spouští jako `build/MicroCommander.app`; knihovna `libsalcore.dylib`
 je součástí bundle (`Contents/Frameworks`, načítá se přes `@rpath`).
@@ -162,7 +168,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   příkazové řádky, stejně jako PgUp/PgDn;
   ⌥← / ⌥→ – historie; ⌘\ – kořen; ⌘. (⌃.) – poslat aktuální adresář do druhého panelu (přepne se druhý panel);
   ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní; oba směry fungují
-  i v archivu a na FTP/SFTP – panel převezme i zanoření, „..“ vede ven); ⇧F7 / ⌘G / dvojklik na řádek adresáře – zadat cestu
+  i v archivu a na FTP/SFTP – panel převezme i zanoření, „..“ vede ven); ⇧F7 / ⌘G / dvojklik na řádek adresáře – zadat cestu;
+  pravé tlačítko na řádku adresáře – Kopírovat cestu do schránky / Změnit adresář…;
+  ⌥⌘C (Úpravy › Kopírovat cestu adresáře, ⌃⌥Insert) – cesta aktuálního adresáře
+  aktivního panelu do schránky (u archivu/FTP tak, jak ji ukazuje řádek adresáře)
 - **Označování:** Space / Insert – označit a posunout; ⇧↑↓, ⇧PgUp/PgDn,
   ⇧Home/End, ⌘klik, ⇧klik; ⌘A / ⌘D – vše / nic; Num + / Num − (⌘= / ⌘−) –
   podle masky; Num * – invertovat. Operace pracují s označenými položkami,

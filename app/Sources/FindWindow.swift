@@ -1517,8 +1517,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     private func copyText(_ transform: (FoundRow) -> String) {
         let text = selectedRows.map(transform).joined(separator: "\n")
         guard !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        copyTextToPasteboard(text)
     }
 
     @objc private func copyFullNameAsText(_ sender: Any?) {

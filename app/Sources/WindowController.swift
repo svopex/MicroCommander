@@ -511,6 +511,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             if panel.quickSearch != nil { panel.endQuickSearch(); return true }
             commandLine.field.stringValue = ""
             return true
+        case KeyCode.insert where flags == [.control, .option]:
+            // Ctrl+Alt+Insert (Salamander): cesta aktuálního adresáře do schránky.
+            perform(.copyDirPath)
+            return true
         case KeyCode.space where flags.isEmpty && panel.quickSearch == nil,
              KeyCode.insert:
             // Space/Insert: označit položku a posunout kurzor (Insert z Windows).
@@ -808,8 +812,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     @objc private func copyPathToPasteboard(_ sender: NSMenuItem) {
         guard let path = sender.representedObject as? String else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(path, forType: .string)
+        copyTextToPasteboard(path)
     }
 
     /// Ukáže položku v panelu (Ukázat v okně Hledat): aktivní panel přejde do
@@ -1064,6 +1067,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .sameDir: commandSameDir()
         case .sameDirOther: commandSameDirOther()
         case .toggleHidden: toggleHiddenFiles()
+        // Cesta tak, jak ji ukazuje řádek adresáře (u archivu/FTP i s popiskem VFS).
+        case .copyDirPath: copyTextToPasteboard(activePanel.displayPath)
         case .viewMenu: showViewModeMenu()
         case .viewBrief, .viewDetailed, .viewIcons, .viewThumbnails, .viewTiles, .viewTypes:
             if let mode = command.viewMode { setViewMode(mode, for: panel) }
@@ -1847,6 +1852,12 @@ enum KeyLog {
             FileManager.default.createFile(atPath: path, contents: Data(line.utf8))
         }
     }
+}
+
+/// Zapíše text do systémové schránky (nahradí její obsah).
+func copyTextToPasteboard(_ text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
 }
 
 extension NSAlert {

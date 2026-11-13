@@ -94,6 +94,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Kopírovat", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Vložit", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Vybrat vše", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(.separator())
+        // Cesta aktuálního adresáře aktivního panelu (Ctrl+Alt+Insert v Salamanderu).
+        editMenu.addItem(makeItem(("Kopírovat cestu adresáře", .copyDirPath, "c", [.command, .option]), controller))
 
         let fileEntries: [Entry] = [
             ("Zobrazit", .view, KeyCode.functionKeyString(3), []),
@@ -184,14 +187,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 menu.addItem(.separator())
                 continue
             }
-            let item = NSMenuItem(title: entry.title, action: #selector(MainWindowController.menuCommand(_:)),
-                                  keyEquivalent: entry.key)
-            item.keyEquivalentModifierMask = entry.modifiers
-            item.tag = MainWindowController.menuCommandIndex(entry.command)
-            item.target = controller
-            menu.addItem(item)
+            menu.addItem(makeItem(entry, controller))
         }
         return menu
+    }
+
+    /// Položka menu volající příkaz hlavního okna (tag = index příkazu).
+    /// - Parameters:
+    ///   - entry: titulek, příkaz, klávesa a modifikátory
+    ///   - controller: hlavní okno, které příkaz provede
+    private func makeItem(_ entry: (title: String, command: Command, key: String, modifiers: NSEvent.ModifierFlags),
+                          _ controller: MainWindowController) -> NSMenuItem {
+        let item = NSMenuItem(title: entry.title, action: #selector(MainWindowController.menuCommand(_:)),
+                              keyEquivalent: entry.key)
+        item.keyEquivalentModifierMask = entry.modifiers
+        item.tag = MainWindowController.menuCommandIndex(entry.command)
+        item.target = controller
+        return item
     }
 
     private func addSubmenu(_ menu: NSMenu, title: String, to mainMenu: NSMenu) {

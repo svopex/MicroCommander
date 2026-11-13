@@ -21,6 +21,10 @@ APPDIR := $(BUILD)/MicroCommander.app
 BIN := $(APPDIR)/Contents/MacOS/MicroCommander
 DYLIB := $(CORE)/target/release/libsalcore.dylib
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+# Identita pro podpis aplikace (viz CODESIGNING.md). Stálý podpis zachová
+# oprávnění macOS (přístup ke Stahování, Dokumentům…) i po novém buildu;
+# bez certifikátu v klíčence zůstane ad-hoc podpis linkeru.
+SIGN_IDENTITY ?= MicroCommander Dev
 
 .PHONY: all app release test smoke selftest keycheck sftp-test icon clean run
 
@@ -62,6 +66,14 @@ app: release
 	cp $(APP)/Info.plist $(APPDIR)/Contents/Info.plist
 	@mkdir -p $(APPDIR)/Contents/Resources
 	cp $(APP)/AppIcon.icns $(APPDIR)/Contents/Resources/AppIcon.icns
+	# Podpis stálou identitou (nejdřív knihovna, pak bundle), pokud je certifikát v klíčence.
+	@if security find-identity -p codesigning | grep -q "\"$(SIGN_IDENTITY)\""; then \
+		codesign --force --timestamp=none -s "$(SIGN_IDENTITY)" $(APPDIR)/Contents/Frameworks/libsalcore.dylib && \
+		codesign --force --timestamp=none -s "$(SIGN_IDENTITY)" $(APPDIR) && \
+		echo "Podepsáno identitou: $(SIGN_IDENTITY)"; \
+	else \
+		echo "Certifikát „$(SIGN_IDENTITY)“ nenalezen – ad-hoc podpis (viz CODESIGNING.md)."; \
+	fi
 	# Finder a Dock drží ikonu v mezipaměti LaunchServices – změna času balíčku
 	# a nová registrace ji obnoví (jinak by zůstala stará / prázdná ikona).
 	touch $(APPDIR)
