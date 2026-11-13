@@ -548,13 +548,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             return true
         case KeyCode.backspace:
             if panel.quickSearch != nil { panel.quickSearchBackspace(); return true }
-            if flags.contains(.command) { perform(.delete); return true }
-            if flags.contains(.shift) || flags.contains(.control) { panel.goRoot(); return true }
+            // ⌘⌫ / ⇧⌫ mažou (viz KeyCode.deleteIntent), ⌃⌫ jde do kořene, holé ⌫ nahoru.
+            if let toTrash = KeyCode.deleteIntent(keyCode: event.keyCode, flags: flags) {
+                perform(toTrash ? .delete : .deletePermanent)
+                return true
+            }
+            if flags.contains(.control) { panel.goRoot(); return true }
             panel.goUp()
             return true
         case KeyCode.forwardDelete:
-            // Delete maže do koše, ⇧Delete trvale (jako F8 / ⇧F8).
-            perform(flags.contains(.shift) ? .deletePermanent : .delete)
+            // ⌦ do koše, ⇧⌦ trvale (jako F8 / ⇧F8).
+            let toTrash = KeyCode.deleteIntent(keyCode: event.keyCode, flags: flags) ?? true
+            perform(toTrash ? .delete : .deletePermanent)
             return true
         case KeyCode.escape:
             if panel.quickSearch != nil { panel.endQuickSearch(); return true }
@@ -1738,7 +1743,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní panel).
 
         F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout,
-        F7 nový adresář, F8 do koše (⇧F8 trvale), F9 terminál, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
+        F7 nový adresář, F8 / ⌦ / ⌘⌫ do koše (⇧F8 / ⇧⌦ / ⇧⌫ trvale), F9 terminál, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
         ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
         ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌘F1 / ⌃F1 informace o jednotce,
         ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
@@ -2008,6 +2013,22 @@ enum KeyCode {
             return value
         }
         return nil
+    }
+
+    /// Mazací klávesa (sdílí panel i okno hledání): ⌦ do koše, ⇧⌦ trvale;
+    /// Macová klávesa „delete“ (⌫) maže jen s modifikátorem – ⌘⌫ do koše
+    /// (jako Finder), ⇧⌫ trvale (obdoba ⇧Delete z Windows).
+    /// - Parameters:
+    ///   - keyCode: kód stisknuté klávesy
+    ///   - flags: relevantní modifikátory (⇧ ⌃ ⌥ ⌘)
+    /// - Returns: true = do koše, false = trvale, nil = nejde o mazání
+    static func deleteIntent(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool? {
+        switch keyCode {
+        case forwardDelete: return !flags.contains(.shift)
+        case backspace where flags.contains(.command): return true
+        case backspace where flags.contains(.shift): return false
+        default: return nil
+        }
     }
 
     /// Číslice 0–9 stisknutá jen s ⌘; nil = jiná klávesa nebo jiné modifikátory.
