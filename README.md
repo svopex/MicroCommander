@@ -296,7 +296,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   tlačítkem **OK** (Zrušit je zahodí).
   - **Obecné:** Před ukončením uložit adresáře panelů (výchozí zapnuto,
     předvolba `savePanelPaths`; vypnuté = po spuštění domov a „/“).
-  - **Panely:** Zobrazovat skryté soubory a adresáře (jako ⌃H); Označit vše (⌘A)
+  - **Panely:** Zobrazovat skryté soubory a adresáře (jako ⌃H, výchozí vypnuto,
+    předvolba `showHiddenFiles`); Označit vše (⌘A)
     a Invertovat označení i s adresáři – výchozí zapnuto (vypnuté = ⌘A označí
     a Num * invertuje jen soubory), zrušení označení platí vždy i pro adresáře
     (předvolba `selectAllIncludesDirs`).

@@ -526,7 +526,7 @@ final class UIKeyCheck {
         // Snímek odlišný od výchozího ve všech volbách.
         var custom = SettingsSnapshot()
         custom.savePanelPaths = false
-        custom.showHiddenFiles = false
+        custom.showHiddenFiles = true
         custom.markingIncludesDirs = false
         custom.showMiddleBar = true
         custom.colorScheme = .norton

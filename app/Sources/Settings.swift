@@ -106,7 +106,7 @@ struct SettingsSnapshot: Codable, Equatable {
     /// Obecné: před ukončením uložit adresáře panelů.
     var savePanelPaths = true
     /// Panely: zobrazovat skryté soubory a adresáře.
-    var showHiddenFiles = true
+    var showHiddenFiles = false
     /// Panely: Označit vše a Invertovat označení i s adresáři.
     var markingIncludesDirs = true
     /// Hlavní okno: lišta příkazů mezi panely.

@@ -99,7 +99,7 @@ final class PanelController: NSObject {
     private(set) var sortKey: SortKey = .name
     private(set) var sortAscending = true
     /// Zobrazovat skryté soubory.
-    var showHidden = true {
+    var showHidden = SettingsSnapshot.defaults.showHiddenFiles {
         didSet { rebuildRows(keepFocus: true) }
     }
     /// Text rychlého hledání (nil = neaktivní).
