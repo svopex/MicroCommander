@@ -113,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Kopírovat…", .copy, KeyCode.functionKeyString(5), []),
             ("Přesunout…", .move, KeyCode.functionKeyString(6), []),
             ("Přejmenovat…", .rename, KeyCode.functionKeyString(2), []),
+            ("Změnit atributy…", .changeAttributes, KeyCode.functionKeyString(2), [.command]),
             ("Smazat…", .delete, KeyCode.functionKeyString(8), []),
             ("Nový adresář…", .mkdir, KeyCode.functionKeyString(7), []),
             nil,

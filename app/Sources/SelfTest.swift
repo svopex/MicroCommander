@@ -226,6 +226,28 @@ final class UISelfTest {
             self.check(self.controller.window?.attachedSheet != nil, "F11 otevře připojení FTP/SFTP")
             self.key(KeyCode.escape, "\u{1b}")
         }))
+        // 11a) Změna atributů (jádro dialogu ⌘F2): jen pro čtení, skrytý a datum změny,
+        // pak zpět na původní stav.
+        steps.append((ready: { self.windowFree }, action: {
+            let path = self.root + "/src/a.txt"
+            let date = Date(timeIntervalSince1970: 1_000_000_000)
+            var changes = AttributeChanges()
+            changes.readonly = true
+            changes.hidden = true
+            changes.modified = date
+            try? applyAttributeChanges(changes, to: [path], state: ProgressState())
+            let values = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.isHiddenKey, .contentModificationDateKey])
+            let writable = FileManager.default.isWritableFile(atPath: path)
+            self.check(!writable && values?.isHidden == true && values?.contentModificationDate == date,
+                       "změna atributů: jen pro čtení, skrytý, datum změny")
+            // Soubor jen pro čtení, mění se jen Skrytý: musí zůstat jen pro čtení.
+            try? applyAttributeChanges(AttributeChanges(hidden: false), to: [path], state: ProgressState())
+            let hiddenAfter = (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.isHiddenKey]))?.isHidden
+            self.check(hiddenAfter == false && !FileManager.default.isWritableFile(atPath: path),
+                       "změna atributů: jen Skrytý u souboru jen pro čtení")
+            try? applyAttributeChanges(AttributeChanges(readonly: false), to: [path], state: ProgressState())
+            self.check(FileManager.default.isWritableFile(atPath: path), "změna atributů: vrácení zápisu")
+        }))
         // 11b) F2 přejmenuje položku přímo v panelu (bez dialogu): c.log → renamed.log
         // (pak zpět, další kroky počítají s původními soubory).
         steps.append((ready: { self.windowFree }, action: {

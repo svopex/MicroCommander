@@ -103,10 +103,10 @@ final class FindAdvancedController: NSWindowController {
     private var result: FindAdvanced
     private var completion: ((FindAdvanced?) -> Void)?
 
-    private let readonlyBox = FindAdvancedController.triState("&Jen pro čtení")
-    private let hiddenBox = FindAdvancedController.triState("&Skrytý")
-    private let encryptedBox = FindAdvancedController.triState("Ši&frovaný")
-    private let directoryBox = FindAdvancedController.triState("Ad&resář")
+    private let readonlyBox = NSButton.triStateCheckbox("&Jen pro čtení")
+    private let hiddenBox = NSButton.triStateCheckbox("&Skrytý")
+    private let encryptedBox = NSButton.triStateCheckbox("Ši&frovaný")
+    private let directoryBox = NSButton.triStateCheckbox("Ad&resář")
     private let minSizeBox = NSButton(checkboxWithTitle: "Nejméně:", target: nil, action: nil)
     private let minSizeField = NSTextField()
     private let minUnitPopup = NSPopUpButton()
@@ -122,13 +122,6 @@ final class FindAdvancedController: NSWindowController {
     private let fromPicker = NSDatePicker()
     private let toBox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     private let toPicker = NSDatePicker()
-
-    /// Třístavové zaškrtávací pole atributu (smíšený stav = ignorovat).
-    private static func triState(_ title: String) -> NSButton {
-        let box = NSButton(checkboxWithTitle: title.replacingOccurrences(of: "&", with: ""), target: nil, action: nil)
-        box.allowsMixedState = true
-        return box
-    }
 
     /// Otevře dialog jako sheet.
     /// - Parameters:
@@ -161,48 +154,35 @@ final class FindAdvancedController: NSWindowController {
     /// Rozvržení podle IDD_FINDADVANCED (Atributy, Velikost souboru, Datum a čas).
     private func buildContent() {
         let content = FlippedView(frame: NSRect(x: 0, y: 0, width: 400, height: 404))
-        func section(_ title: String, y: CGFloat) {
-            let label = NSTextField(labelWithString: title)
-            label.frame = NSRect(x: 12, y: y, width: 120, height: 17)
-            label.sizeToFit()
-            content.addSubview(label)
-            let line = NSBox(frame: NSRect(x: label.frame.maxX + 6, y: y + 9, width: 388 - label.frame.maxX - 6, height: 1))
-            line.boxType = .separator
-            content.addSubview(line)
-        }
-        func place(_ view: NSView, _ frame: NSRect) {
-            view.frame = frame
-            content.addSubview(view)
-        }
 
         // Atributy: Windows-only atributy (Archivovat, Systémový, Komprimovaný)
         // macOS nemá – zobrazí se jako nedostupné, aby rozvržení odpovídalo originálu.
-        section("Atributy", y: 10)
+        content.addSection("Atributy", y: 10)
         let archiveBox = NSButton(checkboxWithTitle: "Archivovat", target: nil, action: nil)
         let systemBox = NSButton(checkboxWithTitle: "Systémový", target: nil, action: nil)
         let compressedBox = NSButton(checkboxWithTitle: "Komprimovaný", target: nil, action: nil)
         for box in [archiveBox, systemBox, compressedBox] { box.isEnabled = false }
-        place(archiveBox, NSRect(x: 24, y: 32, width: 120, height: 18))
-        place(hiddenBox, NSRect(x: 146, y: 32, width: 110, height: 18))
-        place(compressedBox, NSRect(x: 260, y: 32, width: 130, height: 18))
-        place(readonlyBox, NSRect(x: 24, y: 54, width: 120, height: 18))
-        place(systemBox, NSRect(x: 146, y: 54, width: 110, height: 18))
-        place(encryptedBox, NSRect(x: 260, y: 54, width: 130, height: 18))
-        place(directoryBox, NSRect(x: 24, y: 76, width: 120, height: 18))
+        content.place(archiveBox, NSRect(x: 24, y: 32, width: 120, height: 18))
+        content.place(hiddenBox, NSRect(x: 146, y: 32, width: 110, height: 18))
+        content.place(compressedBox, NSRect(x: 260, y: 32, width: 130, height: 18))
+        content.place(readonlyBox, NSRect(x: 24, y: 54, width: 120, height: 18))
+        content.place(systemBox, NSRect(x: 146, y: 54, width: 110, height: 18))
+        content.place(encryptedBox, NSRect(x: 260, y: 54, width: 130, height: 18))
+        content.place(directoryBox, NSRect(x: 24, y: 76, width: 120, height: 18))
 
         // Velikost souboru: nejméně / nejvýše s jednotkou.
-        section("Velikost souboru", y: 106)
+        content.addSection("Velikost souboru", y: 106)
         minUnitPopup.addItems(withTitles: FindAdvanced.sizeUnits)
         maxUnitPopup.addItems(withTitles: FindAdvanced.sizeUnits)
-        place(minSizeBox, NSRect(x: 24, y: 130, width: 110, height: 18))
-        place(minSizeField, NSRect(x: 146, y: 128, width: 120, height: 22))
-        place(minUnitPopup, NSRect(x: 274, y: 126, width: 114, height: 26))
-        place(maxSizeBox, NSRect(x: 24, y: 158, width: 110, height: 18))
-        place(maxSizeField, NSRect(x: 146, y: 156, width: 120, height: 22))
-        place(maxUnitPopup, NSRect(x: 274, y: 154, width: 114, height: 26))
+        content.place(minSizeBox, NSRect(x: 24, y: 130, width: 110, height: 18))
+        content.place(minSizeField, NSRect(x: 146, y: 128, width: 120, height: 22))
+        content.place(minUnitPopup, NSRect(x: 274, y: 126, width: 114, height: 26))
+        content.place(maxSizeBox, NSRect(x: 24, y: 158, width: 110, height: 18))
+        content.place(maxSizeField, NSRect(x: 146, y: 156, width: 120, height: 22))
+        content.place(maxUnitPopup, NSRect(x: 274, y: 154, width: 114, height: 26))
 
         // Datum a čas: ignorovat / změněno během / změněno od–do.
-        section("Datum a čas", y: 192)
+        content.addSection("Datum a čas", y: 192)
         for radio in [ignoreRadio, duringRadio, fromToRadio] {
             radio.target = self
             radio.action = #selector(timeModeChanged(_:))
@@ -212,35 +192,35 @@ final class FindAdvancedController: NSWindowController {
             picker.datePickerStyle = .textFieldAndStepper
             picker.datePickerElements = [.yearMonthDay, .hourMinuteSecond]
         }
-        place(ignoreRadio, NSRect(x: 24, y: 216, width: 200, height: 18))
-        place(duringRadio, NSRect(x: 24, y: 242, width: 120, height: 18))
-        place(duringField, NSRect(x: 146, y: 240, width: 120, height: 22))
-        place(duringUnitPopup, NSRect(x: 274, y: 238, width: 114, height: 26))
-        place(fromToRadio, NSRect(x: 24, y: 270, width: 120, height: 18))
-        place(fromBox, NSRect(x: 146, y: 270, width: 20, height: 18))
-        place(fromPicker, NSRect(x: 168, y: 267, width: 220, height: 24))
+        content.place(ignoreRadio, NSRect(x: 24, y: 216, width: 200, height: 18))
+        content.place(duringRadio, NSRect(x: 24, y: 242, width: 120, height: 18))
+        content.place(duringField, NSRect(x: 146, y: 240, width: 120, height: 22))
+        content.place(duringUnitPopup, NSRect(x: 274, y: 238, width: 114, height: 26))
+        content.place(fromToRadio, NSRect(x: 24, y: 270, width: 120, height: 18))
+        content.place(fromBox, NSRect(x: 146, y: 270, width: 20, height: 18))
+        content.place(fromPicker, NSRect(x: 168, y: 267, width: 220, height: 24))
         let toLabel = NSTextField(labelWithString: "Do:")
         toLabel.alignment = .right
-        place(toLabel, NSRect(x: 100, y: 300, width: 40, height: 17))
-        place(toBox, NSRect(x: 146, y: 299, width: 20, height: 18))
-        place(toPicker, NSRect(x: 168, y: 296, width: 220, height: 24))
+        content.place(toLabel, NSRect(x: 100, y: 300, width: 40, height: 17))
+        content.place(toBox, NSRect(x: 146, y: 299, width: 20, height: 18))
+        content.place(toPicker, NSRect(x: 168, y: 296, width: 220, height: 24))
         let note = NSTextField(labelWithString: "Poznámka: nezaškrtnuté hodnoty se ignorují")
         note.alignment = .right
         note.textColor = .secondaryLabelColor
-        place(note, NSRect(x: 12, y: 328, width: 376, height: 17))
+        content.place(note, NSRect(x: 12, y: 328, width: 376, height: 17))
 
         // Tlačítka: Obnovit (výchozí hodnoty), OK, Storno.
         let line = NSBox(frame: NSRect(x: 12, y: 354, width: 376, height: 1))
         line.boxType = .separator
         content.addSubview(line)
         let resetButton = NSButton(title: "Obnovit", target: self, action: #selector(resetClicked(_:)))
-        place(resetButton, NSRect(x: 12, y: 366, width: 100, height: 28))
+        content.place(resetButton, NSRect(x: 12, y: 366, width: 100, height: 28))
         let okButton = NSButton(title: "OK", target: self, action: #selector(okClicked(_:)))
         okButton.keyEquivalent = "\r"
-        place(okButton, NSRect(x: 184, y: 366, width: 100, height: 28))
+        content.place(okButton, NSRect(x: 184, y: 366, width: 100, height: 28))
         let cancelButton = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
         cancelButton.keyEquivalent = "\u{1b}"
-        place(cancelButton, NSRect(x: 288, y: 366, width: 100, height: 28))
+        content.place(cancelButton, NSRect(x: 288, y: 366, width: 100, height: 28))
         window?.contentView = content
     }
 
@@ -337,6 +317,36 @@ final class FindAdvancedController: NSWindowController {
 /// Pohled s počátkem vlevo nahoře (snazší rozvržení dialogů shora dolů).
 final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+
+    /// Nadpis oddílu dialogu s vodorovnou čarou do pravého okraje (jako v Salamanderu).
+    /// - Parameters:
+    ///   - title: text nadpisu
+    ///   - y: svislá poloha nadpisu
+    func addSection(_ title: String, y: CGFloat) {
+        let label = NSTextField(labelWithString: title)
+        label.frame = NSRect(x: 12, y: y, width: 200, height: 17)
+        label.sizeToFit()
+        addSubview(label)
+        let line = NSBox(frame: NSRect(x: label.frame.maxX + 6, y: y + 9, width: bounds.width - 12 - label.frame.maxX - 6, height: 1))
+        line.boxType = .separator
+        addSubview(line)
+    }
+
+    /// Přidá prvek s danou polohou.
+    func place(_ view: NSView, _ frame: NSRect) {
+        view.frame = frame
+        addSubview(view)
+    }
+}
+
+extension NSButton {
+    /// Třístavové zaškrtávací pole (smíšený stav = neměnit / ignorovat);
+    /// znak „&“ (akcelerátor z předlohy Salamandera) se z titulku odstraní.
+    static func triStateCheckbox(_ title: String) -> NSButton {
+        let box = NSButton(checkboxWithTitle: title.replacingOccurrences(of: "&", with: ""), target: nil, action: nil)
+        box.allowsMixedState = true
+        return box
+    }
 }
 
 // MARK: - Seznam nalezených položek

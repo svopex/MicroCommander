@@ -14,7 +14,7 @@ enum Command: CaseIterable {
     case terminal, quit, connect, disconnect
     case sortName, sortExt, sortTime, sortSize, refresh, compare
     case driveLeft, driveRight, editPlaces, pack, unpack, find, calcSize
-    case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden, copyDirPath
+    case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden, copyDirPath, changeAttributes
     case selectMask, unselectMask, invertMarks, selectAll, unselectAll
     case viewMenu, viewBrief, viewDetailed, viewIcons, viewThumbnails, viewTiles, viewTypes
 
@@ -403,7 +403,7 @@ final class FunctionKeyBar: NSView {
         .shift: [("", nil), ("", nil), ("", nil), ("Nový soub.", .newFile),
                  ("", nil), ("Přejmen.", .rename), ("Změnit adr.", .changeDir), ("Smazat", .delete),
                  ("", nil), ("", nil), ("", nil), ("", nil)],
-        .control: [("", nil), ("", nil), ("Jméno", .sortName), ("Přípona", .sortExt),
+        .control: [("", nil), ("Atributy", .changeAttributes), ("Jméno", .sortName), ("Přípona", .sortExt),
                    ("Čas", .sortTime), ("Velikost", .sortSize), ("", nil), ("", nil),
                    ("Obnovit", .refresh), ("Porovnat", .compare), ("", nil), ("", nil)],
         .option: [("Levý disk", .driveLeft), ("Pravý disk", .driveRight), ("Zobrazit", .view), ("Ukončit", .quit),

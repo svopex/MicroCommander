@@ -1135,6 +1135,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .sameDir: commandSameDir()
         case .sameDirOther: commandSameDirOther()
         case .toggleHidden: toggleHiddenFiles()
+        case .changeAttributes: commandChangeAttributes()
         // Cesta tak, jak ji ukazuje řádek adresáře (u archivu/FTP i s popiskem VFS).
         case .copyDirPath: copyTextToPasteboard(activePanel.displayPath)
         case .viewMenu: showViewModeMenu()
@@ -1297,6 +1298,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.markAll(false)
             self?.leftPanel.reload()
             self?.rightPanel.reload()
+        }
+    }
+
+    /// ⌘F2 / ⌃F2 – změna atributů označených položek (jinak položky pod kurzorem):
+    /// jen pro čtení, skrytý, časy změny/vytvoření/otevření, i rekurzivně.
+    private func commandChangeAttributes() {
+        let panel = activePanel
+        let items = panel.operationItems
+        guard !items.isEmpty, let window else { return }
+        let paths = items.compactMap { panel.localPath(of: $0.name) }
+        guard paths.count == items.count else {
+            showAlert(title: "Změnit atributy", text: "Atributy lze měnit jen na lokálním disku.")
+            return
+        }
+        AttributesDialog.run(on: window, items: items, firstPath: paths[0]) { [weak self] changes in
+            guard let self, let changes else { return }
+            self.beginProgress(title: "Změna atributů") { state in
+                try applyAttributeChanges(changes, to: paths, state: state)
+            } completion: { [weak self] result in
+                guard let self else { return }
+                self.endProgress()
+                if case .failure(let error) = result {
+                    self.showErrorUnlessCancelled(title: "Změnit atributy", error)
+                }
+                self.reloadPanels()
+            }
         }
     }
 
@@ -1689,7 +1716,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
         F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout,
         F7 nový adresář, F8 smazat, F9 terminál, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
-        ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
+        ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
         ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
 
         Tip: na klávesnici Macu F-klávesy vyžadují Fn, nebo zapněte

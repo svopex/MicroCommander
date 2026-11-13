@@ -102,6 +102,7 @@ app/                        # tenké UI pro macOS
   Sources/WindowController.swift  # hlavní okno, příkazy, směrování kláves
   Sources/Dialogs.swift     # progress, správa FTP/SFTP serverů,
                             #   interní prohlížeč, nabídka disků
+  Sources/Attributes.swift  # dialog Změnit atributy (⌘F2 / ⌃F2)
   Sources/FindWindow.swift  # okno Vyhledat soubory a adresáře (⌃F/⌥F7)
                             #   a dialog Upřesnit možnosti
   Sources/Servers.swift     # uložené FTP/SFTP servery (UserDefaults),
@@ -194,7 +195,11 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   potvrdí), F3 prohlížeč, F4 editor, F5
   kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 smazat,
   F9 terminál v adresáři, F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
-  zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌃F3–⌃F6 řazení podle
+  zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; **⌘F2 / ⌃F2 změnit atributy**
+  (dialog podle Salamandera: Jen pro čtení a Skrytý třístavově – smíšený stav
+  = neměnit, změna data a času Změněno / Vytvořeno / Otevřeno, Nastavit
+  aktuální, Včetně podadresářů; označené položky, jinak položka pod kurzorem;
+  jen lokální disk; Windows atributy jsou vidět, ale nedostupné); ⌃F3–⌃F6 řazení podle
   jména/přípony/času/velikosti (opakovaně obrací), ⌃F9 obnovit, ⌃F10 porovnat
   adresáře (označí odlišné soubory); ⌥F1/⌥F2 disk vlevo/vpravo, ⌥F5 zabalit do
   ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat (také ⌃F), ⌥F10 obsazené místo.

@@ -331,8 +331,10 @@ final class ProgressState {
         return (done, total)
     }
 
-    /// Aktualizace z C callbacku (pracovní vlákno); false = požadavek zrušení.
-    fileprivate func update(done: UInt64, total: UInt64) -> Bool {
+    /// Aktualizace průběhu z pracovního vlákna (C callback i operace ve Swiftu);
+    /// false = požadavek zrušení.
+    @discardableResult
+    func update(done: UInt64, total: UInt64) -> Bool {
         lock.lock()
         self.done = done
         self.total = total
