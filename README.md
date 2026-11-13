@@ -60,7 +60,12 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   skupiny oddělené `;`, vyloučení za `|`; maska bez `*`, `?` a `.` hledá jména,
   která ji obsahují), volitelně bez podadresářů a s hledáním v obsahu souborů
   (text, HEX, rozlišení velikosti písmen, celá slova, regulární výraz – crate
-  `regex`); nečitelné adresáře a soubory se přeskočí a spočítají. Vytváření ZIP archivů (`pack_zip`,
+  `regex`); nečitelné adresáře a soubory se přeskočí a spočítají. Volitelně
+  i **hledání v archivech** na lokálním disku (`SAL_FIND_ARCHIVES`): soubor
+  s příponou `.zip`, `.jar`, `.tar`, `.tgz` nebo `.tar.gz` se otevře jako VFS
+  (formát se ověří podle obsahu) a projde stejnou maskou i hledáním v obsahu;
+  nález nese cestu archivu a cestu uvnitř něj. Obsah se v archivu čte v pořadí
+  dat (TAR.GZ se tak dekomprimuje jedním průchodem). Vytváření ZIP archivů (`pack_zip`,
   FFI `sal_pack_zip`) včetně adresářové struktury. **Zaheslované ZIP:** čtení
   AES-128/192/256 (WinZip AE-1/AE-2) i ZipCrypto; vytváření s AES-256
   (doporučeno) nebo ZipCrypto. Výpis šifrovaného
@@ -380,6 +385,19 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   ⌃⌘C cestu + název / název / cestu jako text (i ⌥Insert varianty), ⌘A vybrat vše.
   Dokud je okno aktivní, hlavní menu nahradí menu dialogu (Soubory, Příkazy,
   Upravit, Zobrazit, Možnosti). V archivu či na FTP/SFTP se hledá ve VFS panelu.
+  **Hledat v archivech** (jen při hledání na lokálním disku, předvolba
+  `findArchives`): prohledá i obsah archivů ZIP, TAR a TAR.GZ – soubory
+  s příponou `.zip`, `.jar`, `.tar`, `.tgz`, `.tar.gz` – jménem i volbou Hledat
+  v souboru. Archiv se chová jako adresář: sloupec Cesta ukazuje cestu archivu
+  a cestu uvnitř, podadresáře archivu se řídí volbou Včetně podadresářů.
+  Položku z archivu lze Ukázat (panel vstoupí do archivu, „..“ vede zpět
+  k jeho souboru), Otevřít a Zobrazit (rozbalí se do dočasného adresáře, na
+  heslo se zeptá až zde); Zobrazit ve Finderu ukáže soubor archivu. Upravit,
+  Odstranit a kopírování souborů do schránky pro ni nejsou (archivy jsou jen
+  pro čtení). Při hledání v obsahu se zaheslované soubory přeskočí a započítají
+  mezi nečitelné položky stejně jako poškozený archiv; archiv uvnitř archivu
+  se neotevírá. Velké archivy hledání zpomalí – každý se musí otevřít a u TAR.GZ
+  celý dekomprimovat.
   Nastavení a historie: předvolby `find*` (`findNamedHistory`,
   `findLookInHistory`, `findContainingHistory`, `findAdvanced`, …).
 - **Přetažení myší ven z aplikace:** položku (nebo všechny označené, pokud se
@@ -428,18 +446,20 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - FTP: souběžné příkazy otevírají další spojení (server omezující počet
   spojení na účet je může odmítnout); symbolické odkazy na FTP vytvářet nelze
   a odkaz na adresář se ve výpisu chová jako soubor
-- hledání: bez hledání uvnitř archivů, hledání duplicit, protokolu hledání,
-  seznamu ignorovaných adresářů a správce uložených nastavení (Windows-only
-  atributy a tagy v Upřesnit chybí)
+- hledání: bez hledání duplicit, protokolu hledání, seznamu ignorovaných
+  adresářů a správce uložených nastavení (Windows-only atributy a tagy
+  v Upřesnit chybí); hledání v archivech jen na lokálním disku, podle přípony
+  souboru a bez archivů vnořených v archivu
 - vzdálené VFS (FTP/SFTP) nepodporují předměření celkové velikosti přenosu
   (progress běží bez procent)
 
 ### Testy
 
-- `make test` – 47 unit testů jádra (masky, cesty, operace včetně přesunu
+- `make test` – 50 unit testů jádra (masky, cesty, operace včetně přesunu
   v jednom VFS, konfliktů a přeskakování, symbolických odkazů, odmítnutí
   přenosu do téhož adresáře a úklidu po zrušení, hledání včetně obsahu
-  souborů, HEX a regulárních výrazů, ZIP včetně adresářových záznamů, TAR
+  souborů, HEX a regulárních výrazů, hledání v archivech ZIP / TAR / TAR.GZ
+  včetně obsahu, poškozeného a zaheslovaného archivu, ZIP včetně adresářových záznamů, TAR
   plain i TAR.GZ včetně rekurzivního rozbalení, dlouhých jmen, PAX hlaviček
   a odkazů, rozpoznání ne-archivů, balení s adresářovou strukturou, AES-256
   a ZipCrypto: bez hesla / chybné / správné heslo, FTP proti minimálnímu
@@ -447,13 +467,14 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   během přenosu na dalším spojení)
 - `make smoke` – end-to-end test vazby Swift↔Rust: otevření VFS, list, copy,
   move (v rámci jednoho VFS jako v aplikaci), mkdir, rename, delete, find,
-  výběr podle masky, pack ZIP, probe, otevření ZIP, AES-256 ZIP přes
+  výběr podle masky, pack ZIP, probe, otevření ZIP, hledání v archivech
+  (jménem i v obsahu), AES-256 ZIP přes
   FFI (kódy chyb hesla) a kompatibilita s libarchive (`bsdtar`) oběma směry:
   náš AES-256 archiv rozbalí bsdtar, AES-256 i ZipCrypto archiv z bsdtar
   přečte jádro
 - `make selftest` – UI self-test: aplikace si posílá skutečné klávesové události
   a ověřuje kurzor, Space, Tab, rychlé hledání, F7/F5/F8 dialogy (žádné
-  zamrznutí), ⌫ s návratem kurzoru, ⌘U, ⌃F (okno hledání: Enter najde položky, Escape zavře) a F11 (správa serverů) se zavřením Escapem
+  zamrznutí), ⌫ s návratem kurzoru, ⌘U, ⌃F (okno hledání: Enter najde položky, Hledat v archivech najde položky uvnitř ZIP a Ukázat zavede panel do archivu, Escape zavře) a F11 (správa serverů) se zavřením Escapem
   a zaheslovaný AES-256 ZIP (Enter do archivu, F5, chybné → správné heslo),
   Home/End, ⌥↑/⌥↓, ⌃H (skryté soubory), ⌥1/⌥3/⌥6/⌥2 (režimy) se šipkami;
   test otevírá okno aplikace a posílá jí klávesy – při současné práci

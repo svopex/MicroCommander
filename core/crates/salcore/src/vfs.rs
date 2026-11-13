@@ -217,6 +217,13 @@ pub trait Vfs: Send + Sync {
         true
     }
 
+    /// Pořadí dat souboru ve zdroji (offset v archivu). Čte-li se víc souborů
+    /// v tomto pořadí, stačí proudovému archivu (TAR.GZ) jeden průchod místo
+    /// dekomprese od začátku pro každý soubor. `None` = na pořadí nezáleží.
+    fn read_order(&self, _path: &str) -> Option<u64> {
+        None
+    }
+
     /// Nastaví heslo pro čtení šifrovaných položek (None = zapomenout).
     /// Vrací false, pokud VFS hesla nepodporuje.
     fn set_password(&self, _password: Option<&str>) -> bool {

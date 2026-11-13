@@ -687,6 +687,10 @@ impl Vfs for TarFs {
         }
     }
 
+    fn read_order(&self, path: &str) -> Option<u64> {
+        archive::find_entry(&self.index, path).map(|entry| entry.data_offset)
+    }
+
     fn open_write(&self, _path: &str, _size_hint: Option<u64>) -> SalResult<Box<dyn VfsWriteStream>> {
         Err(SalError::Io(READONLY_MSG.to_string()))
     }

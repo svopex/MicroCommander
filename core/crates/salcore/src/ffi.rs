@@ -15,8 +15,6 @@
 //!   platnost ukazatelů a NUL-ukončení řetězců (viz microcommander.h).
 
 use std::ffi::{c_char, c_void, CStr, CString};
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 use std::time::Duration;
 
@@ -58,8 +56,9 @@ pub struct SalProgress {
     pub user: *mut c_void,
 }
 
-/// Zpětné volání hledání (odpovídá SalFoundFn v microcommander.h).
-pub type SalFoundFn = Option<extern "C" fn(*mut c_void, *const c_char, u64, i64, u32)>;
+/// Zpětné volání hledání (odpovídá SalFoundFn v microcommander.h): user,
+/// cesta archivu (NULL = položka přímo ve VFS), cesta, velikost, čas, příznaky.
+pub type SalFoundFn = Option<extern "C" fn(*mut c_void, *const c_char, *const c_char, u64, i64, u32)>;
 /// Hlášení prohledávaného adresáře (odpovídá SalFindDirFn v microcommander.h).
 pub type SalFindDirFn = Option<extern "C" fn(*mut c_void, *const c_char)>;
 
@@ -72,6 +71,7 @@ const SAL_FIND_WHOLE_WORDS: u32 = 16;
 const SAL_FIND_REGEX: u32 = 32;
 const SAL_FIND_HEX: u32 = 64;
 const SAL_FIND_NAME_CONTAINS: u32 = 128;
+const SAL_FIND_ARCHIVES: u32 = 256;
 
 /// Režimy přepsání (odpovídají #define SAL_OVERWRITE_* v microcommander.h).
 pub const SAL_OVERWRITE_ASK: i32 = 0;
@@ -676,7 +676,7 @@ pub unsafe extern "C" fn sal_find(
             &mut |path, item| {
                 if let Some(callback) = found {
                     let cpath = CString::new(path.replace('\0', "_")).unwrap_or_default();
-                    callback(found_user, cpath.as_ptr(), item.size, item.mtime, item.flags());
+                    callback(found_user, std::ptr::null(), cpath.as_ptr(), item.size, item.mtime, item.flags());
                 }
                 true
             },
@@ -746,6 +746,7 @@ pub unsafe extern "C" fn sal_find_ex(
         subdirs: flags & SAL_FIND_SUBDIRS != 0,
         include_dirs: flags & SAL_FIND_INCLUDE_DIRS != 0,
         content: matcher,
+        archives: flags & SAL_FIND_ARCHIVES != 0,
     };
     let mut progress_cb = progress_from_c(progress);
     let handle = &*(vfs as *const VfsHandle);
@@ -762,10 +763,13 @@ pub unsafe extern "C" fn sal_find_ex(
                     callback(user, cdir.as_ptr());
                 }
             },
-            &mut |path, item| {
+            &mut |archive, path, item| {
                 if let Some(callback) = found {
                     let cpath = CString::new(path.replace('\0', "_")).unwrap_or_default();
-                    callback(user, cpath.as_ptr(), item.size, item.mtime, item.flags());
+                    // Cesta archivu jen u položek nalezených uvnitř archivu (jinak NULL).
+                    let carchive = archive.map(|archive| CString::new(archive.replace('\0', "_")).unwrap_or_default());
+                    let archive_ptr = carchive.as_ref().map_or(std::ptr::null(), |archive| archive.as_ptr());
+                    callback(user, archive_ptr, cpath.as_ptr(), item.size, item.mtime, item.flags());
                 }
                 true
             },
@@ -819,18 +823,7 @@ pub unsafe extern "C" fn sal_probe_archive(path: *const c_char) -> i32 {
     let Some(path_str) = opt_string(path) else {
         return 0;
     };
-    let path = Path::new(&path_str);
-    // ZIP magické bajty PK\x03\x04.
-    if let Ok(mut file) = File::open(path) {
-        let mut head = [0u8; 4];
-        if file.read_exact(&mut head).is_ok() && head == [0x50, 0x4B, 0x03, 0x04] {
-            return crate::vfs::VfsKind::Zip.as_i32();
-        }
-    }
-    match crate::tarfs::probe_tar_format(path) {
-        Ok(Some(_)) => crate::vfs::VfsKind::Tar.as_i32(),
-        _ => 0,
-    }
+    crate::archive::probe_archive(Path::new(&path_str)).map_or(0, |kind| kind.as_i32())
 }
 
 /// # Safety

@@ -10,9 +10,56 @@
 //! nějaká položka (implikovaný adresář).
 
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::Read;
 use std::ops::Bound;
+use std::path::Path;
 
-use crate::vfs::{normalize_vfs_path, VfsItem, VfsItemKind};
+use crate::error::SalResult;
+use crate::tarfs::{probe_tar_format, TarFs};
+use crate::vfs::{normalize_vfs_path, Vfs, VfsItem, VfsItemKind, VfsKind};
+use crate::zipfs::ZipFs;
+
+/// Přípony, podle kterých hledání v archivech vybírá soubory k otevření
+/// (formát se pak ověří podle obsahu, viz `open_archive`). Jen podle přípony,
+/// aby se kvůli detekci nemusel otevírat každý soubor na disku. Nový formát
+/// archivu patří sem i do `probe_archive`.
+const ARCHIVE_EXTENSIONS: [&str; 5] = [".zip", ".jar", ".tar", ".tgz", ".tar.gz"];
+
+/// Má jméno souboru příponu archivu? Bez ohledu na velikost písmen; samotná
+/// přípona bez jména se nepočítá.
+pub(crate) fn is_archive_name(name: &str) -> bool {
+    let name = name.as_bytes();
+    ARCHIVE_EXTENSIONS.iter().any(|extension| {
+        name.len() > extension.len() && name[name.len() - extension.len()..].eq_ignore_ascii_case(extension.as_bytes())
+    })
+}
+
+/// Pozná archiv podle obsahu souboru: ZIP podle magických bajtů `PK\x03\x04`,
+/// TAR / TAR.GZ podle hlavičky (samostatný gzip bez TAR uvnitř archiv není).
+/// Nečitelný soubor a cokoli jiného = `None`.
+pub(crate) fn probe_archive(path: &Path) -> Option<VfsKind> {
+    if let Ok(mut file) = File::open(path) {
+        let mut head = [0u8; 4];
+        if file.read_exact(&mut head).is_ok() && head == [0x50, 0x4B, 0x03, 0x04] {
+            return Some(VfsKind::Zip);
+        }
+    }
+    match probe_tar_format(path) {
+        Ok(Some(_)) => Some(VfsKind::Tar),
+        _ => None,
+    }
+}
+
+/// Otevře soubor jako archivní VFS podle jeho obsahu; `Ok(None)` = soubor
+/// archiv není, chyba = archiv je poškozený nebo nečitelný.
+pub(crate) fn open_archive(path: &Path) -> SalResult<Option<Box<dyn Vfs>>> {
+    Ok(match probe_archive(path) {
+        Some(VfsKind::Zip) => Some(Box::new(ZipFs::open(path)?)),
+        Some(VfsKind::Tar) => Some(Box::new(TarFs::open(path)?)),
+        _ => None,
+    })
+}
 
 /// Kanonické jméno položky archivu: oddělovače `/`, bez prázdných složek,
 /// bez `.` a `..` (ochrana před cestami mířícími ven z archivu) a bez

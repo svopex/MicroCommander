@@ -80,9 +80,11 @@ typedef struct {
     void *user;
 } SalProgress;
 
-/* Zpětné volání hledání: nalezená položka na cestě (VFS cesta včetně jména). */
-typedef void (*SalFoundFn)(void *user, const char *path, uint64_t size, int64_t mtime,
-                           uint32_t flags);
+/* Zpětné volání hledání: nalezená položka na cestě (VFS cesta včetně jména).
+ * `archive` je NULL u položky přímo ve VFS; u položky nalezené uvnitř archivu
+ * (SAL_FIND_ARCHIVES) je to cesta archivu ve VFS a `path` cesta uvnitř archivu. */
+typedef void (*SalFoundFn)(void *user, const char *archive, const char *path, uint64_t size,
+                           int64_t mtime, uint32_t flags);
 
 /* Verze jádra (statický řetězec, neuvolňovat). */
 const char *sal_version(void);
@@ -172,12 +174,16 @@ int32_t sal_find(SalVfs *vfs, const char *root, const char *mask, int32_t includ
 #define SAL_FIND_REGEX 32         /* Regulární výraz (vyhodnocuje se po řádcích) */
 #define SAL_FIND_HEX 64           /* content jsou syrové bajty (Šestnáctkový režim) */
 #define SAL_FIND_NAME_CONTAINS 128 /* maska bez * ? . hledá jména, která ji obsahují */
+#define SAL_FIND_ARCHIVES 256     /* prohledat i archivy na lokálním disku (ZIP, TAR, TAR.GZ
+                                   * podle přípony .zip .jar .tar .tgz .tar.gz) */
 
-/* Hlášení právě prohledávaného adresáře (stavový řádek dialogu). */
+/* Hlášení právě prohledávaného adresáře (stavový řádek dialogu); uvnitř
+ * archivu cesta archivu + cesta v něm. */
 typedef void (*SalFindDirFn)(void *user, const char *path);
 
-/* Hledání s volbami (SAL_FIND_*). Nečitelné podadresáře a soubory se přeskočí,
- * jejich počet vrátí `errors` (smí být NULL). `found` i `dir_cb` dostávají `user`. */
+/* Hledání s volbami (SAL_FIND_*). Nečitelné podadresáře, soubory a poškozené
+ * archivy se přeskočí, jejich počet vrátí `errors` (smí být NULL). `found`
+ * i `dir_cb` dostávají `user`. */
 int32_t sal_find_ex(SalVfs *vfs, const char *root, const char *mask, uint32_t flags,
                     const uint8_t *content, size_t content_len, const SalProgress *progress,
                     SalFoundFn found, SalFindDirFn dir_cb, void *user, uint64_t *errors,

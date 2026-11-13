@@ -156,7 +156,13 @@ final class PanelController: NSObject {
 
     /// Přejde na novou lokaci. Nový VFS (archiv, FTP) se zanoří:
     /// původní lokace se uloží a „..“ na kořeni se do ní vrátí.
-    func navigate(_ newLocation: Location, nested: Bool = false, focus: String? = nil) {
+    /// - Parameters:
+    ///   - newLocation: cílová lokace
+    ///   - nested: zanořit (původní lokace zůstane jako nadřazená)
+    ///   - focus: jméno v původní lokaci, na které se kurzor postaví po návratu
+    ///     ze zanoření (soubor archivu)
+    ///   - select: jméno v nové lokaci, na které se kurzor postaví po načtení
+    func navigate(_ newLocation: Location, nested: Bool = false, focus: String? = nil, select: String? = nil) {
         pushHistory()
         // Skok do jiného VFS bez zanoření ruší zanoření (archivy/FTP se zavřou).
         let leavesNested = !nested && newLocation.vfs !== location.vfs
@@ -169,7 +175,25 @@ final class PanelController: NSObject {
         if leavesNested {
             dropClosedFromHistory()
         }
-        pendingFocus = nil
+        pendingFocus = select
+        marked.removeAll()
+        reload()
+    }
+
+    /// Přejde na položku uvnitř archivu na lokálním disku jedním krokem:
+    /// panel se zanoří do archivu s kurzorem na položce a jako nadřazenou
+    /// lokaci dostane adresář archivu – „..“ z kořene archivu tak vede zpět
+    /// k jeho souboru. Dosavadní zanoření (jiný archiv, server) se zavře.
+    /// - Parameters:
+    ///   - archive: otevřený VFS archivu
+    ///   - archivePath: cesta souboru archivu na disku
+    ///   - path: cesta položky uvnitř archivu
+    func showArchiveItem(_ archive: Vfs, archivePath: String, path: String) {
+        pushHistory()
+        parentLocations = [(Location(vfs: Vfs.localDisk, path: parentPath(archivePath)), lastComponent(archivePath))]
+        location = Location(vfs: archive, path: parentPath(path))
+        dropClosedFromHistory()
+        pendingFocus = lastComponent(path)
         marked.removeAll()
         reload()
     }
@@ -594,25 +618,6 @@ final class PanelController: NSObject {
         }
         return vfs.label + "  " + location.path
     }
-}
-
-/// Spojí adresář a jméno ve stylu VFS (kořen bez dvojitého lomítka).
-func joinPath(_ dir: String, _ name: String) -> String {
-    if dir == "/" || dir.isEmpty {
-        return "/" + name
-    }
-    return dir.hasSuffix("/") ? dir + name : dir + "/" + name
-}
-
-/// Nadřazený adresář cesty (kořen zůstává "/").
-func parentPath(_ path: String) -> String {
-    let parent = (path as NSString).deletingLastPathComponent
-    return parent.isEmpty ? "/" : parent
-}
-
-/// Poslední složka cesty.
-func lastComponent(_ path: String) -> String {
-    (path as NSString).lastPathComponent
 }
 
 /// Cesta zadaná uživatelem (změna adresáře, cíl kopírování…) jako normalizovaná

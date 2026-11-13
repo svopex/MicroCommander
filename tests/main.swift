@@ -120,6 +120,29 @@ func run() throws {
     expect(zipItems.contains { $0.name == "a.txt" }, "ZIP výpis obsahuje a.txt")
     expect(zipItems.contains { $0.name == "pod" && $0.isDir }, "adresář v ZIP je ve výpisu adresářem")
 
+    // Hledání v archivech přes FFI: položka uvnitř ZIP nese cestu archivu
+    // a cestu uvnitř něj; bez volby se archiv neotevře.
+    func findInBase(archives: Bool, content: String? = nil) throws -> [FindResult] {
+        let archiveCollector = FindCollector()
+        let spec = FindSpec(mask: "b.txt", subdirs: true, archives: archives, content: content.map { Array($0.utf8) },
+                            caseSensitive: false, wholeWords: false, regex: false, hex: false)
+        try coreFindEx(vfs: disk, root: base, spec: spec, state: ProgressState(), collector: archiveCollector)
+        return archiveCollector.snapshot()
+    }
+    let inZip: (FindResult) -> Bool = { $0.archive == zipPath && $0.path == "/pod/b.txt" }
+    expect(try !findInBase(archives: false).contains { $0.archive != nil }, "bez volby se v archivech nehledá")
+    expect(try findInBase(archives: true).contains(where: inZip), "hledání v archivech najde pod/b.txt v ZIP")
+    expect(try findInBase(archives: true, content: "obsah b").contains(where: inZip),
+           "hledání v obsahu najde text i uvnitř ZIP")
+    expect(try !findInBase(archives: true, content: "tohle tam neni").contains(where: inZip),
+           "hledání v obsahu uvnitř ZIP nehlásí soubor bez textu")
+    // Hledání přímo ve VFS archivu (vytřídění nálezů): výsledky nesou zadaný archiv.
+    let directCollector = FindCollector()
+    try coreFindEx(vfs: zipVfs, root: "/pod", spec: FindSpec(mask: "*", subdirs: false, caseSensitive: false,
+                                                             wholeWords: false, regex: false, hex: false),
+                   state: ProgressState(), collector: directCollector, archive: zipPath)
+    expect(directCollector.snapshot().contains(where: inZip), "hledání ve VFS archivu označí nálezy archivem")
+
     // Zaheslovaný ZIP (AES-256) přes FFI: bez hesla / chybné heslo / správné heslo.
     let aesPath = base + "/tajne.zip"
     try corePackZip(src: src, srcDir: "/", names: ["a.txt", "pod"], dest: aesPath,

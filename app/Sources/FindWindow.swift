@@ -373,12 +373,29 @@ final class FoundTableView: NSTableView {
     }
 }
 
-/// Řádek seznamu: VFS cesta a položka.
+/// Řádek seznamu: VFS cesta a položka; u položky nalezené uvnitř archivu
+/// (Hledat v archivech) i cesta archivu.
 private struct FoundRow {
+    /// Archiv, ve kterém položka leží (cesta ve VFS okna); nil = položka přímo ve VFS.
+    let archive: String?
+    /// Cesta položky ve svém VFS (u položky z archivu cesta uvnitř archivu).
     let path: String
     let item: Item
-    /// Adresář položky pro sloupec Cesta.
+    /// Jednoznačná cesta pro zobrazení, řazení a porovnávání řádků: u položky
+    /// z archivu cesta archivu + cesta uvnitř (archiv se chová jako adresář).
+    /// Složená jednou při vzniku řádku – řazení ji čte při každém porovnání.
+    let fullPath: String
+    /// Adresář položky ve svém VFS (pro operace nad položkou).
     var dir: String { parentPath(path) }
+    /// Adresář položky pro sloupec Cesta (u kořene archivu soubor archivu).
+    var fullDir: String { parentPath(fullPath) }
+
+    init(archive: String?, path: String, item: Item) {
+        self.archive = archive
+        self.path = path
+        self.item = item
+        fullPath = archive.map { $0 + path } ?? path
+    }
 }
 
 /// Sloupce seznamu nalezených položek (jako v originále; Atributy nejdou řadit).
@@ -493,6 +510,10 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
 
     // Stav hledání a výsledky.
     private var rows: [FoundRow] = []
+    /// Otevřené archivy nalezených položek (cesta archivu ve VFS okna → VFS
+    /// archivu). Otevírají se až při práci s položkou (Ukázat, Zobrazit,
+    /// Otevřít, vytřídění) a drží i zadané heslo.
+    private var archiveCache: [String: Vfs] = [:]
     private var advanced = FindAdvanced()
     private var runningState: ProgressState?
     private var sort: FoundSort = .name
@@ -513,6 +534,22 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     /// Počet nalezených položek a běží hledání? (pro self-test).
     var foundCount: Int { rows.count }
     var isSearching: Bool { runningState != nil }
+    /// Počet nalezených položek ležících uvnitř archivů (pro self-test).
+    var foundInArchivesCount: Int { rows.filter { $0.archive != nil }.count }
+
+    /// Zapne Hledat v archivech a spustí Najít (pro self-test).
+    func searchInArchives() {
+        archivesBox.state = .on
+        startSearch(.now)
+    }
+
+    /// Ukáže v panelu první položku nalezenou uvnitř archivu (pro self-test).
+    /// - Parameter name: jméno hledané položky
+    /// - Returns: false = taková položka v seznamu není nebo ji nejde ukázat
+    func showArchiveItem(named name: String) -> Bool {
+        guard let row = rows.first(where: { $0.archive != nil && $0.item.name == name }) else { return false }
+        return show(row)
+    }
 
     /// Otevře nové okno hledání s výchozím adresářem aktivního panelu
     /// (jako Ctrl+F / Alt+F7 v Salamanderu; každé volání otevře další okno).
@@ -590,9 +627,12 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         addButton.target = self
         addButton.action = #selector(addClicked(_:))
         addButton.bezelStyle = .rounded
-        // Hledání v archivech jádro zatím neumí – volba je vidět, ale nedostupná.
-        archivesBox.isEnabled = false
-        archivesBox.toolTip = "Hledání uvnitř archivů zatím není podporováno."
+        // Archivy se prohledávají jen na lokálním disku (archiv se otevírá ze souboru).
+        archivesBox.isEnabled = vfs.kind == SAL_VFS_LOCAL
+        archivesBox.toolTip = archivesBox.isEnabled
+            ? "Prohledá i obsah archivů ZIP, TAR a TAR.GZ (soubory .zip, .jar, .tar, .tgz, .tar.gz). "
+                + "Zaheslované soubory se při hledání v obsahu přeskočí, archiv v archivu se neotevírá."
+            : "Archivy se prohledávají jen při hledání na lokálním disku."
 
         grepBox.target = self
         grepBox.action = #selector(grepToggled(_:))
@@ -737,6 +777,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         namedCombo.stringValue = (defaults.stringArray(forKey: "findNamedHistory") ?? []).first ?? "*.*"
         lookInCombo.stringValue = lookIn
         subdirsBox.state = defaults.object(forKey: "findSubdirs") as? Bool == false ? .off : .on
+        archivesBox.state = archivesBox.isEnabled && defaults.bool(forKey: "findArchives") ? .on : .off
         grepBox.state = .off
         hexBox.state = defaults.bool(forKey: "findHex") ? .on : .off
         caseBox.state = defaults.bool(forKey: "findCase") ? .on : .off
@@ -758,6 +799,8 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         if vfs.kind == SAL_VFS_LOCAL { Self.remember(lookInCombo, key: "findLookInHistory") }
         if grepBox.state == .on { Self.remember(containingCombo, key: "findContainingHistory") }
         defaults.set(subdirsBox.state == .on, forKey: "findSubdirs")
+        // Nedostupná volba (hledání mimo lokální disk) uloženou hodnotu nemění.
+        if archivesBox.isEnabled { defaults.set(archivesBox.state == .on, forKey: "findArchives") }
         defaults.set(hexBox.state == .on, forKey: "findHex")
         defaults.set(caseBox.state == .on, forKey: "findCase")
         defaults.set(wholeBox.state == .on, forKey: "findWholeWords")
@@ -925,9 +968,9 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
              #selector(hideDuplicates(_:)), #selector(invertSelection(_:)):
             return !rows.isEmpty
         case #selector(deleteItems(_:)), #selector(deleteItemsPermanently(_:)):
-            return hasSelection && !searching && vfs.writable
+            return !searching && canDelete(selectedRows)
         case #selector(editItem(_:)):
-            return focusedRow.map { !$0.item.isDir && vfs.kind == SAL_VFS_LOCAL } ?? false
+            return focusedRow.map { !$0.item.isDir && localPath(of: $0) != nil } ?? false
         case #selector(viewItem(_:)):
             return focusedRow.map { !$0.item.isDir } ?? false
         case #selector(revealInFinder(_:)):
@@ -1012,6 +1055,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             }
         }
         return FindSpec(mask: mask.isEmpty ? "*" : mask, subdirs: subdirsBox.state == .on,
+                        archives: archivesBox.isEnabled && archivesBox.state == .on,
                         content: content, caseSensitive: caseBox.state == .on,
                         wholeWords: wholeBox.state == .on, regex: regexBox.state == .on,
                         hex: hexBox.state == .on)
@@ -1029,20 +1073,28 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     private func startSearch(_ mode: FindMode) {
         guard runningState == nil, let spec = currentSpec() else { return }
         // Průnik/Odečíst prohledá adresáře nalezených položek bez podadresářů;
-        // ostatní režimy výchozí adresáře z „Hledat v“.
+        // položky z archivu se hledají přímo ve VFS jejich archivu – ten se
+        // projde celý jedním voláním (obsah se pak čte v pořadí dat a archiv se
+        // otevírá jen jednou). Ostatní režimy: výchozí adresáře z „Hledat v“.
         var searchSpec = spec
-        let roots: [String]
+        // Jedno volání jádra: výchozí adresář a archiv, v jehož VFS leží
+        // (nil = VFS okna).
+        let jobs: [(root: String, archive: String?)]
         let refinePaths: Set<String>
         switch mode {
         case .intersect, .subtract:
-            refinePaths = Set(rows.map(\.path))
+            refinePaths = Set(rows.map(\.fullPath))
             var seen = Set<String>()
-            roots = rows.map(\.dir).filter { seen.insert($0).inserted }
+            jobs = rows.map { row -> (root: String, archive: String?) in
+                if let archive = row.archive { return ("/", archive) }
+                return (row.dir, nil)
+            }.filter { seen.insert($0.archive ?? $0.root).inserted }
             searchSpec.subdirs = false
+            searchSpec.archives = false
         case .now, .append:
             refinePaths = []
-            roots = lookInRoots()
-            guard !roots.isEmpty else {
+            jobs = lookInRoots().map { ($0, nil) }
+            guard !jobs.isEmpty else {
                 showError("Prázdný řetězec zde není povolen.")
                 window?.makeFirstResponder(lookInCombo)
                 return
@@ -1051,6 +1103,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         saveState()
         if mode == .now {
             rows = []
+            archiveCache = [:]
             tableView.reloadData()
         }
 
@@ -1059,6 +1112,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         let collector = FindCollector()
         let advanced = advanced
         let vfs = vfs
+        let knownArchives = archiveCache
         let now = Date()
         setSearching(true)
 
@@ -1067,7 +1121,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         func foundRows(_ results: [FindResult]) -> [FoundRow] {
             results
                 .filter { !advanced.isActive || advanced.matches($0.item, now: now) }
-                .map { FoundRow(path: $0.path, item: $0.item) }
+                .map { FoundRow(archive: $0.archive, path: $0.path, item: $0.item) }
         }
         // Průběžné doplňování seznamu (jen přibylé položky, seznam při hledání
         // jen roste) a stavového řádku „Vyhledávání: adresář“.
@@ -1092,10 +1146,25 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var errors: UInt64 = 0
             var failure: Error?
-            for root in roots {
+            for job in jobs {
                 if state.isCancelled { break }
+                var jobVfs = vfs
+                var jobSpec = searchSpec
+                if let archive = job.archive {
+                    // Archiv otevřený jen kvůli vytřídění se po úloze zase zavře
+                    // (stovky archivů by jinak držely otevřené soubory); archiv,
+                    // který mezitím zmizel nebo nejde otevřít, se přeskočí jako chyba.
+                    guard let archiveVfs = knownArchives[archive]
+                            ?? vfs.realPath(archive).flatMap(Vfs.openArchive(path:)) else {
+                        errors += 1
+                        continue
+                    }
+                    jobVfs = archiveVfs
+                    jobSpec.subdirs = true
+                }
                 do {
-                    errors += try coreFindEx(vfs: vfs, root: root, spec: searchSpec, state: state, collector: collector)
+                    errors += try coreFindEx(vfs: jobVfs, root: job.root, spec: jobSpec, state: state,
+                                             collector: collector, archive: job.archive)
                 } catch let error as CoreError where error.isCancelledLike {
                     break
                 } catch {
@@ -1114,12 +1183,12 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
                 case .intersect, .subtract:
                     // Výsledek vytřídění se uplatní jen při dokončení (ne po zastavení).
                     if !state.isCancelled {
-                        let matching = Set(found.map(\.path)).intersection(refinePaths)
-                        self.rows = baseRows.filter { matching.contains($0.path) == (mode == .intersect) }
+                        let matching = Set(found.map(\.fullPath)).intersection(refinePaths)
+                        self.rows = baseRows.filter { matching.contains($0.fullPath) == (mode == .intersect) }
                     }
                 }
                 self.finishSearch(stopped: state.isCancelled, errors: errors,
-                                  failure: roots.count == 1 ? failure : nil)
+                                  failure: jobs.count == 1 ? failure : nil)
             }
         }
     }
@@ -1390,6 +1459,48 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         return index >= 0 && index < rows.count ? rows[index] : nil
     }
 
+    /// VFS archivu nalezené položky; otevře se při prvním použití (akce
+    /// uživatele nad položkou) a zůstane v cache okna. Archiv, který mezitím
+    /// zmizel nebo nejde otevřít, ohlásí pípnutím a vrátí nil.
+    /// - Parameter archive: cesta archivu ve VFS okna
+    private func archiveVfs(_ archive: String) -> Vfs? {
+        if let cached = archiveCache[archive] { return cached }
+        guard let opened = vfs.realPath(archive).flatMap(Vfs.openArchive(path:)) else {
+            NSSound.beep()
+            return nil
+        }
+        archiveCache[archive] = opened
+        return opened
+    }
+
+    /// Souborový systém, ve kterém položka leží: VFS okna, u položky
+    /// z archivu VFS archivu (nil = archiv nejde otevřít, viz `archiveVfs`).
+    private func vfs(of row: FoundRow) -> Vfs? {
+        guard let archive = row.archive else { return vfs }
+        return archiveVfs(archive)
+    }
+
+    /// Cesta položky na lokálním disku; nil u položek z archivu a ze serveru
+    /// (ty nejdou upravit, smazat ani předat Finderu jako soubor).
+    private func localPath(of row: FoundRow) -> String? {
+        row.archive == nil ? vfs.realPath(row.path) : nil
+    }
+
+    /// Lze položky odstranit? Jen v zapisovatelném VFS a ne z archivu
+    /// (archivy jsou jen pro čtení).
+    private func canDelete(_ selected: [FoundRow]) -> Bool {
+        !selected.isEmpty && vfs.writable && selected.allSatisfy { $0.archive == nil }
+    }
+
+    /// Ukáže položku v panelu (u položky z archivu panel vstoupí do archivu);
+    /// false = položku ukázat nejde (archiv už neexistuje).
+    @discardableResult
+    private func show(_ row: FoundRow) -> Bool {
+        guard let owner = mainController, let rowVfs = vfs(of: row) else { return false }
+        owner.showItem(vfs: rowVfs, path: row.path, archivePath: row.archive.flatMap(vfs.realPath))
+        return true
+    }
+
     /// Otevřít: adresář otevře v aktivním panelu, soubor výchozí aplikací.
     @objc private func openItem(_ sender: Any?) {
         guard let row = focusedRow else { return }
@@ -1404,11 +1515,13 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         guard let owner = mainController else { return }
         if row.item.isDir {
             // Panel nejdřív přejde do nadřazeného adresáře (správné VFS) a pak dovnitř.
-            owner.showItem(vfs: vfs, path: row.path)
-            owner.activePanel.changePath(vfs.realPath(row.path) ?? row.path)
+            guard show(row) else { return }
+            owner.activePanel.changePath(localPath(of: row) ?? row.path)
             return
         }
-        owner.withLocalFile(row.item, vfs: vfs, dir: row.dir) { path in
+        // Soubor z archivu či serveru se nejdřív rozbalí do dočasného adresáře.
+        guard let rowVfs = vfs(of: row) else { return }
+        owner.withLocalFile(row.item, vfs: rowVfs, dir: row.dir) { path in
             NSWorkspace.shared.open(URL(fileURLWithPath: path))
         }
     }
@@ -1416,24 +1529,27 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     /// Ukázat: aktivní panel přejde do adresáře položky s kurzorem na ní.
     @objc private func focusItem(_ sender: Any?) {
         guard let row = focusedRow else { return }
-        mainController?.showItem(vfs: vfs, path: row.path)
+        show(row)
     }
 
     @objc private func viewItem(_ sender: Any?) {
-        guard let row = focusedRow, !row.item.isDir else { return }
-        let title = vfs.realPath(row.path) ?? row.path
-        mainController?.withLocalFile(row.item, vfs: vfs, dir: row.dir) { path in
+        guard let row = focusedRow, !row.item.isDir, let rowVfs = vfs(of: row) else { return }
+        let title = vfs.realPath(row.fullPath) ?? row.fullPath
+        mainController?.withLocalFile(row.item, vfs: rowVfs, dir: row.dir) { path in
             ViewerWindowController.open(path: path, title: title)
         }
     }
 
     @objc private func editItem(_ sender: Any?) {
-        guard let row = focusedRow, !row.item.isDir, let path = vfs.realPath(row.path) else { return }
+        guard let row = focusedRow, !row.item.isDir, let path = localPath(of: row) else { return }
         mainController?.openInEditor(path)
     }
 
+    /// Zobrazit ve Finderu: u položky z archivu se ukáže soubor archivu.
     @objc private func revealInFinder(_ sender: Any?) {
-        let urls = selectedRows.compactMap { vfs.realPath($0.path) }.map { URL(fileURLWithPath: $0) }
+        var seen = Set<String>()
+        let urls = selectedRows.compactMap { vfs.realPath($0.archive ?? $0.path) }
+            .filter { seen.insert($0).inserted }.map { URL(fileURLWithPath: $0) }
         if !urls.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(urls) }
     }
 
@@ -1452,7 +1568,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     ///   a maže se trvale – potvrzení to uvede
     private func confirmDelete(toTrash: Bool) {
         let selected = selectedRows
-        guard let window, !selected.isEmpty, runningState == nil, vfs.writable else { return }
+        guard let window, runningState == nil, canDelete(selected) else { return }
         let (text, useTrash) = deleteConfirmation(items: selected.map(\.item), vfs: vfs,
                                                   toTrash: toTrash, verb: "odstranit")
         let alert = NSAlert()
@@ -1491,8 +1607,9 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
                 guard let self else { return }
                 self.runningState = nil
                 // Odebrat smazané položky i vše uvnitř smazaných adresářů.
+                // (I položky uvnitř smazaného archivu – jejich cesta jím začíná.)
                 self.rows.removeAll { row in
-                    deleted.contains(row.path) || deleted.contains { row.path.hasPrefix($0 + "/") }
+                    deleted.contains(row.fullPath) || deleted.contains { row.fullPath.hasPrefix($0 + "/") }
                 }
                 self.tableView.reloadData()
                 self.updateFoundLabel()
@@ -1513,7 +1630,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     /// Skrýt duplicitní názvy: položky nalezené víckrát (Připojit) zůstanou jednou.
     @objc private func hideDuplicates(_ sender: Any?) {
         var seen = Set<String>()
-        rows = rows.filter { seen.insert($0.path).inserted }
+        rows = rows.filter { seen.insert($0.fullPath).inserted }
         tableView.reloadData()
         updateFoundLabel()
     }
@@ -1526,7 +1643,8 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
 
     // MARK: Schránka
 
-    /// Kopírovat (⌘C / Ctrl+C v seznamu): lokální soubory jako soubory pro Finder.
+    /// Kopírovat (⌘C / Ctrl+C v seznamu): lokální soubory jako soubory pro Finder
+    /// (položky z archivu a ze serveru se vynechají).
     @objc func copy(_ sender: Any?) {
         writeFilesToPasteboard(cut: false)
     }
@@ -1537,7 +1655,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     }
 
     private func writeFilesToPasteboard(cut: Bool) {
-        let urls = selectedRows.compactMap { vfs.realPath($0.path) }.map { URL(fileURLWithPath: $0) as NSURL }
+        let urls = selectedRows.compactMap(localPath(of:)).map { URL(fileURLWithPath: $0) as NSURL }
         guard !urls.isEmpty else {
             NSSound.beep()
             return
@@ -1556,7 +1674,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     }
 
     @objc private func copyFullNameAsText(_ sender: Any?) {
-        copyText { self.vfs.realPath($0.path) ?? $0.path }
+        copyText { self.vfs.realPath($0.fullPath) ?? $0.fullPath }
     }
 
     @objc private func copyNameAsText(_ sender: Any?) {
@@ -1564,7 +1682,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     }
 
     @objc private func copyPathAsText(_ sender: Any?) {
-        copyText { self.vfs.realPath($0.dir) ?? $0.dir }
+        copyText { self.vfs.realPath($0.fullDir) ?? $0.fullDir }
     }
 
     // MARK: Řazení
@@ -1593,7 +1711,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     /// Seřadí seznam (adresáře nahoře, pokud není zapnuto řazení dohromady)
     /// a zachová označení položek.
     private func applySort() {
-        let selectedPaths = Set(selectedRows.map(\.path))
+        let selectedPaths = Set(selectedRows.map(\.fullPath))
         let key = sort
         let ascending = sortAscending
         let mixed = sortMixed
@@ -1604,17 +1722,17 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             let order: ComparisonResult
             switch key {
             case .name: order = left.item.name.localizedStandardCompare(right.item.name)
-            case .path: order = left.path.localizedStandardCompare(right.path)
+            case .path: order = left.fullPath.localizedStandardCompare(right.fullPath)
             case .time: order = Self.compare(left.item.mtime, right.item.mtime)
             case .size: order = Self.compare(left.item.size, right.item.size)
             }
             if order == .orderedSame {
-                return left.path.localizedStandardCompare(right.path) == .orderedAscending
+                return left.fullPath.localizedStandardCompare(right.fullPath) == .orderedAscending
             }
             return ascending ? order == .orderedAscending : order == .orderedDescending
         }
         tableView.reloadData()
-        let indexes = IndexSet(rows.indices.filter { selectedPaths.contains(rows[$0].path) })
+        let indexes = IndexSet(rows.indices.filter { selectedPaths.contains(rows[$0].fullPath) })
         tableView.selectRowIndexes(indexes, byExtendingSelection: false)
         updateSortIndicators()
     }
@@ -1661,7 +1779,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             cell.textField?.stringValue = item.name
             cell.imageView?.image = listIcon(for: item)
         case .path:
-            cell.textField?.stringValue = vfs.realPath(entry.dir) ?? entry.dir
+            cell.textField?.stringValue = vfs.realPath(entry.fullDir) ?? entry.fullDir
         case .size:
             cell.textField?.stringValue = item.isDir ? "ADRESÁŘ" : formatSize(item.size)
         case .date:

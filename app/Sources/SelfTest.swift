@@ -100,7 +100,8 @@ final class UISelfTest {
         setvbuf(stdout, nil, _IOLBF, 0)
         // Test mění uložené volby (režimy zobrazení, skryté soubory) – po skončení je vrátíme.
         let defaults = UserDefaults.standard
-        let savedSettings = ["showHiddenFiles", "viewModeLeft", "viewModeRight", "selectAllIncludesDirs", "keyBindings"]
+        let savedSettings = ["showHiddenFiles", "viewModeLeft", "viewModeRight", "selectAllIncludesDirs", "keyBindings",
+                             "findArchives"]
             .map { ($0, defaults.object(forKey: $0)) }
         restoreSettings = {
             for (key, value) in savedSettings {
@@ -220,6 +221,32 @@ final class UISelfTest {
         }))
         steps.append((ready: { (findWindow()?.foundCount ?? 0) >= 5 && findWindow()?.isSearching == false }, action: {
             self.check((findWindow()?.foundCount ?? 0) >= 5, "hledání najde položky testovacího adresáře")
+            // 10b) Hledat v archivech: položky uvnitř ZIP se najdou a jdou ukázat v panelu.
+            try? FileManager.default.createDirectory(atPath: self.root + "/arch", withIntermediateDirectories: true)
+            try? corePackZip(src: Vfs.localDisk, srcDir: self.root + "/src", names: ["a.txt", "b.txt"],
+                             dest: self.root + "/arch/hledani.zip", state: ProgressState())
+            findWindow()?.searchInArchives()
+        }))
+        let archivePanel = { self.controller.activePanel }
+        steps.append((ready: { findWindow()?.isSearching == false && (findWindow()?.foundInArchivesCount ?? 0) > 0 }, action: {
+            self.check(findWindow()?.foundInArchivesCount == 2, "hledání v archivech najde obě položky uvnitř ZIP")
+            self.check(findWindow()?.showArchiveItem(named: "b.txt") == true, "položku nalezenou v archivu jde ukázat")
+        }))
+        steps.append((ready: { archivePanel().location.vfs.kind == SAL_VFS_ZIP && !archivePanel().isLoading }, action: {
+            self.check(archivePanel().location.path == "/" && archivePanel().currentItem?.name == "b.txt",
+                       "Ukázat z hledání: panel je v archivu s kurzorem na položce")
+            archivePanel().goUp()
+        }))
+        steps.append((ready: { archivePanel().location.vfs.kind == SAL_VFS_LOCAL && !archivePanel().isLoading }, action: {
+            self.check(archivePanel().location.path == self.root + "/arch"
+                       && archivePanel().currentItem?.name == "hledani.zip", "„..“ z archivu vede zpět na jeho soubor")
+            // Úklid: panel zpět do kořene testu, pomocný archiv pryč.
+            try? FileManager.default.removeItem(atPath: self.root + "/arch")
+            archivePanel().changePath(self.root)
+        }))
+        steps.append((ready: { archivePanel().location.path == self.root && !archivePanel().isLoading }, action: {
+            // Ukázat přeneslo fokus do hlavního okna – Escape patří oknu hledání.
+            findWindow()?.window?.makeKeyAndOrderFront(nil)
             self.key(KeyCode.escape, "\u{1b}", to: findWindow()?.window)
         }))
         steps.append((ready: { FindWindowController.windows.isEmpty && self.windowFree }, action: {
@@ -734,9 +761,33 @@ final class UIKeyCheck {
                     self.poll(until: { right.location.vfs.kind == SAL_VFS_LOCAL && !right.isLoading }) {
                         self.check(right.location.path == dir && right.currentItem?.name == "archiv.zip",
                                    "„..“ v druhém panelu vede ven z archivu na archiv.zip")
-                        done()
+                        self.checkShowArchiveItem(dir: dir, zipPath: zipPath, then: done)
                     }
                 }
+            }
+        }
+    }
+
+    /// Ukázat položku nalezenou uvnitř archivu (okno Hledat s volbou Hledat
+    /// v archivech): panel stojící jinde vstoupí do archivu s kurzorem na
+    /// položce a „..“ vede zpět k souboru archivu.
+    private func checkShowArchiveItem(dir: String, zipPath: String, then done: @escaping () -> Void) {
+        let panel = controller.rightPanel
+        guard let zip = Vfs.openArchive(path: zipPath) else {
+            check(false, "archiv pro kontrolu Ukázat jde otevřít")
+            done()
+            return
+        }
+        panel.changePath("/")
+        panel.showArchiveItem(zip, archivePath: zipPath, path: "/soubor1.txt")
+        poll(until: { panel.location.vfs === zip && !panel.isLoading }) {
+            self.check(panel.location.path == "/" && panel.currentItem?.name == "soubor1.txt",
+                       "Ukázat položku z archivu: panel je v archivu s kurzorem na položce")
+            panel.goUp()
+            self.poll(until: { panel.location.vfs.kind == SAL_VFS_LOCAL && !panel.isLoading }) {
+                self.check(panel.location.path == dir && panel.currentItem?.name == "archiv.zip",
+                           "„..“ z archivu ukázané položky vede zpět na archiv.zip")
+                done()
             }
         }
     }

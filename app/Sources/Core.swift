@@ -41,6 +41,28 @@ let SAL_FIND_WHOLE_WORDS: UInt32 = 16
 let SAL_FIND_REGEX: UInt32 = 32
 let SAL_FIND_HEX: UInt32 = 64
 let SAL_FIND_NAME_CONTAINS: UInt32 = 128
+let SAL_FIND_ARCHIVES: UInt32 = 256
+
+// MARK: - Cesty ve VFS
+
+/// Spojí adresář a jméno ve stylu VFS (kořen bez dvojitého lomítka).
+func joinPath(_ dir: String, _ name: String) -> String {
+    if dir == "/" || dir.isEmpty {
+        return "/" + name
+    }
+    return dir.hasSuffix("/") ? dir + name : dir + "/" + name
+}
+
+/// Nadřazený adresář cesty (kořen zůstává "/").
+func parentPath(_ path: String) -> String {
+    let parent = (path as NSString).deletingLastPathComponent
+    return parent.isEmpty ? "/" : parent
+}
+
+/// Poslední složka cesty.
+func lastComponent(_ path: String) -> String {
+    (path as NSString).lastPathComponent
+}
 
 /// Jedna položka výpisu adresáře.
 struct Item {
@@ -140,6 +162,16 @@ final class Vfs {
     /// TAR / TAR.GZ archiv jako VFS.
     static func openTar(path: String) -> Vfs? {
         path.withCString { wrap(sal_open_tar($0)) }
+    }
+
+    /// Otevře soubor na disku jako archivní VFS, pokud to archiv je (pozná se
+    /// podle obsahu); nil = není archiv nebo nejde otevřít.
+    static func openArchive(path: String) -> Vfs? {
+        switch probeArchive(path: path) {
+        case SAL_VFS_ZIP: return openZip(path: path)
+        case SAL_VFS_TAR: return openTar(path: path)
+        default: return nil
+        }
     }
 
     /// Připojení FTP; hodí chybu s textem od jádra.
@@ -569,6 +601,10 @@ func corePackZip(src: Vfs, srcDir: String, names: [String], dest: String,
 
 /// Výsledek hledání – jedna položka.
 struct FindResult {
+    /// Archiv, ve kterém položka leží (cesta ve prohledávaném VFS); nil =
+    /// položka přímo ve VFS.
+    let archive: String?
+    /// Cesta položky ve VFS; u položky z archivu cesta uvnitř archivu.
     let path: String
     let item: Item
 }
@@ -578,6 +614,9 @@ final class FindCollector {
     private let lock = NSLock()
     private var items: [FindResult] = []
     private var dir = ""
+    /// Archiv, jehož VFS se právě prohledává napřímo (viz `coreFindEx`): nálezy
+    /// bez vlastního archivu ho převezmou. Čte i zapisuje jen vlákno hledání.
+    var baseArchive: String?
 
     func append(_ result: FindResult) {
         lock.lock()
@@ -619,6 +658,8 @@ struct FindSpec {
     var mask: String
     /// Včetně podadresářů.
     var subdirs: Bool
+    /// Prohledat i archivy na lokálním disku (ZIP, TAR, TAR.GZ podle přípony).
+    var archives = false
     /// Hledaný obsah (nil = bez hledání v souboru); u HEX režimu už bajty.
     var content: [UInt8]?
     var caseSensitive: Bool
@@ -628,12 +669,16 @@ struct FindSpec {
 }
 
 /// C callback hledání: každou nalezenou položku přidá do sběrače (`user` = FindCollector).
-private let findFoundCallback: @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UInt64, Int64, UInt32) -> Void = { user, path, size, mtime, flags in
+private let findFoundCallback: @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UnsafePointer<CChar>?, UInt64, Int64, UInt32) -> Void = { user, archive, path, size, mtime, flags in
     guard let user, let path else { return }
     let collector = Unmanaged<FindCollector>.fromOpaque(user).takeUnretainedValue()
     let pathString = String(cString: path)
     let name = pathString.split(separator: "/").last.map(String.init) ?? pathString
-    collector.append(FindResult(path: pathString, item: Item(name: name, size: size, mtime: mtime, flags: flags)))
+    // Archiv hlásí jádro u položek nalezených uvnitř archivu; jinak platí
+    // archiv, jehož VFS se právě prohledává (nil = běžná položka).
+    let archiveString = archive.map { String(cString: $0) } ?? collector.baseArchive
+    collector.append(FindResult(archive: archiveString, path: pathString,
+                                item: Item(name: name, size: size, mtime: mtime, flags: flags)))
 }
 
 /// Hledání podle masky; výsledky hromadí do předaného sběrače.
@@ -662,10 +707,13 @@ func coreFind(vfs: Vfs, root: String, mask: String, includeDirs: Bool,
 ///   - spec: maska a volby hledání
 ///   - state: progress (zrušení hledání)
 ///   - collector: sběrač výsledků a právě prohledávaného adresáře
-/// - Returns: počet přeskočených chyb (nečitelné adresáře/soubory)
+///   - archive: `vfs` je archiv otevřený z této cesty – nálezy ji ponesou
+///     jako svůj archiv (nil = běžné hledání)
+/// - Returns: počet přeskočených chyb (nečitelné adresáře/soubory, poškozené archivy)
 @discardableResult
 func coreFindEx(vfs: Vfs, root: String, spec: FindSpec, state: ProgressState,
-                collector: FindCollector) throws -> UInt64 {
+                collector: FindCollector, archive: String? = nil) throws -> UInt64 {
+    collector.baseArchive = archive
     var err = [CChar](repeating: 0, count: 1024)
     var progress = makeProgress(state)
     var errors: UInt64 = 0
@@ -673,6 +721,7 @@ func coreFindEx(vfs: Vfs, root: String, spec: FindSpec, state: ProgressState,
     // Příznaky SAL_FIND_*; adresáře se hlásí vždy (při hledání v obsahu je jádro vynechá).
     var flags = SAL_FIND_INCLUDE_DIRS | SAL_FIND_NAME_CONTAINS
     if spec.subdirs { flags |= SAL_FIND_SUBDIRS }
+    if spec.archives { flags |= SAL_FIND_ARCHIVES }
     let content = spec.content ?? []
     if !content.isEmpty {
         flags |= SAL_FIND_CONTENT

@@ -844,10 +844,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Ukáže položku v panelu (Ukázat v okně Hledat): aktivní panel přejde do
     /// jejího adresáře a kurzor na ni. Lokální položky jdou do aktivního panelu,
     /// položky archivu/FTP do panelu, který má daný VFS otevřený.
+    /// Položku archivu, který žádný panel otevřený nemá, ukáže aktivní panel
+    /// – vstoupí do archivu, je-li známá cesta jeho souboru na disku.
     /// - Parameters:
     ///   - vfs: souborový systém položky
     ///   - path: VFS cesta položky
-    func showItem(vfs: Vfs, path: String) {
+    ///   - archivePath: `vfs` je archiv otevřený z tohoto souboru na disku
+    ///     (nález okna Hledat s volbou Hledat v archivech)
+    func showItem(vfs: Vfs, path: String, archivePath: String? = nil) {
         let dir = parentPath(path)
         let name = lastComponent(path)
         if vfs.kind == SAL_VFS_LOCAL, let localDir = vfs.realPath(dir) {
@@ -856,13 +860,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 panel.changePath(localDir, focus: name)
             } else {
                 // Z archivu nebo serveru zpět na disk (zanoření se zavře).
-                panel.navigate(Location(vfs: Vfs.localDisk, path: localDir))
-                panel.focus(name: name)
+                panel.navigate(Location(vfs: Vfs.localDisk, path: localDir), select: name)
             }
             activate(panel)
         } else if let panel = [activePanel, leftPanel, rightPanel].first(where: { $0.location.vfs === vfs }) {
             panel.changePath(dir, focus: name)
             activate(panel)
+        } else if let archivePath {
+            activePanel.showArchiveItem(vfs, archivePath: archivePath, path: path)
+            activate(activePanel)
         } else {
             NSSound.beep()
             return
@@ -909,9 +915,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             runInTerminal("./" + shellQuote(item.name), in: parentPath(path))
             return
         }
-        withLocalFile(item, in: panel) { [weak self] path in
-            guard let self else { return }
-            if let archive = self.openArchive(path) {
+        withLocalFile(item, in: panel) { path in
+            if let archive = Vfs.openArchive(path: path) {
                 panel.navigate(Location(vfs: archive, path: "/"), nested: true, focus: item.name)
             } else {
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
@@ -959,15 +964,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             action(path)
         } else {
             extractToTemp(item, vfs: vfs, dir: dir, completion: action)
-        }
-    }
-
-    /// Otevře soubor jako archivní VFS, pokud to archiv je (podle obsahu).
-    private func openArchive(_ path: String) -> Vfs? {
-        switch probeArchive(path: path) {
-        case SAL_VFS_ZIP: return Vfs.openZip(path: path)
-        case SAL_VFS_TAR: return Vfs.openTar(path: path)
-        default: return nil
         }
     }
 
@@ -1489,7 +1485,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let panel = activePanel
         let target = inactivePanel
         guard let item = panel.currentItem, !item.isDir else { return }
-        guard let path = panel.localPath(of: item.name), let archive = openArchive(path) else {
+        guard let path = panel.localPath(of: item.name), let archive = Vfs.openArchive(path: path) else {
             showAlert(title: "Rozbalit", text: "„\(item.name)“ není podporovaný archiv (ZIP, TAR, TAR.GZ) na lokálním disku.")
             return
         }
