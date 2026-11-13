@@ -202,7 +202,15 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   jen lokální disk; Windows atributy jsou vidět, ale nedostupné); ⌃F3–⌃F6 řazení podle
   jména/přípony/času/velikosti (opakovaně obrací), ⌃F9 obnovit, ⌃F10 porovnat
   adresáře (označí odlišné soubory); ⌥F1/⌥F2 disk vlevo/vpravo, ⌥F5 zabalit do
-  ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat (také ⌃F), ⌥F10 obsazené místo.
+  ZIP, ⌥F6 rozbalit do druhého panelu, ⌥F7 hledat (také ⌃F), ⌥F10 obsazené místo
+  (také ⌃Q).
+- **Vlastnosti a oprávnění** (jako Alt+Enter a Ctrl+P v Salamanderu): ⌥↩ / ⌘I
+  (Soubory › Vlastnosti…, kontextové menu) a ⌃P (Soubory › Oprávnění…) otevřou
+  okno Informace z Finderu pro označené položky (jinak pro položku pod
+  kurzorem) – Otevřít v aplikaci, Sdílení a oprávnění atd. Otevírá se systémovou
+  službou Finderu „Zobrazit informace“ (bez AppleScriptu a dotazu na povolení);
+  je-li služba vypnutá, položky se vyberou ve Finderu (pak ⌘I). Víc než 20 oken
+  se otevře až po potvrzení. Jen lokální disk.
 - **Nabídka disků** (⌥F1 levý / ⌥F2 pravý panel, tlačítko disku na řádku
   adresáře): kořen, domov, připojené svazky, **vlastní adresáře** a **uložené
   FTP/SFTP servery** (výběr serveru ho připojí v daném panelu), na konci

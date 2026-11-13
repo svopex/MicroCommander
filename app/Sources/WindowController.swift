@@ -563,7 +563,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.endQuickSearch()
             // ⌘↩ spustí položku systémově (aplikaci .app místo vstupu do ní).
             if flags.contains(.command) { launchRow(panel.cursor, in: panel); return true }
-            if flags.contains(.option) { perform(.calcSize); return true }
+            // ⌥↩ (Alt+Enter v Salamanderu): vlastnosti položky.
+            if flags.contains(.option) { perform(.properties); return true }
             openRow(panel.cursor, in: panel)
             return true
         case KeyCode.backspace:
@@ -634,6 +635,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             // Ctrl+F (jako v Salamanderu) = Vyhledat soubory a adresáře; ⌘F řeší menu.
             case "f": perform(.find); return true
             case "q" where flags.contains(.control): perform(.calcSize); return true
+            // Ctrl+P (Salamander: Zabezpečení / Oprávnění).
+            case "p" where flags.contains(.control): perform(.properties); return true
             case "[":
                 commandLine.insert(shellQuote(leftPanel.displayPath)); return true
             case "]":
@@ -743,7 +746,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let entries: [(String, Command)?] = [
             ("Zobrazit (F3)", .view), ("Upravit (F4)", .edit), nil,
             ("Kopírovat (F5)", .copy), ("Přesunout (F6)", .move), ("Přejmenovat (F2)", .rename), ("Smazat (F8)", .delete), nil,
-            ("Zabalit do ZIP (⌥F5)", .pack), ("Rozbalit (⌥F6)", .unpack), ("Spočítat velikost (⌥F10)", .calcSize),
+            ("Zabalit do ZIP (⌥F5)", .pack), ("Rozbalit (⌥F6)", .unpack), ("Spočítat velikost (⌥F10)", .calcSize), nil,
+            ("Změnit atributy (⌘F2)", .changeAttributes), ("Vlastnosti (⌥↩)", .properties),
         ]
         for entry in entries {
             guard let entry else {
@@ -1136,6 +1140,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .sameDirOther: commandSameDirOther()
         case .toggleHidden: toggleHiddenFiles()
         case .changeAttributes: commandChangeAttributes()
+        case .properties: commandShowInfo()
         // Cesta tak, jak ji ukazuje řádek adresáře (u archivu/FTP i s popiskem VFS).
         case .copyDirPath: copyTextToPasteboard(activePanel.displayPath)
         case .viewMenu: showViewModeMenu()
@@ -1298,6 +1303,36 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.markAll(false)
             self?.leftPanel.reload()
             self?.rightPanel.reload()
+        }
+    }
+
+    /// ⌥↩ / ⌘I Vlastnosti a ⌃P Oprávnění: jako v Salamanderu systémový dialog
+    /// vlastností – na macOS okno Informace z Finderu (Otevřít v aplikaci,
+    /// Sdílení a oprávnění, …) pro označené položky, jinak položku pod kurzorem.
+    /// Otevírá se systémovou službou Finderu „Show Info“ (bez AppleScriptu a bez
+    /// oprávnění k Automatizaci); je-li služba vypnutá, položky se aspoň ukážou
+    /// ve Finderu.
+    private func commandShowInfo() {
+        let panel = activePanel
+        let items = panel.operationItems
+        guard !items.isEmpty else { return }
+        let urls = items.compactMap { panel.localPath(of: $0.name) }.map { URL(fileURLWithPath: $0) }
+        guard !urls.isEmpty else {
+            showAlert(title: "Vlastnosti", text: "Vlastnosti lze zobrazit jen pro položky na lokálním disku.")
+            return
+        }
+        // Každá položka = jedno okno Informace; u velkého výběru se nejdřív zeptat.
+        if urls.count > 20, !confirm(title: "Vlastnosti", text: "Otevřít \(urls.count) oken Informace?", okTitle: "Otevřít") {
+            return
+        }
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("MicroCommander-ShowInfo"))
+        pasteboard.clearContents()
+        pasteboard.writeObjects(urls as [NSURL])
+        if !NSPerformService("Finder/Show Info", pasteboard) {
+            NSWorkspace.shared.activateFileViewerSelecting(urls)
+            showAlert(title: "Vlastnosti",
+                      text: "Služba Finderu „Zobrazit informace“ je vypnutá (Nastavení systému › Klávesnice › Klávesové zkratky › Služby). Položky jsou vybrané ve Finderu – informace zobrazíte stiskem ⌘I.",
+                      style: .informational)
         }
     }
 
@@ -1716,7 +1751,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
         F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout,
         F7 nový adresář, F8 smazat, F9 terminál, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
-        ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
+        ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
         ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
 
         Tip: na klávesnici Macu F-klávesy vyžadují Fn, nebo zapněte
