@@ -127,11 +127,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addSubmenu(editMenu, title: "Úpravy", to: mainMenu)
 
         let markEntries: [Entry] = [
-            ("Označit vše (⌘A)", .selectAll, "", []),
+            ("Označit vše", .selectAll, "a", [.command]),
             ("Zrušit označení", .unselectAll, "d", [.command]),
             ("Označit podle masky…", .selectMask, "=", [.command]),
             ("Odznačit podle masky…", .unselectMask, "-", [.command]),
-            ("Invertovat označení", .invertMarks, "", []),
+            ("Invertovat označení (Num *)", .invertMarks, "*", [.command]),
             nil,
             ("Porovnat adresáře", .compare, KeyCode.functionKeyString(10), [.control]),
         ]
