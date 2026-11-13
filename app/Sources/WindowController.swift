@@ -1165,10 +1165,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             if let mode = command.viewMode { setViewMode(mode, for: panel) }
         case .selectMask: commandMarkByMask(select: true)
         case .unselectMask: commandMarkByMask(select: false)
-        case .invertMarks: panel.invertMarks(includeDirs: false)
+        // Invertovat označení: adresáře podle stejné volby jako Označit vše (⌘A).
+        case .invertMarks: panel.invertMarks(includeDirs: Settings.markingIncludesDirs)
         // ⌘A / Označit vše: opakovaně přepíná označit vše ↔ zrušit označení;
         // adresáře podle Nastavení.
-        case .selectAll: panel.toggleMarkAll(includeDirs: Settings.selectAllIncludesDirs)
+        case .selectAll: panel.toggleMarkAll(includeDirs: Settings.markingIncludesDirs)
         case .unselectAll: panel.markAll(false)
         }
     }

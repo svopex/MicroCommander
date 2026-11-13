@@ -11,7 +11,7 @@ enum Settings {
     /// Oznámení o změně nastavení (hlavní okno se překreslí).
     static let changed = Notification.Name("MicroCommanderSettingsChanged")
     private static let middleBarKey = "showMiddleBar"
-    private static let selectAllDirsKey = "selectAllIncludesDirs"
+    private static let markDirsKey = "selectAllIncludesDirs"
 
     /// Zobrazovat svislou lištu příkazů mezi panely; výchozí ne = jen úzký
     /// dělicí pruh jako v Salamanderu.
@@ -23,11 +23,12 @@ enum Settings {
         }
     }
 
-    /// Označit vše (⌘A) označuje i adresáře; výchozí ano (bez uložené volby).
+    /// Označit vše (⌘A) a Invertovat označení (Num *) pracují i s adresáři;
+    /// výchozí ano (bez uložené volby).
     /// Zrušení označení platí vždy i pro adresáře.
-    static var selectAllIncludesDirs: Bool {
-        get { UserDefaults.standard.object(forKey: selectAllDirsKey) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: selectAllDirsKey) }
+    static var markingIncludesDirs: Bool {
+        get { UserDefaults.standard.object(forKey: markDirsKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: markDirsKey) }
     }
 }
 
@@ -38,7 +39,7 @@ final class SettingsWindowController: NSWindowController {
 
     private let middleBarCheckbox = NSButton(checkboxWithTitle: "Zobrazovat lištu příkazů mezi panely",
                                              target: nil, action: nil)
-    private let selectDirsCheckbox = NSButton(checkboxWithTitle: "Označit vše (⌘A) označuje i adresáře",
+    private let markDirsCheckbox = NSButton(checkboxWithTitle: "Označit vše (⌘A) a Invertovat označení i s adresáři",
                                               target: nil, action: nil)
 
     /// Zobrazí okno Nastavení (vytvoří ho při prvním otevření).
@@ -81,21 +82,21 @@ final class SettingsWindowController: NSWindowController {
         }
         middleBarCheckbox.target = self
         middleBarCheckbox.action = #selector(middleBarToggled(_:))
-        selectDirsCheckbox.target = self
-        selectDirsCheckbox.action = #selector(selectDirsToggled(_:))
+        markDirsCheckbox.target = self
+        markDirsCheckbox.action = #selector(markDirsToggled(_:))
         let middleBarNote = note("Svislá lišta s ikonami operací (kopírovat, přesunout, smazat…) mezi levým a pravým panelem. "
                                  + "Vypnutá lišta zůstane jen jako úzký dělicí pruh.")
-        let selectDirsNote = note("Výchozí je zapnuto. Bez zaškrtnutí ⌘A označí jen soubory. Opakovaný stisk ⌘A zruší celé označení "
-                                  + "(vždy i adresáře).")
+        let markDirsNote = note("Výchozí je zapnuto. Bez zaškrtnutí ⌘A označí a Invertovat (Num *) invertuje jen soubory. "
+                                + "Opakovaný stisk ⌘A zruší celé označení (vždy i adresáře).")
 
         let stack = NSStackView(views: [heading("Vzhled"), middleBarCheckbox, middleBarNote,
-                                        heading("Označování"), selectDirsCheckbox, selectDirsNote])
+                                        heading("Označování"), markDirsCheckbox, markDirsNote])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
         stack.setCustomSpacing(4, after: middleBarCheckbox)
         stack.setCustomSpacing(18, after: middleBarNote)
-        stack.setCustomSpacing(4, after: selectDirsCheckbox)
+        stack.setCustomSpacing(4, after: markDirsCheckbox)
         stack.translatesAutoresizingMaskIntoConstraints = false
         let content = NSView()
         content.addSubview(stack)
@@ -111,14 +112,14 @@ final class SettingsWindowController: NSWindowController {
     /// Načte aktuální hodnoty voleb do ovládacích prvků.
     private func refresh() {
         middleBarCheckbox.state = Settings.showMiddleBar ? .on : .off
-        selectDirsCheckbox.state = Settings.selectAllIncludesDirs ? .on : .off
+        markDirsCheckbox.state = Settings.markingIncludesDirs ? .on : .off
     }
 
     @objc private func middleBarToggled(_ sender: NSButton) {
         Settings.showMiddleBar = sender.state == .on
     }
 
-    @objc private func selectDirsToggled(_ sender: NSButton) {
-        Settings.selectAllIncludesDirs = sender.state == .on
+    @objc private func markDirsToggled(_ sender: NSButton) {
+        Settings.markingIncludesDirs = sender.state == .on
     }
 }

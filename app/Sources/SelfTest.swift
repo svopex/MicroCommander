@@ -275,7 +275,7 @@ final class UISelfTest {
         }))
         // 11c) ⌘A s vypnutou volbou „i adresáře“ označí jen soubory, druhé ⌘A označení zruší.
         steps.append((ready: { self.windowFree }, action: {
-            Settings.selectAllIncludesDirs = false
+            Settings.markingIncludesDirs = false
             try? FileManager.default.createDirectory(atPath: self.root + "/src/podadresar", withIntermediateDirectories: true)
             self.controller.activate(left())
             left().changePath(self.root + "/src")
@@ -291,6 +291,14 @@ final class UISelfTest {
         }))
         steps.append((ready: { left().marked.isEmpty }, action: {
             self.check(true, "druhé ⌘A zruší označení")
+            // Invertovat s vypnutou volbou: jen soubory; se zapnutou i adresáře.
+            self.controller.perform(.invertMarks)
+            self.check(left().marked == ["a.txt", "b.txt", "c.log"], "Invertovat bez adresářů (\(left().marked.sorted()))")
+            left().markAll(false)
+            Settings.markingIncludesDirs = true
+            self.controller.perform(.invertMarks)
+            self.check(left().marked.contains("podadresar"), "Invertovat i s adresáři")
+            left().markAll(false)
             try? FileManager.default.removeItem(atPath: self.root + "/src/podadresar")
             left().reload()
         }))
