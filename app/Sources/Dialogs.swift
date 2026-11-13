@@ -583,24 +583,20 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
     @objc private func removeClicked(_ sender: Any?) {
         guard let index = editingIndex, let window else { return }
         let server = servers[index]
-        let alert = NSAlert()
-        alert.messageText = "Odebrat server „\(server.displayName)“?"
-        alert.informativeText = "Server zmizí ze seznamu i z nabídky disků; uložené heslo se smaže z Klíčenky."
-        alert.addButton(withTitle: "Odebrat")
-        alert.addCancelButton()
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self, response == .alertFirstButtonReturn else { return }
-            ServerKeychain.removeSecret(for: server.id)
-            self.servers.remove(at: index)
-            ServerStore.save(self.servers)
-            // Upravovaný server už neexistuje – nic se z formuláře neukládá.
-            self.editingIndex = nil
-            self.tableView.reloadData()
-            if self.servers.isEmpty {
-                self.loadForm(nil)
-            } else {
-                self.select(min(index, self.servers.count - 1))
-            }
+        let response = PromptDialog.show(title: "Odebrat server „\(server.displayName)“?",
+                                         message: "Server zmizí ze seznamu i z nabídky disků; uložené heslo se smaže z Klíčenky.",
+                                         buttons: ["Odebrat"], showsCancel: true, over: window)
+        guard response == 0 else { return }
+        ServerKeychain.removeSecret(for: server.id)
+        servers.remove(at: index)
+        ServerStore.save(servers)
+        // Upravovaný server už neexistuje – nic se z formuláře neukládá.
+        editingIndex = nil
+        tableView.reloadData()
+        if servers.isEmpty {
+            loadForm(nil)
+        } else {
+            select(min(index, servers.count - 1))
         }
     }
 
@@ -654,12 +650,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
 
     /// Chyba jako sheet nad dialogem (dialog zůstane otevřený k opravě).
     private func showError(_ text: String) {
-        guard let sheet = window else { return }
-        let alert = NSAlert()
-        alert.messageText = "Připojení se nezdařilo"
-        alert.informativeText = text
-        alert.alertStyle = .warning
-        alert.beginSheetModal(for: sheet)
+        PromptDialog.show(title: "Připojení se nezdařilo", message: text, over: window)
     }
 }
 
@@ -688,10 +679,8 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
             return
         }
         guard let handle = FileHandle(forReadingAtPath: path) else {
-            let alert = NSAlert()
-            alert.messageText = "Zobrazit"
-            alert.informativeText = "Soubor \(path) nelze otevřít."
-            alert.runModal()
+            // Prohlížeč se otevírá z hlavního okna i z okna hledání – hlášení nad aktivním oknem.
+            PromptDialog.show(title: "Zobrazit", message: "Soubor \(path) nelze otevřít.", over: NSApp.keyWindow)
             return
         }
         let data = (try? handle.read(upToCount: maxBytes)) ?? Data()
@@ -1223,8 +1212,8 @@ private final class DriveChooserPanel: NSPanel {
 /// Dialog operace ve stylu Salamandera (stejný vzhled jako Informace
 /// o jednotce): text dotazu, volitelně ikona a vstupní pole, dole řada
 /// tlačítek. Zobrazuje se jako sheet nad oknem a běží modálně, takže volající
-/// dostane odpověď synchronně. Slouží kopírování, přesunu, mazání a dalším
-/// dotazům hlavního okna.
+/// dostane odpověď synchronně. Slouží kopírování, přesunu, mazání, dalším
+/// dotazům a všem hlášením aplikace (místo systémového NSAlert).
 final class PromptDialog: NSWindowController {
     private static let width: CGFloat = 520
 
@@ -1239,15 +1228,17 @@ final class PromptDialog: NSWindowController {
     var text: String { input?.stringValue ?? "" }
 
     /// - Parameters:
-    ///   - title: titulek okna
+    ///   - title: titulek okna (u sheetu není vidět)
+    ///   - showsHeading: zopakovat titulek jako tučný nadpis nad textem
     ///   - message: text dotazu (zalamuje se, může mít víc řádků)
     ///   - icon: ikona vlevo od textu (nil = bez ikony)
     ///   - value: výchozí text vstupního pole; nil = dialog bez pole
+    ///   - secure: vstupní pole skrývá zadávaný text (heslo)
     ///   - selectsBaseName: po otevření označit jen jméno bez přípony
     ///   - buttons: titulky tlačítek zleva; první je výchozí (Enter)
     ///   - showsCancel: přidat na konec tlačítko Zrušit (Escape zavře dialog vždy)
-    init(title: String, message: String, icon: NSImage? = nil, value: String? = nil,
-         selectsBaseName: Bool = false, buttons: [String], showsCancel: Bool = true) {
+    init(title: String, showsHeading: Bool = false, message: String, icon: NSImage? = nil, value: String? = nil,
+         secure: Bool = false, selectsBaseName: Bool = false, buttons: [String], showsCancel: Bool = true) {
         self.selectsBaseName = selectsBaseName
         // Výška je jen výchozí – buildContent ji dopočítá podle obsahu.
         let window = DialogWindow(contentRect: NSRect(x: 0, y: 0, width: PromptDialog.width, height: 0),
@@ -1255,7 +1246,29 @@ final class PromptDialog: NSWindowController {
         window.title = title
         super.init(window: window)
         window.onCancel = { [weak self] in self?.finish(nil) }
-        buildContent(message: message, icon: icon, value: value, buttons: buttons, showsCancel: showsCancel)
+        buildContent(heading: showsHeading ? title : nil, message: message, icon: icon, value: value, secure: secure,
+                     buttons: buttons, showsCancel: showsCancel)
+    }
+
+    /// Ikona výstrahy (chyby, upozornění, dotazy na nevratné akce).
+    static let cautionIcon = NSImage(named: NSImage.cautionName)
+
+    /// Zobrazí hlášení nebo dotaz bez vstupního pole a počká na odpověď.
+    /// - Parameters:
+    ///   - title: titulek okna
+    ///   - showsHeading: zopakovat titulek jako tučný nadpis (u dotazů, kde
+    ///     titulek jen opakuje text, se vynechá)
+    ///   - message: text hlášení
+    ///   - icon: ikona vlevo (výchozí výstraha)
+    ///   - buttons: titulky tlačítek; první je výchozí (Enter)
+    ///   - showsCancel: přidat tlačítko Zrušit
+    ///   - parent: okno, nad kterým se dialog zobrazí (nil = samostatné okno)
+    /// - Returns: index stisknutého tlačítka, nil při zrušení (Escape)
+    @discardableResult
+    static func show(title: String, showsHeading: Bool = true, message: String, icon: NSImage? = cautionIcon,
+                     buttons: [String] = ["OK"], showsCancel: Bool = false, over parent: NSWindow?) -> Int? {
+        PromptDialog(title: title, showsHeading: showsHeading, message: message, icon: icon, buttons: buttons,
+                     showsCancel: showsCancel).run(over: parent)
     }
 
     required init?(coder: NSCoder) {
@@ -1264,7 +1277,8 @@ final class PromptDialog: NSWindowController {
 
     /// Rozvržení: ikona a text dotazu, pod ním vstupní pole, čára a tlačítka
     /// uprostřed. Výška dialogu se dopočítá podle textu dotazu.
-    private func buildContent(message: String, icon: NSImage?, value: String?, buttons: [String], showsCancel: Bool) {
+    private func buildContent(heading: String?, message: String, icon: NSImage?, value: String?, secure: Bool,
+                              buttons: [String], showsCancel: Bool) {
         let width = PromptDialog.width
         let margin: CGFloat = 16
         let content = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 0))
@@ -1278,6 +1292,16 @@ final class PromptDialog: NSWindowController {
         }
         let textWidth = width - textX - margin
 
+        // Tučný nadpis (u sheetu nahrazuje neviditelný titulek okna).
+        if let heading {
+            let headingLabel = NSTextField(wrappingLabelWithString: heading)
+            headingLabel.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+            headingLabel.isSelectable = true
+            let headingHeight = ceil(headingLabel.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth, height: 10000)).height ?? 17)
+            content.place(headingLabel, NSRect(x: textX, y: y, width: textWidth, height: headingHeight))
+            y += headingHeight + 6
+        }
+
         // Text dotazu: zalomený, výška podle obsahu.
         let label = NSTextField(wrappingLabelWithString: message)
         label.isSelectable = true
@@ -1288,7 +1312,7 @@ final class PromptDialog: NSWindowController {
         if let value {
             // Jednořádkové pole: dlouhá cesta se posouvá, nezalamuje se (jinak by se
             // druhý řádek useknul).
-            let field = NSTextField(string: value)
+            let field = secure ? NSSecureTextField(string: value) : NSTextField(string: value)
             field.usesSingleLineMode = true
             field.cell?.wraps = false
             field.cell?.isScrollable = true
@@ -1334,9 +1358,17 @@ final class PromptDialog: NSWindowController {
     /// Zobrazí dialog jako sheet nad oknem a čeká na odpověď.
     /// - Parameter parent: okno, nad kterým se sheet zobrazí (nil = samostatné modální okno)
     /// - Returns: index stisknutého tlačítka, nil při zrušení
-    func run(over parent: NSWindow?) -> Int? {
+    func run(over requestedParent: NSWindow?) -> Int? {
         guard let window else { return nil }
-        parent?.beginSheet(window)
+        // Má-li okno už otevřený sheet (dialog serverů apod.), dialog se zobrazí
+        // nad ním – jinak by čekal ve frontě a modální smyčka by uvízla.
+        var parent = requestedParent
+        while let sheet = parent?.attachedSheet { parent = sheet }
+        if let parent {
+            parent.beginSheet(window)
+        } else {
+            window.center()
+        }
         // Výběr textu až po zobrazení (field editor vzniká při aktivaci pole).
         if let input {
             let wholeName = !selectsBaseName

@@ -213,13 +213,10 @@ extension MainWindowController {
 
     /// Chyba připojení s možností rovnou upravit nastavení serveru.
     private func showConnectError(_ error: Error, server: ServerProfile, panel: PanelController) {
-        let alert = NSAlert()
-        alert.messageText = "Připojení k \(server.displayName) se nezdařilo"
-        alert.informativeText = error.localizedDescription
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Upravit server…")
-        if alert.runModal() == .alertSecondButtonReturn {
+        let response = PromptDialog.show(title: "Připojení k \(server.displayName) se nezdařilo",
+                                         message: error.localizedDescription,
+                                         buttons: ["OK", "Upravit server…"], over: window)
+        if response == 1 {
             ConnectWindowController.show(parent: self, panel: panel, selecting: server.id)
         } else {
             focusActivePanel()

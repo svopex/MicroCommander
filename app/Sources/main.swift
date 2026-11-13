@@ -253,11 +253,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showAbout(_ sender: Any?) {
-        let alert = NSAlert()
-        alert.messageText = "MicroCommander"
+        // O aplikaci: samostatné okno uprostřed obrazovky (nezávisí na hlavním okně).
         let version = String(cString: sal_version())
-        alert.informativeText = "Dvoupanelový správce souborů pro macOS.\nJádro salcore v\(version) (Rust).\nPřepis Open Salamanderu (bez pluginů)."
-        alert.runModal()
+        PromptDialog.show(title: "MicroCommander",
+                          message: "Dvoupanelový správce souborů pro macOS.\nJádro salcore v\(version) (Rust).\nPřepis Open Salamanderu (bez pluginů).",
+                          icon: NSApp.applicationIconImage, over: nil)
     }
 }
 

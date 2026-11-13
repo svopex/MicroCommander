@@ -1023,33 +1023,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             ? "Heslo k archivu „\(vfs.label)“ není správné. Zadejte ho znovu:"
             : "Archiv „\(vfs.label)“ obsahuje šifrované soubory (AES nebo ZipCrypto). Zadejte heslo:"
         guard let password = askSecretText(title: wrong ? "Chybné heslo" : "Zaheslovaný archiv", text: text,
-                                           style: wrong ? .warning : .informational) else { return false }
+                                           warning: wrong) else { return false }
         vfs.setPassword(password)
         return true
     }
 
-    /// Modální dotaz na heslo (skryté pole, Enter = potvrdit, Escape = zrušit).
+    /// Modální dotaz na heslo ve stylu Salamandera (skryté pole, Enter = potvrdit,
+    /// Escape = zrušit).
     /// - Parameters:
     ///   - title: nadpis dialogu
     ///   - text: vysvětlující text
     ///   - okTitle: popisek potvrzovacího tlačítka
-    ///   - style: styl dialogu
+    ///   - warning: výstražná ikona (chybné heslo), jinak ikona aplikace
     /// - Returns: zadané heslo, nil = zrušeno
-    func askSecretText(title: String, text: String, okTitle: String = "OK",
-                       style: NSAlert.Style = .informational) -> String? {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = text
-        alert.alertStyle = style
-        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        input.usesSingleLineMode = true
-        alert.accessoryView = input
-        alert.addButton(withTitle: okTitle)
-        alert.addCancelButton()
-        alert.window.initialFirstResponder = input
-        let response = alert.runModal()
+    func askSecretText(title: String, text: String, okTitle: String = "OK", warning: Bool = false) -> String? {
+        let dialog = PromptDialog(title: title, showsHeading: true, message: text,
+                                  icon: warning ? PromptDialog.cautionIcon : NSApp.applicationIconImage,
+                                  value: "", secure: true, buttons: [okTitle])
+        let response = dialog.run(over: window)
         focusActivePanel()
-        return response == .alertFirstButtonReturn ? input.stringValue : nil
+        return response == 0 ? dialog.text : nil
     }
 
     // MARK: - Příkazy
@@ -1293,7 +1286,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             NSWorkspace.shared.activateFileViewerSelecting(urls)
             showAlert(title: "Vlastnosti",
                       text: "Služba Finderu „Zobrazit informace“ je vypnutá (Nastavení systému › Klávesnice › Klávesové zkratky › Služby). Položky jsou vybrané ve Finderu – informace zobrazíte stiskem ⌘I.",
-                      style: .informational)
+                      icon: NSApp.applicationIconImage)
         }
     }
 
@@ -1582,7 +1575,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         left.setMarked(leftMarks)
         right.setMarked(rightMarks)
         if leftMarks.isEmpty && rightMarks.isEmpty {
-            showInfo(title: "Porovnat adresáře", text: "Adresáře obsahují stejné soubory.")
+            showAlert(title: "Porovnat adresáře", text: "Adresáře obsahují stejné soubory.", icon: NSApp.applicationIconImage)
         }
     }
 
@@ -1740,7 +1733,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         Tip: na klávesnici Macu F-klávesy vyžadují Fn, nebo zapněte
         „Používat F1, F2 atd. jako standardní funkční klávesy“ v nastavení klávesnice.
         """
-        showAlert(title: "MicroCommander – ovládání", text: text, style: .informational)
+        showAlert(title: "MicroCommander – ovládání", text: text, icon: NSApp.applicationIconImage)
     }
 
     /// Uloží obsah okna jako PNG (vývojářský snímek, viz SAL_SNAPSHOT).
@@ -1847,33 +1840,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
     }
 
-    /// Zobrazí hlášení (modálně).
-    func showAlert(title: String, text: String, style: NSAlert.Style = .warning) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = text
-        alert.alertStyle = style
-        alert.runModal()
+    /// Hlášení ve stylu Salamandera s tlačítkem OK (Enter i Escape ho zavřou).
+    /// - Parameter icon: ikona vlevo – výstraha u chyb a upozornění, ikona
+    ///   aplikace (NSApp.applicationIconImage) u informací
+    func showAlert(title: String, text: String, icon: NSImage? = PromptDialog.cautionIcon) {
+        PromptDialog.show(title: title, message: text, icon: icon, over: window)
         focusActivePanel()
     }
 
-    /// Informační hlášení ve stylu Salamandera s ikonou aplikace a tlačítkem OK
-    /// (Enter i Escape ho zavřou).
-    private func showInfo(title: String, text: String) {
-        _ = ask(title: title, text: text, buttons: ["OK"], icon: NSApp.applicationIconImage, showsCancel: false)
-    }
-
-    /// Dotaz ve stylu Salamandera, výchozí s výstražnou ikonou (Enter = první
-    /// tlačítko, Escape = zrušit).
-    /// - Parameters:
-    ///   - icon: ikona vlevo od textu (nil = výstražná)
-    ///   - showsCancel: přidat tlačítko Zrušit
+    /// Dotaz s výstražnou ikonou ve stylu Salamandera (Enter = první tlačítko,
+    /// Escape = zrušit); titulek jen opakuje text, proto bez nadpisu.
     /// - Returns: index stisknutého tlačítka, nil při zrušení
-    private func ask(title: String, text: String, buttons: [String], icon: NSImage? = nil,
-                     showsCancel: Bool = true) -> Int? {
-        let dialog = PromptDialog(title: title, message: text, icon: icon ?? NSImage(named: NSImage.cautionName),
-                                  buttons: buttons, showsCancel: showsCancel)
-        let response = dialog.run(over: window)
+    private func ask(title: String, text: String, buttons: [String]) -> Int? {
+        let response = PromptDialog.show(title: title, showsHeading: false, message: text, buttons: buttons,
+                                         showsCancel: true, over: window)
         focusActivePanel()
         return response
     }
@@ -2107,10 +2087,3 @@ func copyTextToPasteboard(_ text: String) {
     NSPasteboard.general.setString(text, forType: .string)
 }
 
-extension NSAlert {
-    /// Přidá tlačítko „Zrušit“ s Escapem (NSAlert ho sám přiřadí jen tlačítku
-    /// s anglickým titulkem „Cancel“).
-    func addCancelButton() {
-        addButton(withTitle: "Zrušit").keyEquivalent = "\u{1b}"
-    }
-}

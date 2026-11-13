@@ -424,7 +424,11 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   znovu a operaci zopakuje. ⌥F5 (Zabalit do ZIP) má v dialogu uložení volbu
   šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
   (prázdné nebo neshodné heslo dialog nepustí dál).
-- Dialogy: Enter potvrdí, Escape zruší. Při konfliktu v cíli se UI zeptá:
+- Dialogy: Enter potvrdí, Escape zruší. Všechna hlášení a dotazy (chyby,
+  upozornění, potvrzení, dotaz na heslo, O aplikaci) mají vlastní vzhled
+  aplikace ve stylu Salamandera – ikona, tučný nadpis, text a tlačítka uprostřed –
+  místo systémového okna; zobrazují se jako sheet nad oknem, ze kterého vzešly.
+  Systémové zůstávají jen dialogy výběru souboru. Při konfliktu v cíli se UI zeptá:
   přepsat vše / přeskočit existující / zrušit (adresáře se slučují; při přesunu
   přeskočené položky zůstanou ve zdroji). Cílem nemůže být zdrojový adresář
   ani přenášený adresář sám. Dialog průběhu ukazuje u přenosů bajty a procenta,

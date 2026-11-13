@@ -1267,13 +1267,9 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         return "\(count) \(word)"
     }
 
+    /// Chybové hlášení jako sheet nad oknem hledání.
     private func showError(_ text: String) {
-        guard let window else { return }
-        let alert = NSAlert()
-        alert.messageText = "Chyba"
-        alert.informativeText = text
-        alert.alertStyle = .warning
-        alert.beginSheetModal(for: window)
+        PromptDialog.show(title: "Chyba", message: text, over: window)
     }
 
     // MARK: Ovládací prvky – akce
@@ -1571,16 +1567,10 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         guard let window, runningState == nil, canDelete(selected) else { return }
         let (text, useTrash) = deleteConfirmation(items: selected.map(\.item), vfs: vfs,
                                                   toTrash: toTrash, verb: "odstranit")
-        let alert = NSAlert()
-        alert.messageText = "Odstranit"
-        alert.informativeText = text
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Odstranit")
-        alert.addCancelButton()
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }
-            self?.performDelete(selected, toTrash: useTrash)
-        }
+        // Bez nadpisu, stejně jako potvrzení mazání v hlavním okně (confirm).
+        guard PromptDialog.show(title: "Odstranit", showsHeading: false, message: text, buttons: ["Odstranit"],
+                                showsCancel: true, over: window) == 0 else { return }
+        performDelete(selected, toTrash: useTrash)
     }
 
     /// Smaže položky po adresářích na pozadí; smazané zmizí ze seznamu.

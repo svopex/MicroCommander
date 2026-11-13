@@ -571,13 +571,12 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     ///   - error: příčina (chyba formátu nebo systémová chyba čtení / zápisu)
     ///   - panel: dialog výběru souboru – musí zmizet dřív, než se ukáže další sheet
     private func showFileError(_ message: String, _ error: Error, after panel: NSSavePanel) {
-        guard let window else { return }
         panel.orderOut(nil)
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.informativeText = error.localizedDescription
-        alert.alertStyle = .warning
-        alert.beginSheetModal(for: window)
+        // Až po úplném zavření dialogu výběru souboru (jeho sheet se uvolní
+        // na konci obsluhy dokončení), aby hlášení nečekalo ve frontě sheetů.
+        DispatchQueue.main.async { [weak self] in
+            PromptDialog.show(title: message, message: error.localizedDescription, over: self?.window)
+        }
     }
 
     // MARK: Klávesnice
@@ -692,12 +691,10 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         if let other = KeyBindings.commands.first(where: { other in
             other != command && (draftBindings[other] ?? []).contains { $0.display == shortcut.display }
         }) {
-            let alert = NSAlert()
-            alert.messageText = "Zkratka \(shortcut.display) už patří příkazu „\(other.title)“."
-            alert.informativeText = "Přeřadit ji příkazu „\(command.title)“?"
-            alert.addButton(withTitle: "Přeřadit")
-            alert.addCancelButton()
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            let response = PromptDialog.show(title: "Zkratka \(shortcut.display) už patří příkazu „\(other.title)“.",
+                                             message: "Přeřadit ji příkazu „\(command.title)“?",
+                                             buttons: ["Přeřadit"], showsCancel: true, over: window)
+            guard response == 0 else { return }
             draftBindings[other]?.removeAll { $0.display == shortcut.display }
         }
         draftBindings[command, default: []].append(shortcut)
