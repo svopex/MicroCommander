@@ -189,11 +189,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Lokální adresář panelu pro obnovení po dalším spuštění: na disku aktuální
     /// cesta, v archivu či na FTP nejbližší lokální adresář, ze kterého se vešlo.
     private static func restorableDirectory(of panel: PanelController) -> String? {
-        let locations = [panel.location] + panel.parentLocations.reversed().map(\.location)
-        for location in locations where location.vfs.kind == SAL_VFS_LOCAL {
-            if let path = location.vfs.realPath(location.path) { return path }
-        }
-        return nil
+        panel.nearestLocalPath
     }
 
     /// Při ukončení aplikace uloží adresáře obou panelů (ne při self-testu /
@@ -1094,6 +1090,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .compare: commandCompare()
         case .driveLeft: activate(leftPanel); leftView.showDriveMenu()
         case .driveRight: activate(rightPanel); rightView.showDriveMenu()
+        case .driveInfo: commandDriveInfo()
         case .pack: commandPack()
         case .unpack: commandUnpack()
         case .find: FindWindowController.show(owner: self)
@@ -1302,6 +1299,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                       text: "Služba Finderu „Zobrazit informace“ je vypnutá (Nastavení systému › Klávesnice › Klávesové zkratky › Služby). Položky jsou vybrané ve Finderu – informace zobrazíte stiskem ⌘I.",
                       style: .informational)
         }
+    }
+
+    /// ⌘F1 / ⌃F1 – informace o jednotce (svazku), na které leží adresář
+    /// aktivního panelu; u archivu jde o svazek se souborem archivu.
+    private func commandDriveInfo() {
+        guard let path = activePanel.nearestLocalPath else {
+            showAlert(title: "Informace o jednotce", text: "Informace o jednotce lze zobrazit jen pro lokální disk.")
+            return
+        }
+        guard let info = VolumeInfo.load(path: path) else {
+            showAlert(title: "Informace o jednotce", text: "Informace o jednotce se nepodařilo zjistit:\n\(path)")
+            return
+        }
+        presentSheet(DriveInfoDialog(info: info))
     }
 
     /// ⌘F2 / ⌃F2 – změna atributů označených položek (jinak položky pod kurzorem):
@@ -1728,7 +1739,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout,
         F7 nový adresář, F8 smazat, F9 terminál, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
         ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
-        ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
+        ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌘F1 / ⌃F1 informace o jednotce,
+        ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
 
         Tip: na klávesnici Macu F-klávesy vyžadují Fn, nebo zapněte
         „Používat F1, F2 atd. jako standardní funkční klávesy“ v nastavení klávesnice.

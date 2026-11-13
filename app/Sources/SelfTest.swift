@@ -513,6 +513,35 @@ final class UIKeyCheck {
               "⌘C v textovém poli zůstane kopírování textu")
     }
 
+    /// Informace o jednotce: ⌘F1 i ⌃F1 spouští příkaz, údaje o kořenovém svazku
+    /// dávají smysl a dialog je ukáže (název svazku, kapacita v bajtech).
+    private func checkDriveInfo() {
+        let cmdF1 = event(KeyCode.functionKeys[0], NSF1FunctionKey, [.command])
+        let ctrlF1 = event(KeyCode.functionKeys[0], NSF1FunctionKey, [.control])
+        let plainF1 = event(KeyCode.functionKeys[0], NSF1FunctionKey, [])
+        check(KeyBindings.command(for: cmdF1) == .driveInfo && KeyBindings.command(for: ctrlF1) == .driveInfo
+              && KeyBindings.command(for: plainF1) == .help, "⌘F1 / ⌃F1 = Informace o jednotce, F1 zůstává nápověda")
+        guard let info = VolumeInfo.load(path: NSTemporaryDirectory()) else {
+            check(false, "informace o jednotce: údaje o svazku se načtou")
+            return
+        }
+        check(info.capacity > 0 && info.free <= info.capacity && info.used + info.free == info.capacity
+              && info.blockSize > 0 && info.blockCount * info.blockSize == info.capacity
+              && info.mountPoint.hasPrefix("/") && !info.fileSystem.isEmpty,
+              "informace o jednotce: kapacita, místo a bloky sedí (\(info.mountPoint), \(info.fileSystem))")
+        check(VolumeInfo.load(path: "/neexistuje-\(getpid())") == nil, "informace o jednotce: neexistující cesta → nic")
+        // Dialog obsahuje název svazku a kapacitu v bajtech.
+        let dialog = DriveInfoDialog(info: info)
+        var texts: [String] = []
+        func collect(_ view: NSView) {
+            if let field = view as? NSTextField { texts.append(field.stringValue) }
+            view.subviews.forEach(collect)
+        }
+        if let content = dialog.window?.contentView { collect(content) }
+        check(texts.contains(info.name) && texts.contains(formatExactSize(info.capacity) + " bajtů"),
+              "dialog Informace o jednotce ukazuje název svazku a kapacitu")
+    }
+
     func run() {
         setvbuf(stdout, nil, _IOLBF, 0)
         // Testovací adresář s podadresářem (aby první položka byla „..“).
@@ -586,6 +615,7 @@ final class UIKeyCheck {
             self.checkServerProfiles()
             self.probeMenuPeriod(dir: dir)
             self.checkKeyBindings()
+            self.checkDriveInfo()
             self.checkSameDir(dir: dir, then: { self.finish(dir: dir) })
         }
     }

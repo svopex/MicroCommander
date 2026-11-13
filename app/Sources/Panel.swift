@@ -571,6 +571,14 @@ final class PanelController: NSObject {
         location.vfs.realPath(joinPath(location.path, name))
     }
 
+    /// Nejbližší adresář na lokálním disku: adresář panelu, v archivu či na
+    /// FTP lokální adresář, ze kterého se vešlo; nil, když žádný není.
+    var nearestLocalPath: String? {
+        // realPath vrací cestu jen pro lokální VFS (jinak nil).
+        let locations = [location] + parentLocations.reversed().map(\.location)
+        return locations.lazy.compactMap { $0.vfs.realPath($0.path) }.first
+    }
+
     /// Text řádku adresáře (VFS + cesta).
     var displayPath: String {
         let vfs = location.vfs

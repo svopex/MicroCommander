@@ -119,6 +119,7 @@ app/                        # tenké UI pro macOS
   Sources/Dialogs.swift     # progress, správa FTP/SFTP serverů,
                             #   interní prohlížeč, nabídka disků
   Sources/Attributes.swift  # dialog Změnit atributy (⌘F2 / ⌃F2)
+  Sources/DriveInfo.swift   # dialog Informace o jednotce (⌘F1 / ⌃F1)
   Sources/FindWindow.swift  # okno Vyhledat soubory a adresáře (⌃F/⌥F7)
                             #   a dialog Upřesnit možnosti
   Sources/Servers.swift     # uložené FTP/SFTP servery (UserDefaults),
@@ -226,7 +227,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   potvrdí; jméno jiné existující položky se odmítne), F3 prohlížeč, F4 editor, F5
   kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 smazat,
   F9 terminál v adresáři, F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
-  zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; **⌘F2 / ⌃F2 změnit atributy**
+  zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌘F1 / ⌃F1 informace o
+  jednotce; **⌘F2 / ⌃F2 změnit atributy**
   (dialog podle Salamandera: Jen pro čtení a Skrytý třístavově – smíšený stav
   = neměnit, změna data a času Změněno / Vytvořeno / Otevřeno, Nastavit
   aktuální, Včetně podadresářů; označené položky, jinak položka pod kurzorem;
@@ -242,6 +244,15 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   službou Finderu „Zobrazit informace“ (bez AppleScriptu a dotazu na povolení);
   je-li služba vypnutá, položky se vyberou ve Finderu (pak ⌘I). Víc než 20 oken
   se otevře až po potvrzení. Jen lokální disk.
+- **Informace o jednotce** (jako Ctrl+F1 v Salamanderu): ⌘F1 / ⌃F1 (Panel ›
+  Informace o jednotce…) ukáže údaje o svazku, na kterém leží adresář aktivního
+  panelu (u archivu svazek se souborem archivu): název svazku, přípojný bod,
+  zařízení (u síťové jednotky adresa sdílení), UUID svazku, typ (interní /
+  externí / výměnný disk, síťová jednotka), využité a volné místo a kapacitu
+  v bajtech i zaokrouhleně s koláčovým grafem, velikost a počty bloků, systém
+  souborů a jeho příznaky (velká a malá písmena, šifrování, žurnál, zhuštěné
+  soubory, odkazy, ACL…). Hodnoty lze označit a zkopírovat; dialog je jen pro
+  čtení, zavírá se Enterem nebo Escape. Jen lokální disk (ne FTP/SFTP).
 - **Nabídka disků** (⌥F1 levý / ⌥F2 pravý panel, tlačítko disku na řádku
   adresáře): kořen, domov, připojené svazky, **vlastní adresáře** a **uložené
   FTP/SFTP servery** (výběr serveru ho připojí v daném panelu), na konci

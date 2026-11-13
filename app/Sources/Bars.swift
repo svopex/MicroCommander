@@ -13,7 +13,7 @@ enum Command: CaseIterable {
     case help, rename, view, edit, newFile, copy, move, mkdir, changeDir, delete
     case terminal, quit, connect, disconnect
     case sortName, sortExt, sortTime, sortSize, refresh, compare
-    case driveLeft, driveRight, editPlaces, pack, unpack, find, calcSize
+    case driveLeft, driveRight, driveInfo, editPlaces, pack, unpack, find, calcSize
     case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden, copyDirPath, changeAttributes
     case properties, permissions
     case selectMask, unselectMask, invertMarks, selectAll, unselectAll

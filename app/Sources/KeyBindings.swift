@@ -196,6 +196,7 @@ extension Command {
         case .driveLeft: return "Disk v levém panelu"
         case .driveRight: return "Disk v pravém panelu"
         case .editPlaces: return "Upravit nabídku disků"
+        case .driveInfo: return "Informace o jednotce"
         case .pack: return "Zabalit do ZIP"
         case .unpack: return "Rozbalit"
         case .find: return "Vyhledat soubory a adresáře"
@@ -245,6 +246,7 @@ extension Command {
         case .compare: return "Porovnat"
         case .driveLeft: return "Levý disk"
         case .driveRight: return "Pravý disk"
+        case .driveInfo: return "Jednotka"
         case .pack: return "Zabalit"
         case .find: return "Hledat"
         case .calcSize: return "Velikost"
@@ -304,6 +306,7 @@ enum KeyBindings {
         (.compare, cmdCtrlFunction(10)),
         (.driveLeft, [.function(1, .option)]),
         (.driveRight, [.function(2, .option)]),
+        (.driveInfo, cmdCtrlFunction(1)),
         (.pack, [.function(5, .option)]),
         (.unpack, [.function(6, .option), .function(9, .option)]),
         (.find, [.function(7, .option)] + cmdCtrl("f")),
