@@ -231,6 +231,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { [weak self] _ in
             self?.middleBar.setCollapsed(!Settings.showMiddleBar)
         }
+        // Barevné schéma: panely si znovu načtou barvy.
+        NotificationCenter.default.addObserver(forName: Settings.colorSchemeChanged, object: nil, queue: .main) { [weak self] _ in
+            self?.leftView.applyColorScheme()
+            self?.rightView.applyColorScheme()
+        }
         functionBar.onCommand = { [weak self] in self?.perform($0) }
         driveBar.onPlace = { [weak self] place in
             guard let self else { return }

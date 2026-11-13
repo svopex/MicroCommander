@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // Nastavení aplikace (⌘,) ve stylu dialogu Konfigurace Salamandera: vlevo
-// seznam kategorií (Obecné, Panely, Hlavní okno, Klávesnice), vpravo stránka
+// seznam kategorií (Obecné, Panely, Barvy, Hlavní okno, Klávesnice), vpravo stránka
 // s nadpisem, dole OK / Zrušit – změny se uloží až tlačítkem OK. Stránka
 // Klávesnice mění klávesové zkratky všech příkazů (KeyBindings).
 
@@ -12,9 +12,12 @@ import AppKit
 enum Settings {
     /// Oznámení o změně nastavení (hlavní okno se překreslí).
     static let changed = Notification.Name("MicroCommanderSettingsChanged")
+    /// Oznámení o změně barevného schématu (panely se přebarví).
+    static let colorSchemeChanged = Notification.Name("MicroCommanderColorSchemeChanged")
     private static let middleBarKey = "showMiddleBar"
     private static let markDirsKey = "selectAllIncludesDirs"
     private static let savePanelPathsKey = "savePanelPaths"
+    private static let colorSchemeKey = "colorScheme"
 
     /// Zobrazovat svislou lištu příkazů mezi panely; výchozí ne = jen úzký
     /// dělicí pruh jako v Salamanderu.
@@ -40,6 +43,28 @@ enum Settings {
         get { UserDefaults.standard.object(forKey: savePanelPathsKey) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: savePanelPathsKey) }
     }
+
+    /// Barevné schéma panelů; výchozí „macOS – tmavé“. Změna nastaví vzhled
+    /// aplikace a oznámí překreslení panelů.
+    static var colorScheme: PanelColorScheme {
+        get {
+            UserDefaults.standard.string(forKey: colorSchemeKey).flatMap(PanelColorScheme.init(rawValue:))
+                ?? PanelColorScheme.defaultScheme
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: colorSchemeKey)
+            applyAppearance()
+            NotificationCenter.default.post(name: colorSchemeChanged, object: nil)
+        }
+    }
+
+    /// Nastaví vzhled aplikace (světlý/tmavý) a barvy panelů podle barevného
+    /// schématu (jediné čtení předvolby – kreslení pak bere PanelColors.current).
+    static func applyAppearance() {
+        let scheme = colorScheme
+        NSApp.appearance = scheme.appearance
+        PanelColors.current = scheme.colors
+    }
 }
 
 /// Okno Nastavení (jedno pro celou aplikaci, otevírá se z menu ⌘,).
@@ -49,12 +74,13 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     /// Stránky dialogu (pořadí v seznamu kategorií).
     private enum Page: Int, CaseIterable {
-        case general, panels, mainWindow, keyboard
+        case general, panels, colors, mainWindow, keyboard
 
         var title: String {
             switch self {
             case .general: return "Obecné"
             case .panels: return "Panely"
+            case .colors: return "Barvy"
             case .mainWindow: return "Hlavní okno"
             case .keyboard: return "Klávesnice"
             }
@@ -76,6 +102,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
                                        target: nil, action: nil)
     private let middleBarBox = NSButton(checkboxWithTitle: "Zobrazovat lištu příkazů mezi panely",
                                         target: nil, action: nil)
+    private let schemePopup = NSPopUpButton()
 
     // Stránka Klávesnice: rozpracované zkratky (všechny příkazy) a jejich tabulka.
     private var draftBindings: [Command: [Shortcut]] = [:]
@@ -191,11 +218,20 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             .panels: optionsPage([(showHiddenBox, "Jména s úvodní tečkou a položky skryté ve Finderu (⌃H)."),
                                   (markDirsBox, "Bez zaškrtnutí ⌘A označí a Invertovat (Num *) invertuje jen soubory. "
                                     + "Opakovaný stisk ⌘A zruší celé označení (vždy i adresáře).")]),
+            .colors: colorsPage(),
             .mainWindow: optionsPage([(middleBarBox, "Svislá lišta s ikonami operací mezi levým a pravým panelem. "
                                        + "Vypnutá lišta zůstane jen jako úzký dělicí pruh.")]),
             .keyboard: keyboardPage(),
         ]
         categoryTable.reloadData()
+    }
+
+    /// Šedá zalamovaná vysvětlivka pod volbou (společný styl všech stránek).
+    private func noteLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = NSFont.systemFont(ofSize: 11)
+        label.textColor = .secondaryLabelColor
+        return label
     }
 
     /// Stránka se zaškrtávacími volbami, pod každou šedá vysvětlivka.
@@ -205,9 +241,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         stack.alignment = .leading
         stack.spacing = 4
         for (index, (box, note)) in options.enumerated() {
-            let label = NSTextField(wrappingLabelWithString: note)
-            label.font = NSFont.systemFont(ofSize: 11)
-            label.textColor = .secondaryLabelColor
+            let label = noteLabel(note)
             stack.addArrangedSubview(box)
             stack.addArrangedSubview(label)
             label.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 20).isActive = true
@@ -221,6 +255,36 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             stack.topAnchor.constraint(equalTo: page.topAnchor),
             stack.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 4),
             stack.trailingAnchor.constraint(equalTo: page.trailingAnchor, constant: -4),
+        ])
+        return page
+    }
+
+    /// Stránka Barvy: výběr barevného schématu panelů (jako Konfigurace ›
+    /// Barvy › Schéma v Salamanderu).
+    private func colorsPage() -> NSView {
+        schemePopup.removeAllItems()
+        for scheme in PanelColorScheme.allCases {
+            schemePopup.addItem(withTitle: scheme.title)
+        }
+        let label = NSTextField(labelWithString: "Schéma:")
+        let row = NSStackView(views: [label, schemePopup])
+        row.orientation = .horizontal
+        row.spacing = 8
+        let note = noteLabel(
+            "„macOS – tmavé“ (výchozí) používá systémové barvy v tmavém režimu, „macOS – podle systému“ "
+            + "přepíná světlý a tmavý režim s macOS. Ostatní schémata odpovídají Open Salamanderu "
+            + "a mají světlé okolí panelů.")
+        let page = NSView()
+        for view in [row, note] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            page.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: page.topAnchor),
+            row.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 4),
+            note.topAnchor.constraint(equalTo: row.bottomAnchor, constant: 10),
+            note.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 4),
+            note.trailingAnchor.constraint(equalTo: page.trailingAnchor, constant: -4),
         ])
         return page
     }
@@ -256,6 +320,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         showHiddenBox.state = mainController?.showHiddenFiles == true ? .on : .off
         markDirsBox.state = Settings.markingIncludesDirs ? .on : .off
         middleBarBox.state = Settings.showMiddleBar ? .on : .off
+        schemePopup.selectItem(at: PanelColorScheme.allCases.firstIndex(of: Settings.colorScheme) ?? 0)
         draftBindings = Dictionary(uniqueKeysWithValues: KeyBindings.table)
         reloadBindings()
     }
@@ -266,6 +331,11 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         Settings.markingIncludesDirs = markDirsBox.state == .on
         if Settings.showMiddleBar != (middleBarBox.state == .on) {
             Settings.showMiddleBar = middleBarBox.state == .on
+        }
+        // Schéma se ukládá jen při změně (setter překreslí panely a změní vzhled).
+        let scheme = PanelColorScheme.allCases[max(0, schemePopup.indexOfSelectedItem)]
+        if scheme != Settings.colorScheme {
+            Settings.colorScheme = scheme
         }
         if let controller = mainController, controller.showHiddenFiles != (showHiddenBox.state == .on) {
             controller.toggleHiddenFiles()
@@ -321,11 +391,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         buttons.orientation = .horizontal
         buttons.spacing = 8
 
-        let note = NSTextField(wrappingLabelWithString:
+        let note = noteLabel(
             "Dvojklik nebo Přidat zkratku… přiřadí příkazu další klávesovou zkratku. Navigační klávesy "
             + "(šipky, Enter, Tab, mezerník, psaní) a ⌘0–⌘9 míst z nabídky disků se nemění.")
-        note.font = NSFont.systemFont(ofSize: 11)
-        note.textColor = .secondaryLabelColor
 
         let page = NSView()
         for view in [filterField, scroll, buttons, note] as [NSView] {

@@ -123,6 +123,7 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = false
         scrollView.borderType = .noBorder
+        applyBackgroundColor()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         updateSortIndicator()
     }
@@ -424,6 +425,19 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         }
     }
 
+    /// Nové barevné schéma: pozadí tabulky a všechny položky (řádek adresáře
+    /// přebarví refreshAppearance v reloadTable).
+    func applyColorScheme() {
+        applyBackgroundColor()
+        reloadTable()
+    }
+
+    /// Pozadí tabulky a plochy pod posledním řádkem podle schématu.
+    private func applyBackgroundColor() {
+        tableView.backgroundColor = PanelColors.current.itemBackground
+        scrollView.backgroundColor = PanelColors.current.itemBackground
+    }
+
     /// Aktivní/neaktivní vzhled (řádek adresáře, kurzor).
     func refreshAppearance() {
         directoryLine.isActive = panel.isActive
@@ -455,6 +469,7 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     /// Nastaví stav vykreslení řádku (kurzor, aktivní panel).
     private func configure(_ rowView: SalRowView, row: Int) {
         rowView.isCursor = row == panel.cursor
+        rowView.isMarked = panel.isMarked(row: row)
         rowView.panelActive = panel.isActive
         rowView.needsDisplay = true
     }
@@ -479,10 +494,11 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         let entry = panel.rows[row]
         let item = entry.item
 
-        // Barva textu: kurzor v aktivním panelu bílý, označené červeně, skryté šedě.
+        // Barva textu podle schématu (kurzor, označení, skryté ztlumeně).
         let onCursor = row == panel.cursor && panel.isActive
         let marked = panel.isMarked(row: row)
-        let color = rowTextColor(marked: marked, onActiveCursor: onCursor, hidden: item.isHidden && !entry.isParent)
+        let color = PanelColors.current.text(marked: marked, onActiveCursor: onCursor,
+                                             hidden: item.isHidden && !entry.isParent)
 
         var text = ""
         var alignment = NSTextAlignment.left
@@ -572,18 +588,6 @@ func listIcon(for item: Item) -> NSImage {
     return image
 }
 
-/// Barva textu položky (sdílí tabulka i mřížka): označené červeně (na kurzoru
-/// aktivního panelu žlutě kvůli kontrastu), kurzor bíle, skryté šedě.
-func rowTextColor(marked: Bool, onActiveCursor: Bool, hidden: Bool) -> NSColor {
-    if marked {
-        return onActiveCursor ? NSColor(calibratedRed: 1, green: 0.86, blue: 0.35, alpha: 1) : .systemRed
-    }
-    if onActiveCursor {
-        return .alternateSelectedControlTextColor
-    }
-    return hidden ? .secondaryLabelColor : .labelColor
-}
-
 // Sdílená písma a ikony seznamu.
 let listFont = NSFont.systemFont(ofSize: 12)
 let boldListFont = NSFont.boldSystemFont(ofSize: 12)
@@ -648,26 +652,19 @@ final class FileCellView: NSTableCellView {
     }
 }
 
-/// Řádek tabulky: kreslí kurzor (výplň v aktivním panelu, rámeček v neaktivním).
+/// Řádek tabulky: pozadí podle schématu (označené položky mohou mít vlastní)
+/// a kurzor (výplň v aktivním panelu, tečkovaný rámeček v neaktivním).
 final class SalRowView: NSTableRowView {
     var isCursor = false
+    var isMarked = false
     var panelActive = false
 
     override func drawBackground(in dirtyRect: NSRect) {
-        super.drawBackground(in: dirtyRect)
+        let colors = PanelColors.current
+        colors.background(marked: isMarked).setFill()
+        bounds.fill()
         guard isCursor else { return }
-        let rect = bounds.insetBy(dx: 1, dy: 0.5)
-        if panelActive {
-            NSColor.selectedContentBackgroundColor.setFill()
-            rect.fill()
-        } else {
-            // Neaktivní panel: jen tečkovaný rámeček kurzoru.
-            let path = NSBezierPath(rect: rect.insetBy(dx: 0.5, dy: 0.5))
-            path.lineWidth = 1
-            path.setLineDash([2, 2], count: 2, phase: 0)
-            NSColor.secondaryLabelColor.setStroke()
-            path.stroke()
-        }
+        colors.drawCursor(in: bounds.insetBy(dx: 1, dy: 0.5), active: panelActive, marked: isMarked)
     }
 
     override func drawSelection(in dirtyRect: NSRect) {
@@ -868,10 +865,11 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
         fatalError("Není podporováno")
     }
 
-    /// Barvy podle aktivity (aktivní = akcent s bílým textem, neaktivní = šedá).
+    /// Barvy podle aktivity a schématu (titulek aktivního/neaktivního panelu).
     private func updateColors() {
         needsDisplay = true
-        let text: NSColor = isActive ? .white : .labelColor
+        let colors = PanelColors.current
+        let text = isActive ? colors.activeCaptionText : colors.inactiveCaptionText
         pathLabel.textColor = text
         freeLabel.textColor = text
         driveButton.contentTintColor = text
@@ -885,7 +883,8 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
     /// Pozadí kreslíme v draw(), aby dynamické systémové barvy sledovaly vzhled
     /// (CGColor ve vrstvě by se při přepnutí světlý/tmavý režim neaktualizovala).
     override func draw(_ dirtyRect: NSRect) {
-        let background: NSColor = isActive ? .controlAccentColor : .unemphasizedSelectedContentBackgroundColor
+        let colors = PanelColors.current
+        let background = isActive ? colors.activeCaptionBackground : colors.inactiveCaptionBackground
         background.setFill()
         bounds.fill()
     }

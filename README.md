@@ -112,6 +112,8 @@ app/                        # tenké UI pro macOS
                             #   nabídku disků
   Sources/Settings.swift    # Nastavení (⌘,): kategorie, volby v UserDefaults,
                             #   editor klávesových zkratek
+  Sources/ColorScheme.swift # barevná schémata panelů (macOS + schémata
+                            #   Salamandera), barvy položek a kurzoru
   Sources/KeyBindings.swift # klávesové zkratky příkazů (výchozí + uživatelské)
   Sources/SelfTest.swift    # self-test UI (SAL_SELFTEST=1)
   Sources/main.swift        # NSApplication, hlavní menu
@@ -255,6 +257,15 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     a Invertovat označení i s adresáři – výchozí zapnuto (vypnuté = ⌘A označí
     a Num * invertuje jen soubory), zrušení označení platí vždy i pro adresáře
     (předvolba `selectAllIncludesDirs`).
+  - **Barvy:** barevné schéma panelů podle Konfigurace › Barvy Salamandera
+    (předvolba `colorScheme`): **macOS – tmavé** (výchozí; systémové barvy
+    a vynucený tmavý režim celé aplikace), **macOS – podle systému** (světlý/tmavý
+    podle macOS) a schémata převzatá z Open Salamanderu se světlým okolím panelů –
+    **Open Salamander** (bílé pozadí, označené červeně, šedý kurzor), **Windows
+    Explorer** (označené bíle na tmavě modré), **Norton Commander** (azurová
+    na tmavě modré, označené žlutě, tyrkysový kurzor) a **DOS Navigator** (bílá
+    na tmavě šedé). Schéma barví položky, kurzor, označení a řádek adresáře
+    v tabulce i mřížce.
   - **Hlavní okno:** Zobrazovat lištu příkazů mezi panely – výchozí vypnuto,
     mezi panely je jen úzký dělicí pruh jako v Salamanderu (`showMiddleBar`).
   - **Klávesnice:** klávesové zkratky všech příkazů (tabulka Příkaz / Klávesové

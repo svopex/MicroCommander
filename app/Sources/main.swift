@@ -24,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.migrateSettingsFromSalamander()
+        // Vzhled podle barevného schématu ještě před vytvořením okna.
+        Settings.applyAppearance()
         let controller = MainWindowController()
         windowController = controller
         buildMenu(controller)

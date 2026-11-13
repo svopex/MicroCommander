@@ -221,7 +221,7 @@ final class FileGridView: NSView {
     // MARK: - Kreslení
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.controlBackgroundColor.setFill()
+        PanelColors.current.itemBackground.setFill()
         dirtyRect.fill()
         guard let owner else { return }
         let panel = owner.panel
@@ -264,24 +264,22 @@ final class FileGridView: NSView {
         let marked = panel.isMarked(row: index)
         let highlight = cell.insetBy(dx: 2, dy: 1)
 
+        // Označená položka může mít vlastní pozadí schématu (např. Windows Explorer).
+        let colors = PanelColors.current
+        if marked {
+            colors.markedBackground.setFill()
+            NSBezierPath(roundedRect: highlight, xRadius: 4, yRadius: 4).fill()
+        }
         // Kurzor: v aktivním panelu výplň, v neaktivním tečkovaný rámeček.
         if onCursor {
-            let path = NSBezierPath(roundedRect: highlight, xRadius: 4, yRadius: 4)
-            if active {
-                NSColor.selectedContentBackgroundColor.setFill()
-                path.fill()
-            } else {
-                path.lineWidth = 1
-                path.setLineDash([2, 2], count: 2, phase: 0)
-                NSColor.secondaryLabelColor.setStroke()
-                path.stroke()
-            }
+            colors.drawCursor(in: highlight, cornerRadius: 4, active: active, marked: marked)
         }
 
-        // Barva textu stejně jako v tabulce (označené červeně, skryté šedě).
-        let color = rowTextColor(marked: marked, onActiveCursor: onCursor && active,
-                                 hidden: row.item.isHidden && !row.isParent)
-        let secondary: NSColor = onCursor && active ? color.withAlphaComponent(0.8) : .secondaryLabelColor
+        // Barva textu stejně jako v tabulce (označení, skryté ztlumeně).
+        let color = colors.text(marked: marked, onActiveCursor: onCursor && active,
+                                hidden: row.item.isHidden && !row.isParent)
+        // Druhotný text: na kurzoru ztlumená barva jména, jinak barva skrytých položek.
+        let secondary = onCursor && active ? color.withAlphaComponent(0.8) : colors.hiddenText
         let font = marked ? boldListFont : listFont
         let image = owner?.icon(for: row)
 
