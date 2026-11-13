@@ -1,0 +1,11 @@
+# Výstupy sestavení (Swift .app, smoke test) a Rust
+/build/
+/core/target/
+
+# Původní Windows zdrojáky Open Samandarin – jen lokální reference (~138 MB)
+/samandarin/
+
+# Pracovní a lokální soubory nástrojů
+/.zwork/
+/.claude/
+.DS_Store

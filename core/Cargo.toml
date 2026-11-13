@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["crates/salcore"]
+
+# Workspace nastavení: společný profil pro release build (LTO pro menší a rychlejší knihovnu).
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

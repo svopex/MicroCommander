@@ -1,0 +1,25 @@
+[package]
+name = "salcore"
+version = "0.1.0"
+edition = "2021"
+description = "MicroCommander jádro: souborové operace, virtuální souborové systémy, archivy, FTP/SFTP, hledání"
+license = "GPL-2.0-or-later"
+
+[lib]
+# "rlib" pro testy a budoucí znovupoužití, "cdylib" pro Swift/AppKit UI přes C ABI.
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+# Archivy ZIP: čtení i vytváření, komprese deflate (pure Rust backend),
+# šifrování AES-128/192/256 (WinZip AE-1/AE-2) i starší ZipCrypto.
+zip = { version = "4", default-features = false, features = ["deflate", "time", "aes-crypto"] }
+# Archivy TAR a dekomprese gzip pro .tar.gz.
+tar = "0.4"
+flate2 = "1"
+# FTP klient (čisté FTP, pasivní mód); synchronní API je výchozí,
+# async/TLS features nepotřebujeme.
+suppaftp = { version = "6", default-features = false }
+# SFTP klient; vendored-openssl sestaví OpenSSL ze zdrojů, aby build nezávisel na systémové knihovně.
+ssh2 = { version = "0.9", features = ["vendored-openssl"] }
+# Volání systových API (statfs pro volné místo na disku).
+libc = "0.2"
