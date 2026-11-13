@@ -137,7 +137,9 @@ make selftest   # self-test UI: klávesy, dialogy, F5/F8 (aplikace se sama ukon�
 make clean      # smaže build/
 ```
 
-Nastavení (režimy zobrazení, pořadí disků, skryté soubory, poloha okna) se ukládá
+Nastavení (režimy zobrazení, pořadí disků, skryté soubory, poloha okna, adresáře
+panelů – po dalším spuštění se otevřou stejné adresáře; z archivu či FTP nejbližší
+lokální adresář) se ukládá
 do předvoleb `com.github.svopex.microcommander`; při prvním spuštění se jednorázově
 převezme z dřívější domény `eu.krtkovo.salamander` (z doby názvu Salamander).
 
@@ -187,7 +189,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   např. `~/Library`); informační řádek ukazuje počet skrytých.
 - **Rychlé hledání:** psaní písmen skáče na položku podle prefixu, ↑↓ další
   shoda, Escape konec.
-- **F-klávesy:** F1 nápověda, F2 přejmenovat, F3 prohlížeč, F4 editor, F5
+- **F-klávesy:** F1 nápověda, F2 přejmenovat (přímo v panelu bez dialogu:
+  předvybrané jméno bez přípony, Enter potvrdí, Escape zruší, klik jinam
+  potvrdí), F3 prohlížeč, F4 editor, F5
   kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 smazat,
   F9 terminál v adresáři, F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
   zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌃F3–⌃F6 řazení podle
@@ -279,9 +283,12 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   přetažení do panelu zatím není.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (Finder, kopírovat cestu).
-- **Příkazová řádka** (⌃Tab): Enter spustí příkaz v login shellu v adresáři
+- **Příkazová řádka** (⌘Tab, také ⌃Tab): Enter spustí příkaz v login shellu v adresáři
   panelu (výstup v prohlížeči), `cd cesta` mění adresář panelu, ↑↓ historie,
-  ⌃↩ v panelu vloží jméno položky, ⌃[ / ⌃] cestu levého/pravého panelu.
+  ⌃↩ (z panelu i z příkazové řádky) vloží jméno položky pod kurzorem na pozici
+  kurzoru v řádce – u souboru na začátku prázdné řádky jako `./jméno` a fokus
+  přejde do řádky, takže Enter skript/program rovnou spustí; jinde jako argument
+  (za „./“ bez mezery), ⌃[ / ⌃] cestu levého/pravého panelu.
 - **Zaheslované archivy:** šifrované položky mají v atributech „E“ (info řádek
   „šifrováno“). Při F3/Enter, F5/F6 nebo ⌥F6 ze zaheslovaného ZIP se aplikace
   zeptá na heslo (jednou pro otevřený archiv); při chybném hesle se zeptá

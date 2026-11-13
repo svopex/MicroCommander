@@ -231,6 +231,75 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         }
     }
 
+    // MARK: - Přejmenování přímo v panelu
+
+    /// Editační pole přejmenování a jeho dokončení (nil = žádné probíhá).
+    private var renameField: NSTextField?
+    private var renameCompletion: ((String?) -> Void)?
+
+    /// Přejmenování položky pod kurzorem přímo v panelu (F2 / ⇧F6, bez dialogu):
+    /// nad jménem se objeví editační pole, Enter potvrdí, Escape zruší, klik
+    /// jinam potvrdí. U souboru je předvybrané jméno bez přípony.
+    /// - Parameter completion: nové jméno, nil = zrušeno nebo beze změny
+    func beginInlineRename(completion: @escaping (String?) -> Void) {
+        finishInlineRename(commit: false)
+        let row = panel.cursor
+        guard row >= 0, row < panel.rows.count, !panel.rows[row].isParent else { return }
+        let item = panel.rows[row].item
+        // Pole přesně nad nakresleným jménem: v tabulce popisek buňky sloupce Jméno,
+        // v mřížce obdélník jména podle režimu (stejný, jaký používá kreslení).
+        let host = focusView
+        var frame: NSRect
+        if viewMode.usesTable {
+            tableView.scrollRowToVisible(row)
+            let column = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier(ColumnID.name))
+            let cell = tableView.frameOfCell(atColumn: column, row: row)
+            if let label = (tableView.view(atColumn: column, row: row, makeIfNecessary: true) as? NSTableCellView)?.textField {
+                frame = tableView.convert(label.frame, from: label.superview)
+                frame.size.width = cell.maxX - frame.minX
+            } else {
+                frame = cell
+            }
+        } else {
+            gridView.scrollToVisible(gridView.rect(for: row))
+            frame = gridView.nameRect(for: row)
+        }
+        // Minimální šířka pro pohodlnou úpravu, výška aspoň jeden řádek pole.
+        frame.size.width = max(frame.width, 160)
+        frame = frame.insetBy(dx: 0, dy: min(0, (frame.height - 20) / 2))
+
+        let field = NSTextField(frame: frame)
+        field.stringValue = item.name
+        field.font = listFont
+        field.focusRingType = .none
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.delegate = self
+        host.addSubview(field)
+        renameField = field
+        // Dokončení porovná s původním jménem (nezávisle na kurzoru panelu).
+        renameCompletion = { newName in
+            completion(newName.flatMap { $0 != item.name ? $0 : nil })
+        }
+        window?.makeFirstResponder(field)
+        // Předvýběr jména bez přípony (u adresáře celé jméno).
+        if let editor = field.currentEditor() {
+            selectBaseName(of: item.name, in: editor, wholeName: item.isDir)
+        }
+    }
+
+    /// Ukončí přejmenování: commit předá nové jméno (pokud se změnilo), jinak nil.
+    private func finishInlineRename(commit: Bool) {
+        guard let field = renameField else { return }
+        renameField = nil
+        let completion = renameCompletion
+        renameCompletion = nil
+        let newName = field.stringValue.trimmingCharacters(in: .whitespaces)
+        field.removeFromSuperview()
+        window?.makeFirstResponder(focusView)
+        completion?(commit && !newName.isEmpty ? newName : nil)
+    }
+
     /// Zahájí přetažení souborů (Finder, Zprávy, Mail…): táhne označené položky,
     /// pokud je mezi nimi položka pod myší, jinak jen ji. Táhnout lze jen soubory
     /// z lokálního disku (archiv/FTP nemají cestu, kterou by cíl mohl otevřít).
@@ -464,6 +533,16 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
 }
 
+/// Označí v editoru jméno bez přípony (jako Salamander při přejmenování).
+/// - Parameters:
+///   - name: jméno v editoru
+///   - editor: editor textového pole
+///   - wholeName: označit celé jméno (adresář)
+func selectBaseName(of name: String, in editor: NSText, wholeName: Bool = false) {
+    let base = wholeName ? name : splitExtension(name).base
+    editor.selectedRange = NSRange(location: 0, length: (base as NSString).length)
+}
+
 /// Atributy ve stylu Salamandera (R = jen pro čtení, H = skrytý, L = odkaz,
 /// E = šifrovaná položka archivu); sdílí panel i okno hledání.
 func attributes(of item: Item) -> String {
@@ -645,6 +724,29 @@ final class SalTableView: NSTableView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = self.row(at: convert(event.locationInWindow, from: nil))
         return owner?.handleContextMenu(index: row >= 0 ? row : nil, in: self)
+    }
+}
+
+/// Klávesy editačního pole přejmenování: Enter potvrdí, Escape zruší.
+extension PanelView: NSTextFieldDelegate {
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard control === renameField else { return false }
+        switch commandSelector {
+        case #selector(NSResponder.insertNewline(_:)):
+            finishInlineRename(commit: true)
+            return true
+        case #selector(NSResponder.cancelOperation(_:)):
+            finishInlineRename(commit: false)
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Ztráta fokusu (klik jinam) přejmenování potvrdí, jako v Salamanderu.
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard notification.object as? NSTextField === renameField else { return }
+        finishInlineRename(commit: true)
     }
 }
 

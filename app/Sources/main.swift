@@ -15,6 +15,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Běžící kontrola kláves bez okna.
     var keyCheck: UIKeyCheck?
 
+    /// Automatický běh (self-test, kontrola kláves) – nemá přepisovat uživatelské
+    /// stavy, např. uložené adresáře panelů.
+    static let isAutomatedRun: Bool = {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["SAL_SELFTEST"] != nil || environment["SAL_KEYCHECK"] != nil
+    }()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.migrateSettingsFromSalamander()
         let controller = MainWindowController()

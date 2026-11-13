@@ -279,7 +279,7 @@ final class CommandLineView: NSView, NSTextFieldDelegate {
         field.delegate = self
         field.focusRingType = .none
         field.bezelStyle = .squareBezel
-        field.placeholderString = "příkazová řádka (⌃Tab) – Enter spustí příkaz v adresáři panelu, cd změní adresář"
+        field.placeholderString = "příkazová řádka (⌘Tab) – Enter spustí příkaz v adresáři panelu, cd změní adresář"
         for view in [promptLabel, field] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
@@ -299,11 +299,34 @@ final class CommandLineView: NSView, NSTextFieldDelegate {
         fatalError("Není podporováno")
     }
 
-    /// Vloží text na konec příkazové řádky (⌃↩ vkládá jméno položky).
-    func insert(_ text: String) {
-        let current = field.stringValue
-        let separator = current.isEmpty || current.hasSuffix(" ") ? "" : " "
-        field.stringValue = current + separator + text
+    /// Vloží text do příkazové řádky na pozici kurzoru, jinak na konec.
+    /// - Parameters:
+    ///   - text: vkládaný text (jméno položky, cesta)
+    ///   - asCommand: na začátku příkazu se vloží jako spuštění „./text“
+    ///     (⌃↩ nad souborem); jinde v řádce jen text jako argument
+    /// - Returns: true, pokud se vložilo jako příkaz „./text“
+    @discardableResult
+    func insert(_ text: String, asCommand: Bool = false) -> Bool {
+        // Text před místem vložení: při psaní v řádce po kurzor, jinak celá řádka.
+        let editor = field.currentEditor() as? NSTextView
+        let prefix: String
+        if let editor {
+            let content = editor.string as NSString
+            prefix = content.substring(to: min(editor.selectedRange().location, content.length))
+        } else {
+            prefix = field.stringValue
+        }
+        // Na začátku příkazu (prázdný text před kurzorem) spuštění „./jméno“;
+        // jinak mezera za předchozím slovem (ne za mezerou ani za lomítkem, např. „./“).
+        let runsAsCommand = asCommand && prefix.trimmingCharacters(in: .whitespaces).isEmpty
+        let separator = prefix.isEmpty || prefix.hasSuffix(" ") || prefix.hasSuffix("/") ? "" : " "
+        let inserted = runsAsCommand ? "./" + text : separator + text
+        if let editor {
+            editor.insertText(inserted, replacementRange: editor.selectedRange())
+        } else {
+            field.stringValue = prefix + inserted
+        }
+        return runsAsCommand
     }
 
     /// Enter spustí, Escape vymaže a vrátí se do panelu, šipky listují historií.

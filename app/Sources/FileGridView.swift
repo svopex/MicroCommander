@@ -149,6 +149,20 @@ final class FileGridView: NSView {
                       width: cellSize.width, height: cellSize.height)
     }
 
+    /// Obdélník jména položky v buňce podle režimu (kreslení i přejmenování v panelu).
+    func nameRect(for index: Int) -> NSRect {
+        let cell = rect(for: index)
+        switch mode {
+        case .icons, .thumbnails:
+            let side: CGFloat = mode == .icons ? 32 : 92
+            return NSRect(x: cell.minX + 4, y: cell.minY + side + 6, width: cell.width - 8, height: 28)
+        case .tiles:
+            return NSRect(x: cell.minX + 52, y: cell.minY + 4, width: cell.width - 58, height: 16)
+        default:
+            return NSRect(x: cell.minX + 24, y: cell.minY + 1, width: cell.width - 28, height: 15)
+        }
+    }
+
     /// Index položky pod bodem (nil = prázdné místo).
     func index(at point: NSPoint) -> Int? {
         guard let owner, point.x >= 0, point.y >= 0 else { return nil }
@@ -276,8 +290,7 @@ final class FileGridView: NSView {
             // Ikona 16 px + jméno na jednom řádku.
             image?.draw(in: NSRect(x: cell.minX + 4, y: cell.minY + 0.5, width: 16, height: 16),
                         from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            drawText(row.item.name, in: NSRect(x: cell.minX + 24, y: cell.minY + 1, width: cell.width - 28, height: 15),
-                     font: font, color: color, alignment: .left)
+            drawText(row.item.name, in: nameRect(for: index), font: font, color: color, alignment: .left)
         case .icons, .thumbnails:
             // Velká ikona / miniatura nahoře, jméno pod ní na střed (dva řádky).
             let side: CGFloat = mode == .icons ? 32 : 92
@@ -288,16 +301,14 @@ final class FileGridView: NSView {
             let imageRect = fitted(picture?.size ?? NSSize(width: side, height: side),
                                    in: NSRect(x: cell.midX - side / 2, y: cell.minY + 4, width: side, height: side))
             picture?.draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            drawText(row.item.name, in: NSRect(x: cell.minX + 4, y: cell.minY + side + 6, width: cell.width - 8, height: 28),
-                     font: font, color: color, alignment: .center, lines: 2)
+            drawText(row.item.name, in: nameRect(for: index), font: font, color: color, alignment: .center, lines: 2)
         case .tiles:
             // Ikona 40 px vlevo, vpravo jméno, typ a velikost/datum.
             image?.draw(in: NSRect(x: cell.minX + 6, y: cell.minY + 6, width: 40, height: 40),
                         from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             let textX = cell.minX + 52
             let width = cell.width - 58
-            drawText(row.item.name, in: NSRect(x: textX, y: cell.minY + 4, width: width, height: 16),
-                     font: font, color: color, alignment: .left)
+            drawText(row.item.name, in: nameRect(for: index), font: font, color: color, alignment: .left)
             drawText(typeDescription(for: row), in: NSRect(x: textX, y: cell.minY + 20, width: width, height: 14),
                      font: NSFont.systemFont(ofSize: 11), color: secondary, alignment: .left)
             if !row.isParent {

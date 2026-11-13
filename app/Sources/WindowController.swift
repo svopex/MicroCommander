@@ -40,9 +40,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     init() {
         // Oba panely nad celým lokálním diskem – cesty ve VFS jsou reálné cesty.
+        // Výchozí adresáře: naposledy otevřené (pokud ještě existují), jinak domov a „/“.
         let disk = Vfs.openLocal(root: nil)!
-        leftPanel = PanelController(location: Location(vfs: disk, path: NSHomeDirectory()))
-        rightPanel = PanelController(location: Location(vfs: disk, path: "/"))
+        leftPanel = PanelController(location: Location(vfs: disk, path: Self.savedDirectory("leftPanelPath") ?? NSHomeDirectory()))
+        rightPanel = PanelController(location: Location(vfs: disk, path: Self.savedDirectory("rightPanelPath") ?? "/"))
         leftView = PanelView(panel: leftPanel)
         rightView = PanelView(panel: rightPanel)
         activePanel = leftPanel
@@ -164,6 +165,36 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         window?.contentView = container
     }
 
+    /// Uložený adresář panelu z předvoleb, pokud stále existuje (jinak nil).
+    private static func savedDirectory(_ key: String) -> String? {
+        guard let path = UserDefaults.standard.string(forKey: key) else { return nil }
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue ? path : nil
+    }
+
+    /// Lokální adresář panelu pro obnovení po dalším spuštění: na disku aktuální
+    /// cesta, v archivu či na FTP nejbližší lokální adresář, ze kterého se vešlo.
+    private static func restorableDirectory(of panel: PanelController) -> String? {
+        let locations = [panel.location] + panel.parentLocations.reversed().map(\.location)
+        for location in locations where location.vfs.kind == SAL_VFS_LOCAL {
+            if let path = location.vfs.realPath(location.path) { return path }
+        }
+        return nil
+    }
+
+    /// Při ukončení aplikace uloží adresáře obou panelů (ne při self-testu /
+    /// kontrole kláves – ty pracují v dočasných adresářích).
+    private func observeTermination() {
+        guard !AppDelegate.isAutomatedRun else { return }
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            guard let self else { return }
+            let defaults = UserDefaults.standard
+            defaults.set(Self.restorableDirectory(of: self.leftPanel), forKey: "leftPanelPath")
+            defaults.set(Self.restorableDirectory(of: self.rightPanel), forKey: "rightPanelPath")
+        }
+    }
+
     /// Obnoví uložené volby: skryté soubory a režimy zobrazení obou stran.
     private func restoreSettings() {
         let defaults = UserDefaults.standard
@@ -183,6 +214,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     /// Napojení lišt a panelů na příkazy.
     private func wireCallbacks() {
+        observeTermination()
         for (panel, view) in [(leftPanel, leftView), (rightPanel, rightView)] {
             panel.delegate = self
             view.inputHandler = self
@@ -234,8 +266,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 self.perform(command)
                 return nil
             }
-            // Ctrl+Tab: přepínání mezi panelem a příkazovou řádkou.
-            if event.keyCode == KeyCode.tab, event.modifierFlags.contains(.control) {
+            // Ctrl+Enter: jméno položky pod kurzorem do příkazové řádky – z panelu
+            // i z příkazové řádky. Zachytává se tady, protože macOS jinak ⌃↩ použije
+            // jako „Zobrazit kontextovou nabídku“ a do panelu se klávesa nedostane.
+            if event.keyCode == KeyCode.returnKey || event.keyCode == KeyCode.enter,
+               event.modifierFlags.intersection([.shift, .control, .option, .command]) == .control {
+                if let item = self.activePanel.currentItem {
+                    // Soubor na začátku prázdné řádky = „./jméno“ připravené ke spuštění;
+                    // fokus pak do řádky (kurzor na konec), aby Enter příkaz spustil.
+                    if self.commandLine.insert(shellQuote(item.name), asCommand: !item.isDir),
+                       !self.commandLineHasFocus {
+                        window.makeFirstResponder(self.commandLine.field)
+                        self.commandLine.field.currentEditor()?.moveToEndOfDocument(nil)
+                    }
+                }
+                return nil
+            }
+            // ⌘Tab / Ctrl+Tab: přepínání mezi panelem a příkazovou řádkou.
+            if event.keyCode == KeyCode.tab, !event.modifierFlags.intersection([.control, .command]).isEmpty {
                 if self.commandLineHasFocus {
                     self.focusActivePanel()
                 } else {
@@ -490,11 +538,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.endQuickSearch()
             // ⌘↩ spustí položku systémově (aplikaci .app místo vstupu do ní).
             if flags.contains(.command) { launchRow(panel.cursor, in: panel); return true }
-            if flags.contains(.control), let item = panel.currentItem {
-                // ⌃↩ (Ctrl+Enter): jméno položky do příkazové řádky.
-                commandLine.insert(shellQuote(item.name))
-                return true
-            }
             if flags.contains(.option) { perform(.calcSize); return true }
             openRow(panel.cursor, in: panel)
             return true
@@ -1240,15 +1283,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             showAlert(title: "Přejmenovat", text: "Souborový systém je jen pro čtení.")
             return
         }
-        guard let newName = promptText(title: "Přejmenovat", message: "Nové jméno pro „\(item.name)“:",
-                                       value: item.name, okTitle: "Přejmenovat", selectBaseName: !item.isDir),
-              newName != item.name else { return }
-        do {
-            try panel.location.vfs.rename(dir: panel.location.path, oldName: item.name, newName: newName)
-            panel.focus(name: newName)
-            panel.reload()
-        } catch {
-            showAlert(title: "Přejmenovat", text: error.localizedDescription)
+        // Jméno se upraví přímo v panelu (bez dialogu); nil = zrušeno / beze změny.
+        let dir = panel.location.path
+        let vfs = panel.location.vfs
+        panel.view?.beginInlineRename { [weak self] newName in
+            guard let newName else { return }
+            do {
+                try vfs.rename(dir: dir, oldName: item.name, newName: newName)
+                panel.focus(name: newName)
+                panel.reload()
+            } catch {
+                self?.showAlert(title: "Přejmenovat", text: error.localizedDescription)
+            }
         }
     }
 
@@ -1559,7 +1605,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let text = """
         Panely: ↑↓ PgUp PgDn Home End – pohyb, Enter – otevřít (adresář, archiv, soubor),
         ⌘Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
-        ⌫ – nadřazený adresář, Tab – druhý panel, ⌃Tab – příkazová řádka,
+        ⌫ – nadřazený adresář, Tab – druhý panel, ⌘Tab (⌃Tab) – příkazová řádka,
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
         ⌘A / ⌘D – označit vše / nic, psaní písmen – rychlé hledání,
         ⌥← / ⌥→ – historie, ⌘\\ – kořen, ⌃H – skryté soubory.
@@ -1714,8 +1760,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         // Výběr textu až po zobrazení (field editor vzniká při aktivaci pole).
         DispatchQueue.main.async {
             guard let editor = input.currentEditor() else { return }
-            let base = selectBaseName ? splitExtension(value).base : value
-            editor.selectedRange = NSRange(location: 0, length: (base as NSString).length)
+            MicroCommander.selectBaseName(of: value, in: editor, wholeName: !selectBaseName)
         }
         let response = alert.runModal()
         focusActivePanel()

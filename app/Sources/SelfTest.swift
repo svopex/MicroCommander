@@ -226,6 +226,33 @@ final class UISelfTest {
             self.check(self.controller.window?.attachedSheet != nil, "F11 otevře připojení FTP/SFTP")
             self.key(KeyCode.escape, "\u{1b}")
         }))
+        // 11b) F2 přejmenuje položku přímo v panelu (bez dialogu): c.log → renamed.log
+        // (pak zpět, další kroky počítají s původními soubory).
+        steps.append((ready: { self.windowFree }, action: {
+            self.controller.activate(self.controller.leftPanel)
+            self.controller.leftPanel.changePath(self.root + "/src", focus: "c.log")
+        }))
+        steps.append((ready: { self.controller.leftPanel.currentItem?.name == "c.log" && !self.controller.leftPanel.isLoading }, action: {
+            self.key(KeyCode.functionKeys[1], KeyCode.functionKeyString(2))
+        }))
+        let renameEditing = { () -> Bool in
+            guard let editor = self.controller.window?.firstResponder as? NSTextView,
+                  let field = editor.delegate as? NSTextField else { return false }
+            return field.superview is SalTableView || field.superview is FileGridView
+        }
+        steps.append((ready: renameEditing, action: {
+            self.check(self.controller.window?.attachedSheet == nil && NSApp.modalWindow == nil,
+                       "F2 přejmenuje v panelu bez dialogu")
+            // Předvybraný je základ jména bez přípony – napsané jméno ho nahradí.
+            for char in "renamed" { self.key(0, String(char)) }
+            self.key(KeyCode.returnKey, "\r")
+        }))
+        steps.append((ready: { FileManager.default.fileExists(atPath: self.root + "/src/renamed.log") }, action: {
+            self.check(!FileManager.default.fileExists(atPath: self.root + "/src/c.log"),
+                       "přejmenování v panelu: c.log → renamed.log")
+            try? FileManager.default.moveItem(atPath: self.root + "/src/renamed.log", toPath: self.root + "/src/c.log")
+            self.controller.leftPanel.reload()
+        }))
         // 12) Home/End, ⌥↑/⌥↓, skryté soubory (⌃H) a režimy zobrazení (⌥1/⌥3/⌥2).
         steps.append((ready: { self.windowFree }, action: {
             FileManager.default.createFile(atPath: self.root + "/src/.skryty", contents: Data())
