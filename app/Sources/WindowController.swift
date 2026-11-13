@@ -668,7 +668,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     // MARK: - Skryté soubory
 
     /// Zobrazovat skryté soubory (tečka na začátku, příznak UF_HIDDEN) – globálně pro oba panely.
-    private(set) var showHiddenFiles = true
+    private(set) var showHiddenFiles = SettingsSnapshot.defaults.showHiddenFiles
 
     /// Přepne zobrazení skrytých souborů v obou panelech a uloží volbu.
     func toggleHiddenFiles() {

@@ -133,7 +133,8 @@ app/                        # tenké UI pro macOS
                             #   adresáře, zkratky ⌘0–⌘9) a dialog Upravit
                             #   nabídku disků
   Sources/Settings.swift    # Nastavení (⌘,): kategorie, volby v UserDefaults,
-                            #   editor klávesových zkratek
+                            #   editor klávesových zkratek, Obnovit vše,
+                            #   uložení nastavení do souboru a načtení z něj
   Sources/ColorScheme.swift # barevná schémata panelů (macOS + schémata
                             #   Salamandera), barvy položek a kurzoru
   Sources/KeyBindings.swift # klávesové zkratky příkazů (výchozí + uživatelské)
@@ -314,12 +315,26 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     zkratky s hledáním). Přidat zkratku… (nebo dvojklik) zaznamená stisk klávesy –
     zkratka používaná jiným příkazem se po potvrzení přeřadí, písmeno bez
     modifikátoru se odmítne (blokovalo by rychlé hledání); Odebrat zkratku…,
-    Výchozí (vybraný příkaz) a Obnovit vše. Podle zkratek se řídí obsluha kláves,
+    Výchozí (vybraný příkaz) a Obnovit zkratky (všechny příkazy). Podle zkratek se řídí obsluha kláves,
     zkratky v menu i popisky lišty F-kláves. V textových polích (příkazová
     řádka, úprava cesty) se nepoužijí zkratky potřebné pro psaní (⌘A/⌘C/⌘V/⌘X/⌘Z,
     ⌃písmeno, šipky). Pevné zůstávají navigační klávesy (šipky, Enter, Tab,
     mezerník, psaní), ⌘Enter / ⌃Enter, ⌘Tab a ⌘0–⌘9 míst. Uloží se jen změny
     oproti výchozím (předvolba `keyBindings`).
+  - **Obnovit vše** (vlevo dole): nastaví všechny volby na všech stránkách
+    i klávesové zkratky na výchozí hodnoty.
+  - **Uložit do souboru… / Načíst ze souboru…** (vlevo dole): nastavení z dialogu
+    (všechny stránky včetně klávesových zkratek) se uloží do souboru JSON
+    (výchozí název `MicroCommander-nastaveni.json`) a dá se z něj znovu načíst,
+    např. na jiném počítači. Soubor má značku formátu a verzi; klíče odpovídají
+    předvolbám (`savePanelPaths`, `showHiddenFiles`, `selectAllIncludesDirs`,
+    `showMiddleBar`, `colorScheme`, `keyBindings`). Chybějící volba dostane
+    výchozí hodnotu, cizí JSON a soubor z novější verze se odmítnou, zkratky
+    neznámých příkazů a nepřiřaditelné klávesy se přeskočí. Ukládá se, co
+    dialog právě ukazuje (i rozpracované změny). Obnovit vše i Načíst ze
+    souboru… jen naplní dialog – platit začnou až tlačítkem **OK**, Zrušit
+    ponechá dosavadní nastavení. Mimo soubor zůstávají nabídka disků, uložené
+    servery, režimy zobrazení, poloha okna a historie hledání.
 - **FTP/SFTP servery** (F11, tlačítko FTP/SFTP v liště disků, poslední položka
   nabídky disků): seznam libovolného počtu uložených serverů – **+** přidá,
   **−** odebere (po potvrzení), **Duplikovat** vytvoří kopii vybraného serveru

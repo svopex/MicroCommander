@@ -4,9 +4,12 @@
 // Nastavení aplikace (⌘,) ve stylu dialogu Konfigurace Salamandera: vlevo
 // seznam kategorií (Obecné, Panely, Barvy, Hlavní okno, Klávesnice), vpravo stránka
 // s nadpisem, dole OK / Zrušit – změny se uloží až tlačítkem OK. Stránka
-// Klávesnice mění klávesové zkratky všech příkazů (KeyBindings).
+// Klávesnice mění klávesové zkratky všech příkazů (KeyBindings). Vlevo dole
+// Obnovit vše (výchozí hodnoty), Načíst ze souboru… a Uložit do souboru…
+// (SettingsSnapshot – nastavení jako soubor JSON).
 
 import AppKit
+import UniformTypeIdentifiers
 
 /// Volby aplikace v UserDefaults.
 enum Settings {
@@ -22,7 +25,7 @@ enum Settings {
     /// Zobrazovat svislou lištu příkazů mezi panely; výchozí ne = jen úzký
     /// dělicí pruh jako v Salamanderu.
     static var showMiddleBar: Bool {
-        get { UserDefaults.standard.bool(forKey: middleBarKey) }
+        get { UserDefaults.standard.object(forKey: middleBarKey) as? Bool ?? SettingsSnapshot.defaults.showMiddleBar }
         set {
             UserDefaults.standard.set(newValue, forKey: middleBarKey)
             NotificationCenter.default.post(name: changed, object: nil)
@@ -33,14 +36,14 @@ enum Settings {
     /// výchozí ano (bez uložené volby).
     /// Zrušení označení platí vždy i pro adresáře.
     static var markingIncludesDirs: Bool {
-        get { UserDefaults.standard.object(forKey: markDirsKey) as? Bool ?? true }
+        get { UserDefaults.standard.object(forKey: markDirsKey) as? Bool ?? SettingsSnapshot.defaults.markingIncludesDirs }
         set { UserDefaults.standard.set(newValue, forKey: markDirsKey) }
     }
 
     /// Před ukončením uložit adresáře panelů (po spuštění se otevřou znovu);
     /// výchozí ano.
     static var savePanelPaths: Bool {
-        get { UserDefaults.standard.object(forKey: savePanelPathsKey) as? Bool ?? true }
+        get { UserDefaults.standard.object(forKey: savePanelPathsKey) as? Bool ?? SettingsSnapshot.defaults.savePanelPaths }
         set { UserDefaults.standard.set(newValue, forKey: savePanelPathsKey) }
     }
 
@@ -49,7 +52,7 @@ enum Settings {
     static var colorScheme: PanelColorScheme {
         get {
             UserDefaults.standard.string(forKey: colorSchemeKey).flatMap(PanelColorScheme.init(rawValue:))
-                ?? PanelColorScheme.defaultScheme
+                ?? SettingsSnapshot.defaults.colorScheme
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: colorSchemeKey)
@@ -64,6 +67,162 @@ enum Settings {
         let scheme = colorScheme
         NSApp.appearance = scheme.appearance
         PanelColors.current = scheme.colors
+    }
+}
+
+/// Chyba při načítání souboru s nastavením.
+enum SettingsFileError: LocalizedError {
+    /// Soubor není nastavení MicroCommanderu (chybí nebo nesedí značka formátu).
+    case notSettings
+    /// Soubor uložila novější verze aplikace (číslo verze formátu).
+    case newerVersion(Int)
+    /// Soubor má značku formátu, ale neplatný obsah (poškozený nebo ručně upravený JSON).
+    case corrupted
+
+    var errorDescription: String? {
+        switch self {
+        case .notSettings:
+            return "Soubor neobsahuje nastavení MicroCommanderu."
+        case .newerVersion(let version):
+            return "Soubor je z novější verze MicroCommanderu (formát \(version)) a tato verze ho neumí načíst."
+        case .corrupted:
+            return "Soubor není platné nastavení MicroCommanderu (poškozený nebo ručně upravený JSON)."
+        }
+    }
+}
+
+/// Snímek všech voleb dialogu Nastavení: výchozí hodnoty (`defaults`), právě
+/// platné nastavení (`current`), jeho použití (`apply`) a uložení do souboru
+/// JSON / načtení z něj. Výchozí hodnoty vlastností jsou zároveň výchozím
+/// nastavením aplikace (berou si je odtud i gettery v `Settings`).
+struct SettingsSnapshot: Codable, Equatable {
+    /// Značka formátu v souboru (podle ní se pozná cizí JSON).
+    static let fileFormat = "MicroCommander settings"
+    /// Verze formátu souboru; novější soubor se odmítne.
+    static let fileVersion = 1
+    /// Výchozí nastavení aplikace.
+    static let defaults = SettingsSnapshot()
+
+    /// Obecné: před ukončením uložit adresáře panelů.
+    var savePanelPaths = true
+    /// Panely: zobrazovat skryté soubory a adresáře.
+    var showHiddenFiles = true
+    /// Panely: Označit vše a Invertovat označení i s adresáři.
+    var markingIncludesDirs = true
+    /// Hlavní okno: lišta příkazů mezi panely.
+    var showMiddleBar = false
+    /// Barvy: barevné schéma panelů.
+    var colorScheme = PanelColorScheme.defaultScheme
+    /// Klávesnice: změny zkratek oproti výchozím (název příkazu → zkratky).
+    var keyBindings: [String: [Shortcut]] = [:]
+
+    init() {}
+
+    // Klíče v souboru odpovídají názvům předvoleb (viz README).
+    private enum CodingKeys: String, CodingKey {
+        case format, version
+        case savePanelPaths, showHiddenFiles, showMiddleBar, colorScheme, keyBindings
+        case markingIncludesDirs = "selectAllIncludesDirs"
+    }
+
+    /// Hlavní okno aplikace (drží volbu skrytých souborů).
+    private static var mainController: MainWindowController? {
+        (NSApp.delegate as? AppDelegate)?.windowController
+    }
+
+    // MARK: Platné nastavení
+
+    /// Právě platné (uložené) nastavení aplikace.
+    static var current: SettingsSnapshot {
+        var snapshot = SettingsSnapshot()
+        snapshot.savePanelPaths = Settings.savePanelPaths
+        snapshot.showHiddenFiles = mainController?.showHiddenFiles ?? defaults.showHiddenFiles
+        snapshot.markingIncludesDirs = Settings.markingIncludesDirs
+        snapshot.showMiddleBar = Settings.showMiddleBar
+        snapshot.colorScheme = Settings.colorScheme
+        snapshot.keyBindings = KeyBindings.overrides
+        return snapshot
+    }
+
+    /// Uloží snímek jako platné nastavení aplikace. Volby s viditelným dopadem
+    /// (lišta, schéma, skryté soubory, zkratky) se zapisují jen při změně –
+    /// jejich zápis překresluje okno a posílá oznámení.
+    func apply() {
+        Settings.savePanelPaths = savePanelPaths
+        Settings.markingIncludesDirs = markingIncludesDirs
+        if Settings.showMiddleBar != showMiddleBar {
+            Settings.showMiddleBar = showMiddleBar
+        }
+        if Settings.colorScheme != colorScheme {
+            Settings.colorScheme = colorScheme
+        }
+        if let controller = Self.mainController, controller.showHiddenFiles != showHiddenFiles {
+            controller.toggleHiddenFiles()
+        }
+        if KeyBindings.overrides != keyBindings {
+            KeyBindings.overrides = keyBindings
+        }
+    }
+
+    // MARK: Soubor
+
+    /// Načtení ze souboru: chybějící volba dostane výchozí hodnotu (soubor ze
+    /// starší verze nebo ručně zkrácený), cizí JSON a novější formát se odmítnou.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard try container.decodeIfPresent(String.self, forKey: .format) == Self.fileFormat else {
+            throw SettingsFileError.notSettings
+        }
+        let version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        guard version <= Self.fileVersion else {
+            throw SettingsFileError.newerVersion(version)
+        }
+        let defaults = Self.defaults
+        savePanelPaths = try container.decodeIfPresent(Bool.self, forKey: .savePanelPaths) ?? defaults.savePanelPaths
+        showHiddenFiles = try container.decodeIfPresent(Bool.self, forKey: .showHiddenFiles) ?? defaults.showHiddenFiles
+        markingIncludesDirs = try container.decodeIfPresent(Bool.self, forKey: .markingIncludesDirs)
+            ?? defaults.markingIncludesDirs
+        showMiddleBar = try container.decodeIfPresent(Bool.self, forKey: .showMiddleBar) ?? defaults.showMiddleBar
+        // Neznámé schéma (z jiné verze) = výchozí.
+        colorScheme = try container.decodeIfPresent(String.self, forKey: .colorScheme)
+            .flatMap(PanelColorScheme.init(rawValue:)) ?? defaults.colorScheme
+        // Zkratky jen v rozsahu, který jde nastavit i v dialogu.
+        keyBindings = KeyBindings.sanitized(
+            try container.decodeIfPresent([String: [Shortcut]].self, forKey: .keyBindings) ?? [:])
+    }
+
+    /// Uložení do souboru: značka formátu, verze a všechny volby.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Self.fileFormat, forKey: .format)
+        try container.encode(Self.fileVersion, forKey: .version)
+        try container.encode(savePanelPaths, forKey: .savePanelPaths)
+        try container.encode(showHiddenFiles, forKey: .showHiddenFiles)
+        try container.encode(markingIncludesDirs, forKey: .markingIncludesDirs)
+        try container.encode(showMiddleBar, forKey: .showMiddleBar)
+        try container.encode(colorScheme.rawValue, forKey: .colorScheme)
+        try container.encode(keyBindings, forKey: .keyBindings)
+    }
+
+    /// Načte nastavení ze souboru JSON. Neplatný obsah hlásí jako
+    /// `SettingsFileError` (srozumitelný text místo technické hlášky dekodéru).
+    /// - Parameter url: soubor uložený přes `write(to:)`
+    static func read(from url: URL) throws -> SettingsSnapshot {
+        let data = try Data(contentsOf: url)
+        do {
+            return try JSONDecoder().decode(SettingsSnapshot.self, from: data)
+        } catch is DecodingError {
+            throw SettingsFileError.corrupted
+        }
+    }
+
+    /// Zapíše nastavení do souboru JSON (čitelně odsazený, klíče abecedně –
+    /// stejné nastavení dá vždy stejný soubor).
+    /// - Parameter url: cílový soubor (existující se přepíše)
+    func write(to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(self).write(to: url, options: .atomic)
     }
 }
 
@@ -116,7 +275,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     static func show() {
         let controller = shared ?? SettingsWindowController()
         shared = controller
-        controller.loadValues()
+        // Vždy aktuální uložené nastavení (rozpracované změny z minula se zahodí).
+        controller.draft = .current
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
     }
@@ -177,7 +337,19 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         let cancelButton = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
         cancelButton.keyEquivalent = "\u{1b}"
 
-        for view in [categoryScroll, headerBox, pageContainer, separator, okButton, cancelButton] {
+        // Vlevo dole: výchozí hodnoty a nastavení v souboru. Všechna tři tlačítka
+        // pracují s hodnotami v dialogu – platit začnou až tlačítkem OK.
+        let resetAllButton = NSButton(title: "Obnovit vše", target: self, action: #selector(resetAllSettingsClicked(_:)))
+        resetAllButton.toolTip = "Nastaví všechny volby i klávesové zkratky na výchozí hodnoty (uloží se až tlačítkem OK)."
+        let importButton = NSButton(title: "Načíst ze souboru…", target: self, action: #selector(importClicked(_:)))
+        importButton.toolTip = "Načte do dialogu nastavení uložené v souboru (uloží se až tlačítkem OK)."
+        let exportButton = NSButton(title: "Uložit do souboru…", target: self, action: #selector(exportClicked(_:)))
+        exportButton.toolTip = "Uloží nastavení zobrazené v dialogu do souboru JSON."
+        let fileButtons = NSStackView(views: [resetAllButton, importButton, exportButton])
+        fileButtons.orientation = .horizontal
+        fileButtons.spacing = 10
+
+        for view in [categoryScroll, headerBox, pageContainer, separator, fileButtons, okButton, cancelButton] {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
         }
@@ -209,6 +381,10 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             okButton.trailingAnchor.constraint(equalTo: cancelButton.leadingAnchor, constant: -10),
             okButton.bottomAnchor.constraint(equalTo: cancelButton.bottomAnchor),
             okButton.widthAnchor.constraint(equalToConstant: 100),
+
+            fileButtons.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
+            fileButtons.centerYAnchor.constraint(equalTo: okButton.centerYAnchor),
+            fileButtons.trailingAnchor.constraint(lessThanOrEqualTo: okButton.leadingAnchor, constant: -20),
         ])
         window?.contentView = content
 
@@ -310,54 +486,98 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     // MARK: Hodnoty
 
-    /// Hlavní okno aplikace (skryté soubory se přepínají přes něj).
-    private var mainController: MainWindowController? {
-        (NSApp.delegate as? AppDelegate)?.windowController
-    }
-
-    /// Načte aktuální nastavení do ovládacích prvků (rozpracované změny se zahodí).
-    private func loadValues() {
-        savePathsBox.state = Settings.savePanelPaths ? .on : .off
-        showHiddenBox.state = mainController?.showHiddenFiles == true ? .on : .off
-        markDirsBox.state = Settings.markingIncludesDirs ? .on : .off
-        middleBarBox.state = Settings.showMiddleBar ? .on : .off
-        schemePopup.selectItem(at: PanelColorScheme.allCases.firstIndex(of: Settings.colorScheme) ?? 0)
-        draftBindings = Dictionary(uniqueKeysWithValues: KeyBindings.table)
-        reloadBindings()
+    /// Nastavení tak, jak ho právě ukazují ovládací prvky dialogu (rozpracované,
+    /// ještě neuložené). Zápis hodnoty naplní všechny stránky dialogu.
+    var draft: SettingsSnapshot {
+        get {
+            var snapshot = SettingsSnapshot()
+            snapshot.savePanelPaths = savePathsBox.state == .on
+            snapshot.showHiddenFiles = showHiddenBox.state == .on
+            snapshot.markingIncludesDirs = markDirsBox.state == .on
+            snapshot.showMiddleBar = middleBarBox.state == .on
+            snapshot.colorScheme = PanelColorScheme.allCases[max(0, schemePopup.indexOfSelectedItem)]
+            // Ukládají se jen zkratky odlišné od výchozích.
+            snapshot.keyBindings = KeyBindings.overrides(for: draftBindings)
+            return snapshot
+        }
+        set {
+            savePathsBox.state = newValue.savePanelPaths ? .on : .off
+            showHiddenBox.state = newValue.showHiddenFiles ? .on : .off
+            markDirsBox.state = newValue.markingIncludesDirs ? .on : .off
+            middleBarBox.state = newValue.showMiddleBar ? .on : .off
+            schemePopup.selectItem(at: PanelColorScheme.allCases.firstIndex(of: newValue.colorScheme) ?? 0)
+            draftBindings = Dictionary(uniqueKeysWithValues: KeyBindings.table(applying: newValue.keyBindings))
+            reloadBindings()
+        }
     }
 
     /// OK: uloží všechny volby a zkratky a zavře okno.
     @objc private func okClicked(_ sender: Any?) {
-        Settings.savePanelPaths = savePathsBox.state == .on
-        Settings.markingIncludesDirs = markDirsBox.state == .on
-        if Settings.showMiddleBar != (middleBarBox.state == .on) {
-            Settings.showMiddleBar = middleBarBox.state == .on
-        }
-        // Schéma se ukládá jen při změně (setter překreslí panely a změní vzhled).
-        let scheme = PanelColorScheme.allCases[max(0, schemePopup.indexOfSelectedItem)]
-        if scheme != Settings.colorScheme {
-            Settings.colorScheme = scheme
-        }
-        if let controller = mainController, controller.showHiddenFiles != (showHiddenBox.state == .on) {
-            controller.toggleHiddenFiles()
-        }
-        // Ukládají se jen zkratky odlišné od výchozích.
-        var overrides: [String: [Shortcut]] = [:]
-        for command in KeyBindings.commands {
-            let shortcuts = draftBindings[command] ?? []
-            if shortcuts != KeyBindings.defaultShortcuts(for: command) {
-                overrides[KeyBindings.name(of: command)] = shortcuts
-            }
-        }
-        if overrides != KeyBindings.overrides {
-            KeyBindings.overrides = overrides
-        }
+        draft.apply()
         window?.close()
     }
 
     /// Zrušit: zavře okno bez uložení (při dalším otevření se načte uložený stav).
     @objc private func cancelClicked(_ sender: Any?) {
         window?.close()
+    }
+
+    // MARK: Výchozí hodnoty a soubor
+
+    /// Obnovit vše: všechny stránky dialogu na výchozí hodnoty (uloží až OK).
+    @objc private func resetAllSettingsClicked(_ sender: Any?) {
+        draft = .defaults
+    }
+
+    /// Uložit do souboru: nastavení zobrazené v dialogu (i rozpracované) jako JSON.
+    @objc private func exportClicked(_ sender: Any?) {
+        guard let window else { return }
+        let snapshot = draft
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "MicroCommander-nastaveni.json"
+        panel.isExtensionHidden = false
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try snapshot.write(to: url)
+            } catch {
+                self?.showFileError("Nastavení se nepodařilo uložit.", error, after: panel)
+            }
+        }
+    }
+
+    /// Načíst ze souboru: naplní dialog nastavením ze souboru (uloží až OK,
+    /// Zrušit ponechá dosavadní nastavení).
+    @objc private func importClicked(_ sender: Any?) {
+        guard let window else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                self?.draft = try SettingsSnapshot.read(from: url)
+            } catch {
+                self?.showFileError("Nastavení se nepodařilo načíst.", error, after: panel)
+            }
+        }
+    }
+
+    /// Chyba práce se souborem nastavení jako sheet okna.
+    /// - Parameters:
+    ///   - message: co se nepodařilo
+    ///   - error: příčina (chyba formátu nebo systémová chyba čtení / zápisu)
+    ///   - panel: dialog výběru souboru – musí zmizet dřív, než se ukáže další sheet
+    private func showFileError(_ message: String, _ error: Error, after panel: NSSavePanel) {
+        guard let window else { return }
+        panel.orderOut(nil)
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.beginSheetModal(for: window)
     }
 
     // MARK: Klávesnice
@@ -387,7 +607,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         let addButton = NSButton(title: "Přidat zkratku…", target: self, action: #selector(addShortcutClicked(_:)))
         removeButton = NSButton(title: "Odebrat zkratku…", target: self, action: #selector(removeShortcutClicked(_:)))
         resetButton = NSButton(title: "Výchozí", target: self, action: #selector(resetCommandClicked(_:)))
-        let resetAllButton = NSButton(title: "Obnovit vše", target: self, action: #selector(resetAllClicked(_:)))
+        let resetAllButton = NSButton(title: "Obnovit zkratky", target: self, action: #selector(resetAllClicked(_:)))
+        resetAllButton.toolTip = "Nastaví zkratky všech příkazů na výchozí (ostatní volby nemění)."
         let buttons = NSStackView(views: [addButton, removeButton, resetButton, NSView(), resetAllButton])
         buttons.orientation = .horizontal
         buttons.spacing = 8
@@ -628,7 +849,7 @@ final class ShortcutRecorder: NSWindowController {
             }
             guard let shortcut = Shortcut(event: event) else { return nil }
             // Písmeno nebo číslice bez modifikátoru by v panelu zablokovalo rychlé hledání.
-            if !shortcut.byKeyCode && shortcut.modifiers.subtracting(.shift).isEmpty {
+            if shortcut.blocksQuickSearch {
                 self.reject("Zkratka \(shortcut.display) by blokovala rychlé hledání – "
                             + "použijte modifikátor (⌘ ⌃ ⌥) nebo F-klávesu.")
                 return nil

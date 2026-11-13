@@ -514,6 +514,69 @@ final class UIKeyCheck {
               "⌘C v textovém poli zůstane kopírování textu")
     }
 
+    /// Nastavení v souboru (Nastavení › Uložit do souboru… / Načíst ze souboru…)
+    /// a Obnovit vše: snímek projde souborem JSON beze změny, dialog ho ukáže
+    /// a vrátí stejný, chybějící volby jsou výchozí, cizí a novější soubor se
+    /// odmítne a nepřiřaditelné zkratky se zahodí. Uložené předvolby se nemění
+    /// (pracuje se jen se snímky a s rozpracovanými hodnotami dialogu).
+    private func checkSettingsFile() {
+        let file = URL(fileURLWithPath: TempFiles.newPath(suffix: ".json"))
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        // Snímek odlišný od výchozího ve všech volbách.
+        var custom = SettingsSnapshot()
+        custom.savePanelPaths = false
+        custom.showHiddenFiles = false
+        custom.markingIncludesDirs = false
+        custom.showMiddleBar = true
+        custom.colorScheme = .norton
+        custom.keyBindings = [
+            KeyBindings.name(of: .swap): [.char("k", keyCode: 40, .command)],
+            KeyBindings.name(of: .editPlaces): [.function(12, .control)],
+        ]
+        try? custom.write(to: file)
+        check((try? SettingsSnapshot.read(from: file)) == custom && custom != SettingsSnapshot.defaults, "nastavení projde souborem JSON beze změny")
+
+        // Dialog: načtený snímek se ukáže ve všech stránkách a Obnovit vše vrátí výchozí.
+        let dialog = SettingsWindowController()
+        dialog.draft = custom
+        check(dialog.draft == custom, "dialog Nastavení ukáže hodnoty načtené ze souboru")
+        dialog.draft = .defaults
+        check(dialog.draft == SettingsSnapshot.defaults, "Obnovit vše nastaví v dialogu výchozí hodnoty")
+
+        /// Zapíše text jako soubor nastavení a zkusí ho načíst.
+        func read(_ json: String) -> Result<SettingsSnapshot, Error> {
+            try? json.write(to: file, atomically: true, encoding: .utf8)
+            return Result { try SettingsSnapshot.read(from: file) }
+        }
+        let format = SettingsSnapshot.fileFormat
+        // Jen značka formátu a jedna volba – zbytek výchozí.
+        var expected = SettingsSnapshot.defaults
+        expected.showMiddleBar = true
+        check((try? read(#"{"format": "\#(format)", "showMiddleBar": true}"#).get()) == expected,
+              "chybějící volby v souboru dostanou výchozí hodnoty")
+        // Cizí JSON a novější verze formátu.
+        let foreignRejected = if case .failure(SettingsFileError.notSettings) = read(#"{"showMiddleBar": true}"#) { true } else { false }
+        check(foreignRejected, "cizí soubor JSON se jako nastavení odmítne")
+        let newerRejected = if case .failure(SettingsFileError.newerVersion) = read(#"{"format": "\#(format)", "version": 99}"#) { true } else { false }
+        check(newerRejected, "soubor z novější verze se odmítne")
+        // Značka formátu sedí, ale volba má špatný typ.
+        let corruptedRejected = if case .failure(SettingsFileError.corrupted) = read(#"{"format": "\#(format)", "showMiddleBar": "ano"}"#) { true } else { false }
+        check(corruptedRejected, "poškozený soubor nastavení se odmítne")
+        // Ručně upravený soubor: neznámý příkaz, vyhrazená klávesa (⌘1) a písmeno
+        // bez modifikátoru se nepřevezmou, platná zkratka ano.
+        var edited = SettingsSnapshot.defaults
+        edited.keyBindings = [
+            "neznamyPrikaz": [.function(5)],
+            KeyBindings.name(of: .swap): [.code(KeyCode.digits[0], key: "1", .command), .char("x", keyCode: 7, []),
+                                          .function(11, .option)],
+        ]
+        // Zápis filtr obchází (ten je jen při čtení) – soubor obsahuje i neplatné zkratky.
+        try? edited.write(to: file)
+        check((try? SettingsSnapshot.read(from: file))?.keyBindings == [KeyBindings.name(of: .swap): [.function(11, .option)]],
+              "ze souboru se převezmou jen přiřaditelné zkratky známých příkazů")
+    }
+
     /// Informace o jednotce: ⌘F1 i ⌃F1 spouští příkaz, údaje o kořenovém svazku
     /// dávají smysl a dialog je ukáže (název svazku, kapacita v bajtech).
     private func checkDriveInfo() {
@@ -616,6 +679,7 @@ final class UIKeyCheck {
             self.checkServerProfiles()
             self.probeMenuPeriod(dir: dir)
             self.checkKeyBindings()
+            self.checkSettingsFile()
             self.checkDriveInfo()
             self.checkSameDir(dir: dir, then: { self.finish(dir: dir) })
         }

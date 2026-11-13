@@ -95,6 +95,13 @@ struct Shortcut: Codable, Hashable {
         return mods == .command && (KeyCode.digits.contains(keyCode) || keyCode == KeyCode.digitZero)
     }
 
+    /// Písmeno, číslice nebo symbol bez modifikátoru (nejvýš s ⇧) – jako zkratka
+    /// by v panelu blokovalo rychlé hledání, proto ho příkazu přiřadit nelze.
+    var blocksQuickSearch: Bool { !byKeyCode && modifiers.subtracting(.shift).isEmpty }
+
+    /// Lze zkratku přiřadit příkazu? (Záznam v Nastavení i načtení ze souboru.)
+    var isAssignable: Bool { !isReserved && !blocksQuickSearch }
+
     /// Je to F-klávesa?
     var isFunctionKey: Bool { functionNumber != nil }
 
@@ -368,6 +375,14 @@ enum KeyBindings {
         }
     }
 
+    /// Uživatelské změny z vnějšího zdroje (soubor s nastavením) očištěné na to,
+    /// co jde nastavit i v dialogu: jen známé příkazy a jen přiřaditelné klávesy
+    /// (ručně upravený soubor nesmí zablokovat navigaci ani rychlé hledání).
+    static func sanitized(_ overrides: [String: [Shortcut]]) -> [String: [Shortcut]] {
+        let known = Set(commands.map(name(of:)))
+        return overrides.filter { known.contains($0.key) }.mapValues { $0.filter(\.isAssignable) }
+    }
+
     /// Stálý název příkazu pro uložení.
     static func name(of command: Command) -> String { String(describing: command) }
 
@@ -380,9 +395,27 @@ enum KeyBindings {
     private static var cachedTable: [(Command, [Shortcut])]?
     static var table: [(Command, [Shortcut])] {
         if let cachedTable { return cachedTable }
-        let saved = overrides
-        let result = defaults.map { command, shortcuts in (command, saved[name(of: command)] ?? shortcuts) }
+        let result = table(applying: overrides)
         cachedTable = result
+        return result
+    }
+
+    /// Tabulka zkratek pro dané uživatelské změny (v pořadí výchozích příkazů;
+    /// příkaz bez změny má výchozí zkratky, neznámé názvy příkazů se ignorují).
+    static func table(applying overrides: [String: [Shortcut]]) -> [(Command, [Shortcut])] {
+        defaults.map { command, shortcuts in (command, overrides[name(of: command)] ?? shortcuts) }
+    }
+
+    /// Uživatelské změny pro dané přiřazení zkratek: jen příkazy, jejichž zkratky
+    /// se liší od výchozích (příkaz chybějící v přiřazení = bez zkratek).
+    static func overrides(for bindings: [Command: [Shortcut]]) -> [String: [Shortcut]] {
+        var result: [String: [Shortcut]] = [:]
+        for (command, defaultShortcuts) in defaults {
+            let shortcuts = bindings[command] ?? []
+            if shortcuts != defaultShortcuts {
+                result[name(of: command)] = shortcuts
+            }
+        }
         return result
     }
 
