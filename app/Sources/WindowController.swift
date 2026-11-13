@@ -690,6 +690,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case drive(path: String)
         case server(ServerProfile)
         case manageServers
+
+        /// Cesta disku (nil u ostatních položek).
+        var drivePath: String? {
+            if case .drive(let path) = self { return path }
+            return nil
+        }
+
+        /// Uložený server (nil u ostatních položek).
+        var server: ServerProfile? {
+            if case .server(let server) = self { return server }
+            return nil
+        }
     }
 
     /// Položky nabídky disků: kořen, domov, svazky (v uloženém pořadí), uložené
@@ -711,14 +723,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         return items
     }
 
+    /// Skupiny přesouvatelných položek nabídky: souvislé úseky disků a serverů
+    /// (každá skupina se přesouvá zvlášť; správa serverů nikam nepatří).
+    static func driveChooserGroups(_ items: [(entry: DriveChooser.Entry, choice: DriveChoice)]) -> [Range<Int>] {
+        let drives = items.compactMap(\.choice.drivePath).count
+        let servers = items.compactMap(\.choice.server).count
+        return [0..<drives, drives..<(drives + servers)]
+    }
+
     /// Nabídka disků pro panel (⌥F1/⌥F2, tlačítko disku). Výchozí řádek = disk,
-    /// na kterém panel právě je; přesouvat (⌥↑/⌥↓) lze jen disky.
+    /// na kterém panel právě je; disky i servery lze přesouvat (šipky v řádku, ⌥↑/⌥↓).
     func panelViewShowDriveChooser(_ view: PanelView, anchor: NSView) {
         let panel = view.panel
         let drives = DriveBar.listDrives()
         // Položky se při přesunu v nabídce prohazují – výběr pak odpovídá novému pořadí.
         var items = MainWindowController.driveChooserItems()
         let chooser = DriveChooser.show(entries: items.map(\.entry), selected: currentDriveIndex(drives, panel: panel),
+                                        movableGroups: MainWindowController.driveChooserGroups(items),
                                         below: anchor) { [weak self] index in
             guard let self else { return }
             self.activate(panel)
@@ -728,12 +749,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             case .manageServers: ConnectWindowController.show(parent: self, panel: panel)
             }
         }
-        chooser.movableCount = drives.count
         chooser.onMove = { from, to in
             items.swapAt(from, to)
-            DriveBar.saveOrder(items.prefix(drives.count).compactMap {
-                if case .drive(let path) = $0.choice { return path } else { return nil }
-            })
+            // Uloží se jen skupina, ve které se přesouvalo (disky, nebo servery).
+            if items[to].choice.drivePath != nil {
+                DriveBar.saveOrder(items.compactMap(\.choice.drivePath))
+            } else {
+                // Pořadí podle nabídky, aktuální údaje serverů z úložiště.
+                let stored = ServerStore.load()
+                let order = items.compactMap(\.choice.server?.id)
+                ServerStore.save(order.compactMap { id in stored.first { $0.id == id } })
+            }
         }
     }
 

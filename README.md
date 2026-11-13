@@ -173,13 +173,17 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   kurzor začíná na disku,
   kde panel je. ↑/↓ cyklí (z poslední položky na první a obráceně), Home/End,
   číslice 1–9 vyberou přímo, Enter potvrdí, Escape nebo klik mimo zavře.
-  **Pořadí disků** je výchozí Domů, „/“, svazky; mění se v nabídce klávesami
-  ⌥↑ / ⌥↓ (⌘↑ / ⌘↓) nebo pravým tlačítkem na disku v liště disků (Na první
-  místo / Posunout doleva / doprava). Pořadí se pamatuje a platí pro lištu
-  i nabídku; nově připojené svazky se řadí na konec.
+  **Pořadí disků** je výchozí Domů, „/“, svazky; mění se v nabídce šipkami
+  nahoru/dolů vpravo v řádku, klávesami ⌥↑ / ⌥↓ (⌘↑ / ⌘↓) nebo pravým
+  tlačítkem na disku v liště disků (Na první místo / Posunout doleva /
+  doprava). Stejně (šipkami v řádku, ⌥↑ / ⌥↓) se mění i **pořadí serverů** –
+  disky i servery se přesouvají jen v rámci své skupiny. Pořadí se pamatuje
+  a platí pro lištu i nabídku; nově připojené svazky se řadí na konec.
+  Nabídka je široká podle nejdelší položky, text je vždy na jednom řádku.
 - **FTP/SFTP servery** (F11, tlačítko FTP/SFTP v liště disků, poslední položka
   nabídky disků): seznam libovolného počtu uložených serverů – **+** přidá,
-  **−** odebere (po potvrzení), vybraný server se upravuje ve formuláři vpravo
+  **−** odebere (po potvrzení), **Duplikovat** vytvoří kopii vybraného serveru
+  se všemi nastaveními (i uloženým heslem) s názvem „… (kopie)“, vybraný server se upravuje ve formuláři vpravo
   (název, protokol, server, port, uživatel, ověření). Úpravy se ukládají
   průběžně (přepnutí serveru, Připojit, Zavřít/Escape); Enter nebo dvojklik
   připojí vybraný server v panelu, odkud byl dialog otevřen. Každý panel může

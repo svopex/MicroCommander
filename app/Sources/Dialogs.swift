@@ -121,6 +121,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
     private let noteLabel = NSTextField(wrappingLabelWithString: "")
     private let connectButton = NSButton(title: "Připojit", target: nil, action: nil)
     private let removeButton = NSButton()
+    private let duplicateButton = NSButton()
     private let tableView = NSTableView()
     private var grid: NSGridView!
     /// Řádky mřížky skrývané podle protokolu a ověření.
@@ -262,13 +263,17 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         removeButton.image = NSImage(systemSymbolName: "minus", accessibilityDescription: "Odebrat")
         removeButton.target = self
         removeButton.action = #selector(removeClicked(_:))
-        for button in [addButton, removeButton] {
+        duplicateButton.image = NSImage(systemSymbolName: "plus.square.on.square", accessibilityDescription: "Duplikovat")
+        duplicateButton.target = self
+        duplicateButton.action = #selector(duplicateClicked(_:))
+        for button in [addButton, removeButton, duplicateButton] {
             button.bezelStyle = .smallSquare
             button.widthAnchor.constraint(equalToConstant: 26).isActive = true
         }
         addButton.toolTip = "Přidat server"
         removeButton.toolTip = "Odebrat vybraný server"
-        let listButtons = NSStackView(views: [addButton, removeButton])
+        duplicateButton.toolTip = "Duplikovat vybraný server (kopie se všemi nastaveními)"
+        let listButtons = NSStackView(views: [addButton, removeButton, duplicateButton])
         listButtons.spacing = 0
 
         let closeButton = NSButton(title: "Zavřít", target: self, action: #selector(closeClicked(_:)))
@@ -388,7 +393,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         let enabled = index != nil
         for control in [nameField, kindFtp, kindSftp, hostField, portField, userField, authPopup,
                         passField, keyField, keyButton, passphraseField, saveSecretCheckbox,
-                        connectButton, removeButton] as [NSControl] {
+                        connectButton, removeButton, duplicateButton] as [NSControl] {
             control.isEnabled = enabled
         }
         updateVisibility()
@@ -539,6 +544,26 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         select(servers.count - 1)
         ServerStore.save(servers)
         window?.makeFirstResponder(hostField)
+    }
+
+    /// Kopie vybraného serveru (nové id, název s „(kopie)“) hned za originál;
+    /// uložené heslo se zkopíruje také. Kopie se vybere k úpravě.
+    @objc private func duplicateClicked(_ sender: Any?) {
+        guard let index = editingIndex else { return }
+        commitForm()
+        let original = servers[index]
+        var copy = original
+        copy.id = UUID()
+        copy.name = original.displayName + " (kopie)"
+        if original.savePassword, let secret = ServerKeychain.secret(for: original.id) {
+            ServerKeychain.setSecret(secret, for: copy.id)
+        }
+        servers.insert(copy, at: index + 1)
+        ServerStore.save(servers)
+        // Originál zůstává na svém indexu (už uložený), kopie se vybere za ním.
+        tableView.reloadData()
+        select(index + 1)
+        window?.makeFirstResponder(nameField)
     }
 
     /// Odebrání vybraného serveru po potvrzení (smaže i heslo v Klíčence).
@@ -1081,8 +1106,9 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
 
     private var entries: [Entry]
     private let onChoose: (Int) -> Void
-    /// Kolik položek od začátku lze přesouvat (disky; servery a „FTP/SFTP servery…“ se nepřesouvají).
-    var movableCount = 0
+    /// Skupiny přesouvatelných položek (rozsahy indexů, např. disky a servery);
+    /// položka se přesouvá jen v rámci své skupiny, ostatní („FTP/SFTP servery…“) stojí.
+    let movableGroups: [Range<Int>]
     /// Přesun položky (z indexu, na index) – volající uloží nové pořadí.
     var onMove: ((Int, Int) -> Void)?
     let tableView = DriveTableView()
@@ -1097,10 +1123,10 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
 
     /// Otevře nabídku pod pohledem `anchor`; `selected` = výchozí řádek (aktuální disk).
     @discardableResult
-    static func show(entries: [Entry], selected: Int, below anchor: NSView,
+    static func show(entries: [Entry], selected: Int, movableGroups: [Range<Int>] = [], below anchor: NSView,
                      onChoose: @escaping (Int) -> Void) -> DriveChooser {
         current?.cancel()
-        let chooser = DriveChooser(entries: entries, selected: selected, onChoose: onChoose)
+        let chooser = DriveChooser(entries: entries, selected: selected, movableGroups: movableGroups, onChoose: onChoose)
         current = chooser
         if let window = chooser.window, let parent = anchor.window {
             // Umístění pod tlačítko (souřadnice obrazovky).
@@ -1114,13 +1140,19 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
     }
 
     /// Vytvoří nabídku (bez zobrazení – používá i kontrola kláves bez okna).
-    init(entries: [Entry], selected: Int, onChoose: @escaping (Int) -> Void) {
+    /// - Parameter movableGroups: skupiny přesouvatelných položek (viz movableGroups)
+    init(entries: [Entry], selected: Int, movableGroups: [Range<Int>] = [], onChoose: @escaping (Int) -> Void) {
         self.entries = entries
+        self.movableGroups = movableGroups
         self.onChoose = onChoose
         let rowHeight: CGFloat = 22
         // Výška přesně na počet řádků (bez mezer mezi řádky), max. 480 bodů.
         let height = min(CGFloat(entries.count) * rowHeight + 8, 480)
-        let panel = DriveChooserPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: height),
+        // Šířka podle nejdelší položky (text na jednom řádku): ikona, text, šipky
+        // pro změnu pořadí a okraje; 380–760 bodů.
+        let textWidth = entries.enumerated().map { DriveChooser.attributedTitle($1, row: $0).size().width }.max() ?? 0
+        let width = min(max(380, ceil(textWidth) + 6 + 16 + 6 + DriveChooser.arrowsWidth + 18), 760)
+        let panel = DriveChooserPanel(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
                                       styleMask: [.borderless], backing: .buffered, defer: false)
         panel.hasShadow = true
         panel.isReleasedWhenClosed = false
@@ -1130,7 +1162,7 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
 
         // Tabulka bez záhlaví: ikona + název + cesta.
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("drive"))
-        column.width = 370
+        column.width = width - 10
         tableView.addTableColumn(column)
         tableView.headerView = nil
         tableView.rowHeight = rowHeight
@@ -1203,15 +1235,21 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
         return true
     }
 
-    /// Přesune položku o krok nahoru/dolů (jen v rozsahu přesouvatelných disků).
+    /// Lze položku přesunout z `index` na `target` (obě ve stejné skupině)?
+    func canMove(_ index: Int, to target: Int) -> Bool {
+        movableGroups.contains { $0.contains(index) && $0.contains(target) }
+    }
+
+    /// Přesune položku o krok nahoru/dolů (jen v rámci její skupiny).
     func move(_ index: Int, by delta: Int) {
         let target = index + delta
-        guard index < movableCount, target >= 0, target < movableCount else {
+        guard canMove(index, to: target) else {
             NSSound.beep()
             return
         }
         entries.swapAt(index, target)
-        tableView.reloadData()
+        // Mění se jen dva prohozené řádky (číslo položky, text); šipky závisí jen na indexu.
+        tableView.reloadData(forRowIndexes: IndexSet([index, target]), columnIndexes: IndexSet(integer: 0))
         select(target)
         onMove?(index, target)
     }
@@ -1257,11 +1295,11 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
         entries.count
     }
 
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let entry = entries[row]
-        let cell = NSTableCellView()
-        let image = NSImageView(image: entry.icon ?? NSImage())
-        // Číslo položky (1–9) jako zkratka, pak název a šedě cesta.
+    /// Šířka dvojice šipek pro změnu pořadí vpravo v řádku.
+    static let arrowsWidth: CGFloat = 40
+
+    /// Text řádku: číslo položky (1–9) jako zkratka, název a šedě cesta.
+    static func attributedTitle(_ entry: Entry, row: Int) -> NSAttributedString {
         let number = row < 9 ? "\(row + 1)  " : "   "
         let text = NSMutableAttributedString(string: number, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .bold)])
         text.append(NSAttributedString(string: entry.title, attributes: [.font: NSFont.systemFont(ofSize: 13)]))
@@ -1269,9 +1307,39 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
             text.append(NSAttributedString(string: "   " + entry.detail,
                                            attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
         }
-        let label = NSTextField(labelWithAttributedString: text)
+        return text
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let entry = entries[row]
+        let cell = NSTableCellView()
+        let image = NSImageView(image: entry.icon ?? NSImage())
+        // Vždy jeden řádek – dlouhý text se zkrátí uprostřed, nezalomí.
+        let label = NSTextField(labelWithAttributedString: DriveChooser.attributedTitle(entry, row: row))
         label.lineBreakMode = .byTruncatingMiddle
-        for view in [image, label] as [NSView] {
+        label.maximumNumberOfLines = 1
+        label.usesSingleLineMode = true
+        label.cell?.wraps = false
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // Šipky nahoru/dolů jen u přesouvatelných položek; na okraji skupiny neaktivní.
+        let arrows = NSStackView()
+        arrows.spacing = 0
+        if canMove(row, to: row) {
+            let arrowSpecs: [(String, Int, Selector, String)] = [
+                ("chevron.up", -1, #selector(moveUpClicked(_:)), "Posunout nahoru (⌥↑)"),
+                ("chevron.down", 1, #selector(moveDownClicked(_:)), "Posunout dolů (⌥↓)"),
+            ]
+            for (symbol, delta, action, tip) in arrowSpecs {
+                let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip) ?? NSImage(),
+                                      target: self, action: action)
+                button.isBordered = false
+                button.toolTip = tip
+                button.isEnabled = canMove(row, to: row + delta)
+                button.widthAnchor.constraint(equalToConstant: DriveChooser.arrowsWidth / 2).isActive = true
+                arrows.addArrangedSubview(button)
+            }
+        }
+        for view in [image, label, arrows] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             cell.addSubview(view)
         }
@@ -1281,10 +1349,24 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
             image.widthAnchor.constraint(equalToConstant: 16),
             image.heightAnchor.constraint(equalToConstant: 16),
             label.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 6),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -6),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: arrows.leadingAnchor, constant: -4),
             label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            arrows.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+            arrows.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            arrows.widthAnchor.constraint(equalToConstant: DriveChooser.arrowsWidth),
         ])
         return cell
+    }
+
+    /// Šipky v řádku: řádek se zjistí z pozice tlačítka v tabulce (vždy aktuální).
+    @objc private func moveUpClicked(_ sender: NSButton) {
+        let row = tableView.row(for: sender)
+        if row >= 0 { move(row, by: -1) }
+    }
+
+    @objc private func moveDownClicked(_ sender: NSButton) {
+        let row = tableView.row(for: sender)
+        if row >= 0 { move(row, by: 1) }
     }
 }
 

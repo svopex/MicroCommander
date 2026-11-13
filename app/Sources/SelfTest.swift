@@ -586,8 +586,7 @@ final class UIKeyCheck {
         self.check(cancelledChoice == nil, "nabídka disků: Escape zavře bez výběru")
         // Změna pořadí: ⌥↓ / ⌥↑ přesouvají disk, poslední položka (FTP) se nehýbe.
         var moves: [(Int, Int)] = []
-        let reorder = DriveChooser(entries: entries, selected: 0) { _ in }
-        reorder.movableCount = 3
+        let reorder = DriveChooser(entries: entries, selected: 0, movableGroups: [0..<3]) { _ in }
         reorder.onMove = { moves.append(($0, $1)) }
         _ = reorder.handleKey(event(KeyCode.down, NSDownArrowFunctionKey, [.option, .function]))
         self.check(moves.count == 1 && moves[0] == (0, 1) && reorder.selectedIndex == 1,
@@ -600,14 +599,19 @@ final class UIKeyCheck {
         reorder.select(3)
         _ = reorder.handleKey(event(KeyCode.up, NSUpArrowFunctionKey, [.option, .function]))
         self.check(moves.count == 2, "nabídka disků: „FTP/SFTP servery…“ se nepřesouvá")
+        // Dvě skupiny (disky 0–1, servery 2–3): přesun jen uvnitř skupiny.
+        let groups = DriveChooser(entries: entries, selected: 0, movableGroups: [0..<2, 2..<4]) { _ in }
+        self.check(groups.canMove(2, to: 3) && !groups.canMove(1, to: 2),
+                   "nabídka disků: server se přesouvá jen mezi servery, ne mezi disky")
         // Výchozí pořadí (jen pokud uživatel ještě nic neuložil): Domů první.
         if UserDefaults.standard.object(forKey: "driveOrder") == nil {
             self.check(DriveBar.listDrives().first?.path == NSHomeDirectory(), "výchozí pořadí disků: Domů první")
         }
         // Volitelný snímek skutečné nabídky (vykreslení mimo obrazovku, bez zobrazení okna).
         if let path = ProcessInfo.processInfo.environment["SAL_CHOOSER_SNAPSHOT"] {
-            let real = MainWindowController.driveChooserItems().map(\.entry)
-            let snapshot = DriveChooser(entries: real, selected: 1) { _ in }
+            let items = MainWindowController.driveChooserItems()
+            let snapshot = DriveChooser(entries: items.map(\.entry), selected: 1,
+                                        movableGroups: MainWindowController.driveChooserGroups(items)) { _ in }
             // Okno mimo obrazovku se samo nerozvrhne – vynutit layout před snímkem.
             snapshot.window?.contentView?.layoutSubtreeIfNeeded()
             snapshot.tableView.layoutSubtreeIfNeeded()

@@ -184,6 +184,11 @@ README.md       # zadání (aktualizovat na konci)
 
 ## Poslední aktualizace
 
+- 2026-11-13 (24): Duplikovat server ve správě serverů (kopie i s heslem
+  v Klíčence). Nabídka disků: šířka podle nejdelší položky, text na jednom
+  řádku, šipky nahoru/dolů v řádku; DriveChooser.movableGroups (disky
+  a servery se přesouvají zvlášť, uloží se jen dotčená skupina).
+
 - 2026-11-13 (23): Více FTP/SFTP serverů: Servers.swift (ServerProfile Codable
   s decodeIfPresent, ServerStore = UserDefaults „servers“ + převod starých
   klíčů connect*, ServerKeychain = hesla v Klíčence), ConnectWindowController
