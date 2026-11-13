@@ -4,7 +4,7 @@
 // Vývojářský self-test UI (SAL_SELFTEST=1): posílá do aplikace skutečné
 // klávesové události (přes frontu událostí, tedy i přes monitory a modální
 // dialogy) a ověřuje navigaci, označování, Tab, dialogy bez zamrznutí,
-// kopírování F5 a mazání F8 nad dočasným adresářem. Výsledek vypíše a skončí.
+// kopírování F5 a mazání ⇧F8 nad dočasným adresářem. Výsledek vypíše a skončí.
 
 import AppKit
 
@@ -173,21 +173,22 @@ final class UISelfTest {
             self.check(copied, "F5 zkopíroval a.txt do dst")
             self.check(self.windowFree, "po kopírování progress sheet zmizel")
             self.check(left().markedItems.isEmpty, "po kopírování se označení zrušilo")
-            // 7) Ve druhém panelu F8 smaže a.txt (Enter potvrdí).
+            // 7) Ve druhém panelu ⇧F8 trvale smaže a.txt (Enter potvrdí; F8 by
+            // soubor přesunul do koše uživatele).
             self.key(KeyCode.tab, "\t")
         }))
         steps.append((ready: { self.controller.activePanel === right() }, action: {
             copiedBefore = FileManager.default.fileExists(atPath: self.root + "/dst/a.txt")
             right().focus(name: "a.txt")
-            self.key(KeyCode.functionKeys[7], KeyCode.functionKeyString(8))
+            self.key(KeyCode.functionKeys[7], KeyCode.functionKeyString(8), .shift)
         }))
         steps.append((ready: { NSApp.modalWindow != nil }, action: {
-            self.check(NSApp.modalWindow != nil, "F8 otevře potvrzení mazání")
+            self.check(NSApp.modalWindow != nil, "⇧F8 otevře potvrzení mazání")
             self.key(KeyCode.returnKey, "\r")
         }))
         steps.append((ready: { self.windowFree && !FileManager.default.fileExists(atPath: self.root + "/dst/a.txt") }, action: {
             let gone = !FileManager.default.fileExists(atPath: self.root + "/dst/a.txt")
-            self.check(gone && copiedBefore, "F8 smazal a.txt v dst")
+            self.check(gone && copiedBefore, "⇧F8 trvale smazal a.txt v dst")
             self.check(self.windowFree, "po mazání okno není blokované")
             // 8) Backspace jde nahoru a kurzor se postaví na adresář, ze kterého jsme přišli.
             self.key(KeyCode.backspace, "\u{7f}")

@@ -108,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Vlastnosti…", .properties),
             ("Oprávnění…", .permissions),
             ("Smazat…", .delete),
+            ("Smazat trvale…", .deletePermanent),
             ("Nový adresář…", .mkdir),
             nil,
             ("Zabalit do ZIP…", .pack),

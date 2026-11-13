@@ -230,10 +230,12 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **F-klávesy:** F1 nápověda, F2 přejmenovat (přímo v panelu bez dialogu:
   předvybrané jméno bez přípony, Enter potvrdí, Escape zruší, klik jinam
   potvrdí; jméno jiné existující položky se odmítne), F3 prohlížeč, F4 editor, F5
-  kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 smazat
-  (dotazy na cíl, potvrzení mazání i konflikt existujících cílů jsou dialogy
-  ve stylu Salamandera, stejné jako Informace o jednotce: text, vstupní pole,
-  dole tlačítka; Enter potvrdí, Escape zruší),
+  kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 / Delete
+  (i ⌘⌫) smazat do koše, ⇧F8 / ⇧Delete smazat trvale bez koše (v archivu a na
+  FTP/SFTP koš není, maže se vždy trvale a potvrzení to uvede; dotazy na cíl,
+  potvrzení mazání i konflikt existujících cílů jsou dialogy ve stylu
+  Salamandera, stejné jako Informace o jednotce: text, vstupní pole, dole
+  tlačítka; Enter potvrdí, Escape zruší),
   F9 terminál v adresáři, F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
   zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌘F1 / ⌃F1 informace o
   jednotce; **⌘F2 / ⌃F2 změnit atributy**
@@ -356,7 +358,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   na záhlaví řadí, znovu obrací; adresáře nahoře, pokud není Možnosti › Řadit
   soubory a adresáře dohromady). V seznamu: Enter otevřít (adresář v panelu),
   ⇧Enter otevřít všechny označené, mezerník Ukázat (panel přejde na položku),
-  F3 zobrazit, F4 upravit, F8 / Delete odstranit, ⌃H skrýt, ⌃⇧H skrýt duplicity,
+  F3 zobrazit, F4 upravit, F8 / Delete odstranit do koše, ⇧F8 / ⇧Delete
+  trvale, ⌃H skrýt, ⌃⇧H skrýt duplicity,
   ⌘C / ⌃C kopírovat soubory do schránky (pro Finder), ⌘X vyjmout, ⌥⌘C / ⌥⌘⇧C /
   ⌃⌘C cestu + název / název / cestu jako text (i ⌥Insert varianty), ⌘A vybrat vše.
   Dokud je okno aktivní, hlavní menu nahradí menu dialogu (Soubory, Příkazy,
@@ -401,7 +404,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - F3/Enter nad souborem v archivu či na FTP ho nejprve rozbalí do dočasného
   adresáře (smaže se při ukončení aplikace, zbytky po pádu při dalším
   spuštění); F4 a příkazová řádka fungují jen na lokálním disku
-- mazání je trvalé (bez koše)
+- koš funguje jen na lokálním disku; v archivu a na FTP/SFTP je mazání trvalé
 - FTP bez TLS (FTPS není zapojeno)
 - SFTP neověřuje klíč serveru proti ~/.ssh/known_hosts (připojí se k jakémukoli
   serveru na dané adrese)

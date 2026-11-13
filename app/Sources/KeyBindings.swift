@@ -182,7 +182,8 @@ extension Command {
         case .move: return "Přesunout"
         case .mkdir: return "Nový adresář"
         case .changeDir: return "Změnit adresář"
-        case .delete: return "Smazat"
+        case .delete: return "Smazat (do koše)"
+        case .deletePermanent: return "Smazat trvale (bez koše)"
         case .terminal: return "Terminál v adresáři"
         case .quit: return "Ukončit"
         case .connect: return "FTP/SFTP servery"
@@ -237,6 +238,8 @@ extension Command {
         case .newFile: return "Nový soub."
         case .mkdir: return "Nový adr."
         case .changeDir: return "Změnit adr."
+        case .delete: return "Smazat"
+        case .deletePermanent: return "Smazat trvale"
         case .connect: return "Připojit"
         case .disconnect: return "Odpojit"
         case .sortName: return "Jméno"
@@ -289,7 +292,9 @@ enum KeyBindings {
         (.copy, [.function(5)]),
         (.move, [.function(6)]),
         (.mkdir, [.function(7)]),
-        (.delete, [.function(8), .function(8, .shift)]),
+        // F8 maže do koše, ⇧F8 trvale (Delete / ⇧Delete řeší přímo panel).
+        (.delete, [.function(8)]),
+        (.deletePermanent, [.function(8, .shift)]),
         (.terminal, [.function(9)]),
         (.quit, [.function(10), .function(4, .option)]),
         (.connect, [.function(11)]),

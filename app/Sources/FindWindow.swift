@@ -619,7 +619,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             ("scope", "Ukázat položku (mezerník)", #selector(focusItem(_:))),
             ("eye", "Zobrazit soubor (F3)", #selector(viewItem(_:))),
             ("square.and.pencil", "Upravit soubor (F4)", #selector(editItem(_:))),
-            ("trash", "Odstranit (F8)", #selector(deleteItems(_:))),
+            ("trash", "Odstranit do koše (F8, ⇧F8 trvale)", #selector(deleteItems(_:))),
             ("scissors", "Vyjmout (⌘X)", #selector(cut(_:))),
             ("doc.on.doc", "Kopírovat (⌘C)", #selector(copy(_:))),
             ("stop.circle", "Zastavit (Escape)", #selector(stopClicked(_:))),
@@ -817,6 +817,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         add("Zobrazit", #selector(viewItem(_:)), KeyCode.functionKeyString(3), [])
         add("Upravit", #selector(editItem(_:)), KeyCode.functionKeyString(4), [])
         add("Odstranit", #selector(deleteItems(_:)), KeyCode.functionKeyString(8), [])
+        add("Odstranit trvale", #selector(deleteItemsPermanently(_:)), KeyCode.functionKeyString(8), [.shift])
         add("Zobrazit ve Finderu", #selector(revealInFinder(_:)))
         if withShortcuts {
             menu.addItem(.separator())
@@ -923,7 +924,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         case #selector(sortByName(_:)), #selector(sortByPath(_:)), #selector(sortByTime(_:)), #selector(sortBySize(_:)),
              #selector(hideDuplicates(_:)), #selector(invertSelection(_:)):
             return !rows.isEmpty
-        case #selector(deleteItems(_:)):
+        case #selector(deleteItems(_:)), #selector(deleteItemsPermanently(_:)):
             return hasSelection && !searching && vfs.writable
         case #selector(editItem(_:)):
             return focusedRow.map { !$0.item.isDir && vfs.kind == SAL_VFS_LOCAL } ?? false
@@ -1350,7 +1351,8 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             focusItem(nil)
             return true
         case KeyCode.forwardDelete:
-            deleteItems(nil)
+            // Delete do koše, ⇧Delete trvale (jako F8 / ⇧F8).
+            confirmDelete(toTrash: !flags.contains(.shift))
             return true
         case KeyCode.escape:
             cancelOperation(nil)
@@ -1435,38 +1437,51 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         if !urls.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(urls) }
     }
 
-    /// Odstranit označené položky (po potvrzení; trvale, bez koše) a odebrat je ze seznamu.
+    /// F8 / Delete – odstranit označené položky do koše (po potvrzení) a odebrat je ze seznamu.
     @objc private func deleteItems(_ sender: Any?) {
+        confirmDelete(toTrash: true)
+    }
+
+    /// ⇧F8 / ⇧Delete – odstranit označené položky trvale, bez koše.
+    @objc private func deleteItemsPermanently(_ sender: Any?) {
+        confirmDelete(toTrash: false)
+    }
+
+    /// Potvrzení odstranění označených položek.
+    /// - Parameter toTrash: přesunout do koše; mimo lokální disk koš není
+    ///   a maže se trvale – potvrzení to uvede
+    private func confirmDelete(toTrash: Bool) {
         let selected = selectedRows
         guard let window, !selected.isEmpty, runningState == nil, vfs.writable else { return }
-        let what = selected.count == 1
-            ? "\(selected[0].item.kindNoun) „\(selected[0].item.name)“"
-            : "\(selected.count) označených položek"
+        let (text, useTrash) = deleteConfirmation(items: selected.map(\.item), vfs: vfs,
+                                                  toTrash: toTrash, verb: "odstranit")
         let alert = NSAlert()
         alert.messageText = "Odstranit"
-        alert.informativeText = "Opravdu odstranit \(what)?\nMazání je trvalé (bez koše)."
+        alert.informativeText = text
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Odstranit")
         alert.addCancelButton()
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
-            self?.performDelete(selected)
+            self?.performDelete(selected, toTrash: useTrash)
         }
     }
 
     /// Smaže položky po adresářích na pozadí; smazané zmizí ze seznamu.
-    private func performDelete(_ selected: [FoundRow]) {
+    /// - Parameter toTrash: přesunout do koše místo trvalého smazání
+    private func performDelete(_ selected: [FoundRow], toTrash: Bool) {
         let vfs = vfs
         let groups = Dictionary(grouping: selected, by: \.dir)
         let state = ProgressState()
         runningState = state
-        setStatus("Odstraňuji…")
+        setStatus(toTrash ? "Přesouvám do koše…" : "Odstraňuji…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var deleted = Set<String>()
             var failure: Error?
             for (dir, items) in groups {
                 do {
-                    try coreDelete(vfs: vfs, dir: dir, names: items.map(\.item.name), state: state)
+                    try coreRemove(vfs: vfs, dir: dir, names: items.map(\.item.name),
+                                   useTrash: toTrash, state: state)
                     deleted.formUnion(items.map(\.path))
                 } catch {
                     failure = error

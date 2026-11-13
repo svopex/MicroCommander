@@ -83,7 +83,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             (.copy, "doc.on.doc", "Kopírovat (F5)"),
             (.move, "arrow.right.doc.on.clipboard", "Přesunout (F6)"),
             (.mkdir, "folder.badge.plus", "Nový adresář (F7)"),
-            (.delete, "trash", "Smazat (F8)"),
+            (.delete, "trash", "Smazat do koše (F8, ⇧F8 trvale)"),
             nil,
             (.rename, "pencil", "Přejmenovat (F2)"),
             (.view, "eye.square", "Zobrazit (F3)"),
@@ -553,7 +553,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.goUp()
             return true
         case KeyCode.forwardDelete:
-            perform(.delete)
+            // Delete maže do koše, ⇧Delete trvale (jako F8 / ⇧F8).
+            perform(flags.contains(.shift) ? .deletePermanent : .delete)
             return true
         case KeyCode.escape:
             if panel.quickSearch != nil { panel.endQuickSearch(); return true }
@@ -692,7 +693,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         menu.addItem(open)
         menu.addItem(.separator())
         let entries: [Command?] = [
-            .view, .edit, nil, .copy, .move, .rename, .delete, nil,
+            .view, .edit, nil, .copy, .move, .rename, .delete, .deletePermanent, nil,
             .pack, .unpack, .calcSize, nil, .changeAttributes, .properties,
         ]
         for entry in entries {
@@ -1077,7 +1078,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .move: runTransfer(move: true)
         case .mkdir: commandMkdir()
         case .changeDir: view(of: panel).directoryLine.beginEditing()
-        case .delete: commandDelete()
+        case .delete: commandDelete(toTrash: true)
+        case .deletePermanent: commandDelete(toTrash: false)
         case .terminal: commandTerminal()
         case .quit: NSApp.terminate(nil)
         case .connect: ConnectWindowController.show(parent: self)
@@ -1238,8 +1240,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
     }
 
-    /// F8 / Delete – smazání (označené položky, jinak položka pod kurzorem).
-    private func commandDelete() {
+    /// F8 / Delete – smazání do koše, ⇧F8 / ⇧Delete – trvalé smazání
+    /// (označené položky, jinak položka pod kurzorem).
+    /// - Parameter toTrash: přesunout do koše; mimo lokální disk (archiv,
+    ///   FTP/SFTP) koš není a maže se trvale – potvrzení to uvede
+    private func commandDelete(toTrash: Bool) {
         let panel = activePanel
         let items = panel.operationItems
         guard !items.isEmpty else { return }
@@ -1247,16 +1252,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             showAlert(title: "Smazat", text: "Souborový systém je jen pro čtení.")
             return
         }
-        let what = items.count == 1
-            ? "\(items[0].kindNoun) „\(items[0].name)“"
-            : "\(items.count) označených položek"
-        guard confirm(title: "Smazat", text: "Opravdu smazat \(what)?\nMazání je trvalé (bez koše).", okTitle: "Smazat") else { return }
+        let vfs = panel.location.vfs
+        let (text, useTrash) = deleteConfirmation(items: items, vfs: vfs, toTrash: toTrash, verb: "smazat")
+        guard confirm(title: "Smazat", text: text, okTitle: "Smazat") else { return }
 
         let names = items.map(\.name)
         let dir = panel.location.path
-        let vfs = panel.location.vfs
-        beginProgress(title: "Mazání", unit: .items) { state in
-            try coreDelete(vfs: vfs, dir: dir, names: names, state: state)
+        beginProgress(title: useTrash ? "Přesun do koše" : "Mazání", unit: .items) { state in
+            try coreRemove(vfs: vfs, dir: dir, names: names, useTrash: useTrash, state: state)
         } completion: { [weak self] result in
             self?.endProgress()
             if case .failure(let error) = result {
@@ -1735,7 +1738,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní panel).
 
         F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout,
-        F7 nový adresář, F8 smazat, F9 terminál, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
+        F7 nový adresář, F8 do koše (⇧F8 trvale), F9 terminál, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
         ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
         ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌘F1 / ⌃F1 informace o jednotce,
         ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.

@@ -215,6 +215,10 @@ final class Vfs {
     /// Podporuje zápis (archivy ne).
     var writable: Bool { sal_vfs_writable(ptr) != 0 }
 
+    /// Lze položky přesouvat do systémového koše? Jen lokální disk (stejná
+    /// podmínka jako u realPath) – archivy a FTP/SFTP koš nemají.
+    var supportsTrash: Bool { kind == SAL_VFS_LOCAL }
+
     /// Heslo zadané pro šifrované položky (nil = zatím nezadáno).
     private(set) var password: String?
 
@@ -457,6 +461,66 @@ func coreDelete(vfs: Vfs, dir: String, names: [String], state: ProgressState) th
         }
     }
     guard code == SAL_OK else { throw CoreError.code(code, String(cString: err)) }
+}
+
+/// Text potvrzení mazání a skutečný způsob mazání (sdílí hlavní okno
+/// i okno hledání).
+/// - Parameters:
+///   - items: mazané položky (pro popis „soubor „x““ / „N označených položek“)
+///   - vfs: VFS položek – koš je jen na lokálním disku (viz Vfs.supportsTrash)
+///   - toTrash: požadováno smazání do koše (F8 / Delete), jinak trvale
+///   - verb: sloveso v textu („smazat“, „odstranit“)
+/// - Returns: text dialogu a zda se bude mazat do koše
+func deleteConfirmation(items: [Item], vfs: Vfs, toTrash: Bool, verb: String) -> (text: String, useTrash: Bool) {
+    let useTrash = toTrash && vfs.supportsTrash
+    let what = items.count == 1
+        ? "\(items[0].kindNoun) „\(items[0].name)“"
+        : "\(items.count) označených položek"
+    // U trvalého mazání text uvede i proč, když byl požadován koš, ale VFS ho nemá.
+    if useTrash {
+        return ("Opravdu přesunout \(what) do koše?", true)
+    } else if toTrash {
+        return ("Opravdu \(verb) \(what)?\nZde koš není – mazání je trvalé.", false)
+    }
+    return ("Opravdu trvale \(verb) \(what)?\nPoložky se nepřesunou do koše.", false)
+}
+
+/// Smazání položek do koše, nebo trvale (jediný vstupní bod pro oba způsoby).
+/// - Parameters:
+///   - vfs: VFS položek
+///   - dir: adresář položek ve VFS
+///   - names: jména položek v adresáři
+///   - useTrash: přesunout do koše (jen lokální VFS – viz deleteConfirmation)
+///   - state: progres a zrušení
+func coreRemove(vfs: Vfs, dir: String, names: [String], useTrash: Bool, state: ProgressState) throws {
+    if useTrash {
+        try coreTrash(vfs: vfs, dir: dir, names: names, state: state)
+    } else {
+        try coreDelete(vfs: vfs, dir: dir, names: names, state: state)
+    }
+}
+
+/// Přesun položek lokálního VFS do koše (jako ⌘⌫ ve Finderu); progres je
+/// počet položek, zrušení se kontroluje mezi nimi.
+private func coreTrash(vfs: Vfs, dir: String, names: [String], state: ProgressState) throws {
+    let total = UInt64(names.count)
+    for (index, name) in names.enumerated() {
+        guard state.update(done: UInt64(index), total: total) else {
+            throw CoreError.code(SAL_ERR_CANCELLED, "")
+        }
+        // realPath je nil jen mimo lokální disk (sem se díky supportsTrash nedostane).
+        guard let path = vfs.realPath(joinPath(dir, name)) else {
+            throw CoreError.code(SAL_ERR_GENERIC, "Do koše lze přesouvat jen položky na lokálním disku.")
+        }
+        // trashItem přesouvá samotný odkaz, ne jeho cíl (poslední složku
+        // cesty nesleduje), takže smazání odkazu na adresář cíl nezasáhne.
+        do {
+            try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+        } catch {
+            throw CoreError.code(SAL_ERR_GENERIC, "Nelze přesunout do koše „\(name)“: \(error.localizedDescription)")
+        }
+    }
+    state.update(done: total, total: total)
 }
 
 /// Šifrování nově vytvářeného ZIP archivu (odpovídá SAL_ZIP_ENC_*).

@@ -10,7 +10,7 @@ import AppKit
 /// Příkazy aplikace – sdílené menu, lištami i klávesami.
 /// CaseIterable: tag položky menu = index v `Command.allCases`.
 enum Command: CaseIterable {
-    case help, rename, view, edit, newFile, copy, move, mkdir, changeDir, delete
+    case help, rename, view, edit, newFile, copy, move, mkdir, changeDir, delete, deletePermanent
     case terminal, quit, connect, disconnect
     case sortName, sortExt, sortTime, sortSize, refresh, compare
     case driveLeft, driveRight, driveInfo, editPlaces, pack, unpack, find, calcSize
