@@ -68,6 +68,11 @@ final class CommandBar: NSView {
     private let stack = NSStackView()
     private var commands: [Command] = []
     var onCommand: ((Command) -> Void)?
+    /// Šířka svislé lišty (mění ji setCollapsed).
+    private var widthConstraint: NSLayoutConstraint?
+    /// Šířka svislé lišty s ikonami a sbalené (jen dělicí pruh).
+    private static let verticalWidth: CGFloat = 30
+    private static let collapsedWidth: CGFloat = 5
 
     init(entries: [Entry], vertical: Bool) {
         super.init(frame: .zero)
@@ -89,10 +94,12 @@ final class CommandBar: NSView {
         }
         addSubview(stack)
         if vertical {
+            let width = widthAnchor.constraint(equalToConstant: CommandBar.verticalWidth)
+            widthConstraint = width
             NSLayoutConstraint.activate([
                 stack.topAnchor.constraint(equalTo: topAnchor, constant: 22),
                 stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-                widthAnchor.constraint(equalToConstant: 30),
+                width,
             ])
         } else {
             NSLayoutConstraint.activate([
@@ -109,6 +116,12 @@ final class CommandBar: NSView {
 
     @objc private func buttonClicked(_ sender: NSButton) {
         onCommand?(commands[sender.tag])
+    }
+
+    /// Sbalí svislou lištu na úzký dělicí pruh bez ikon (nebo ji obnoví).
+    func setCollapsed(_ collapsed: Bool) {
+        stack.isHidden = collapsed
+        widthConstraint?.constant = collapsed ? CommandBar.collapsedWidth : CommandBar.verticalWidth
     }
 
     /// Změní ikonu tlačítka příkazu (např. oko / přeškrtnuté oko u skrytých souborů).
@@ -286,7 +299,7 @@ final class CommandLineView: NSView, NSTextFieldDelegate {
         fatalError("Není podporováno")
     }
 
-    /// Vloží text na konec příkazové řádky (⌘↩ vkládá jméno položky).
+    /// Vloží text na konec příkazové řádky (⌃↩ vkládá jméno položky).
     func insert(_ text: String) {
         let current = field.stringValue
         let separator = current.isEmpty || current.hasSuffix(" ") ? "" : " "

@@ -536,11 +536,15 @@ final class UIKeyCheck {
         do {
             // Volitelný snímek dialogu připojení (hodnoty dodají argumenty -connect…).
             if let path = ProcessInfo.processInfo.environment["SAL_CONNECT_SNAPSHOT"] {
-                self.writeSnapshot(ConnectWindowController(owner: self.controller).window, to: path)
+                self.writeSnapshot(ConnectWindowController(owner: self.controller), to: path)
+            }
+            // Volitelný snímek okna Nastavení.
+            if let path = ProcessInfo.processInfo.environment["SAL_SETTINGS_SNAPSHOT"] {
+                self.writeSnapshot(SettingsWindowController(), to: path)
             }
             // Volitelný snímek dialogu „Upravit nabídku disků“.
             if let path = ProcessInfo.processInfo.environment["SAL_PLACES_SNAPSHOT"] {
-                self.writeSnapshot(PlacesWindowController().window, to: path)
+                self.writeSnapshot(PlacesWindowController(), to: path)
             }
             try? FileManager.default.removeItem(atPath: (dir as NSString).deletingLastPathComponent)
             print(self.failures == 0 ? "KEYCHECK: vše OK" : "KEYCHECK: \(self.failures) chyb")
@@ -550,13 +554,18 @@ final class UIKeyCheck {
 
     /// Uloží snímek okna dialogu do PNG (vykreslení mimo obrazovku).
     /// Světlý vzhled: mimo obrazovku se pozadí okna nekreslí (bílý text by nebyl vidět).
-    private func writeSnapshot(_ window: NSWindow?, to path: String) {
+    /// Bere kontroler, aby žil po celou dobu snímku (tabulky mají delegáta slabě).
+    private func writeSnapshot(_ controller: NSWindowController, to path: String) {
+        let window = controller.window
         window?.appearance = NSAppearance(named: .aqua)
+        // Tabulky vytvoří buňky až při rozvržení a vykreslení – vynutit před snímkem.
         window?.contentView?.layoutSubtreeIfNeeded()
+        window?.displayIfNeeded()
         if let view = window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
             view.cacheDisplay(in: view.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
         }
+        withExtendedLifetime(controller) {}
     }
 
     /// Leží řádek s kurzorem ve viditelné části panelu?
@@ -612,6 +621,16 @@ final class UIKeyCheck {
         reorder.select(3)
         _ = reorder.handleKey(event(KeyCode.up, NSUpArrowFunctionKey, [.option, .function]))
         self.check(moves.count == 2, "nabídka disků: „FTP/SFTP servery…“ se nepřesouvá")
+        // Zkratky míst ⌘0–⌘9: jen se samotným ⌘, horní řada i numerická klávesnice.
+        self.check(KeyCode.commandDigit(event(KeyCode.digitZero, Int(("0" as UnicodeScalar).value), [.command])) == 0,
+                   "zkratka místa: ⌘0")
+        self.check(KeyCode.commandDigit(event(KeyCode.digits[2], Int(("3" as UnicodeScalar).value), [.command])) == 3,
+                   "zkratka místa: ⌘3 (horní řada)")
+        self.check(KeyCode.commandDigit(event(91, Int(("8" as UnicodeScalar).value), [.command, .numericPad])) == 8,
+                   "zkratka místa: ⌘8 na numerické klávesnici")
+        self.check(KeyCode.commandDigit(event(KeyCode.digits[0], Int(("1" as UnicodeScalar).value), [.option])) == nil
+                   && KeyCode.commandDigit(event(KeyCode.digits[0], Int(("1" as UnicodeScalar).value), [.command, .shift])) == nil,
+                   "zkratka místa: ⌥1 ani ⌘⇧1 nejsou zkratka místa")
         // Pořadí míst: uložené klíče první, nová místa na konec, neexistující se přeskočí.
         let natural = ["a", "b", "c"].map { Place(key: $0, kind: .folder, title: $0, detail: "/" + $0, icon: nil) }
         let ordered = PlaceStore.ordered(natural, saved: ["c", "x", "a"]).map(\.key)

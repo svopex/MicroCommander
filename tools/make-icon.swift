@@ -114,7 +114,15 @@ for toe in toes {
     footParts.append(CGPath(ellipseIn: CGRect(x: end.x - toe.pad, y: end.y - toe.pad, width: toe.pad * 2, height: toe.pad * 2),
                             transform: nil))
 }
-let foot = footParts.dropFirst().reduce(footParts[0]) { $0.union($1) }
+let rawFoot = footParts.dropFirst().reduce(footParts[0]) { $0.union($1) }
+// Vycentrování: střed obrysu tlapky se posune do středu disku a tlapka se
+// zmenší, aby kolem ní zůstal rovnoměrný okraj od prstence.
+let footBounds = rawFoot.boundingBoxOfPath
+let footScale: CGFloat = 0.88
+var centering = CGAffineTransform(translationX: center.x, y: center.y)
+    .scaledBy(x: footScale, y: footScale)
+    .translatedBy(x: -footBounds.midX, y: -footBounds.midY)
+let foot = rawFoot.copy(using: &centering) ?? rawFoot
 
 // Stín tlapky na disku, pak bílá výplň s jemným gradientem.
 ctx.saveGState()

@@ -80,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "O aplikaci MicroCommander", action: #selector(showAbout(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Nastavení…", action: #selector(showSettings(_:)), keyEquivalent: ",")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Skrýt MicroCommander", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Ukončit MicroCommander", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         addSubmenu(appMenu, title: "MicroCommander", to: mainMenu)
@@ -197,6 +199,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.title = title
         item.submenu = menu
         mainMenu.addItem(item)
+    }
+
+    /// Okno Nastavení (⌘,).
+    @objc func showSettings(_ sender: Any?) {
+        SettingsWindowController.show()
     }
 
     @objc func showAbout(_ sender: Any?) {

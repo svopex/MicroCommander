@@ -54,7 +54,8 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   chyby jako kódy + text, panika jádra se zachycuje (nepřechází přes FFI).
 - **UI** (Swift/AppKit) rozvržené podle originálu (help: `main.png`, `panel.png`):
   horní nástrojová lišta, lišta disků (kořen, domov, připojené svazky, FTP/SFTP servery),
-  dva panely s prostřední svislou lištou operací, příkazová řádka `cesta>`
+  dva panely s prostřední svislou lištou operací (výchozí jen úzký pruh, ikony
+  zapne Nastavení), příkazová řádka `cesta>`
   a spodní lišta F-kláves (popisky se mění podle držených Shift/Ctrl/Alt).
   Panel má řádek adresáře (aktivní panel zvýrazněný barvou, tlačítko disku,
   volné místo), sloupce Jméno/Přípona/Velikost/Datum/Čas/Atr, řádek „..“
@@ -100,7 +101,9 @@ app/                        # tenké UI pro macOS
   Sources/Servers.swift     # uložené FTP/SFTP servery (UserDefaults),
                             #   hesla v Klíčence, připojení serveru v panelu
   Sources/Places.swift      # místa nabídky disků (pořadí, skrytí, vlastní
-                            #   adresáře) a dialog Upravit nabídku disků
+                            #   adresáře, zkratky ⌘0–⌘9) a dialog Upravit
+                            #   nabídku disků
+  Sources/Settings.swift    # Nastavení (⌘,): volby vzhledu v UserDefaults
   Sources/SelfTest.swift    # self-test UI (SAL_SELFTEST=1)
   Sources/main.swift        # NSApplication, hlavní menu
   Info.plist
@@ -142,7 +145,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 
 - **Panely:** ↑↓ PgUp PgDn Home End – pohyb kurzoru; Enter / dvojklik – otevřít
   adresář, archiv (ZIP/TAR/TAR.GZ jako panel) nebo soubor ve výchozí aplikaci;
-  **⇧Enter** – spustit / otevřít systémově bez vstupu dovnitř (aplikace `.app`
+  **⌘Enter** – spustit / otevřít systémově bez vstupu dovnitř (aplikace `.app`
   se spustí, archiv se otevře ve výchozí aplikaci, adresář ve Finderu;
   z archivu či FTP se soubor nejdřív rozbalí do dočasného adresáře);
   ⌫ / „..“ – nadřazený adresář (kurzor se vrátí na adresář, ze kterého se
@@ -197,10 +200,17 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   (i disk nebo server). **Přidat adresář…** přidá vlastní adresáře (i více
   najednou), **Odebrat** je smaže, dvojklik na název vlastního adresáře ho
   přejmenuje; pořadí se mění **přetažením myší** nebo šipkami pro vybranou
-  položku. Změny platí hned. Lišta disků
+  položku. Sloupec **Zkratka** přiřadí místu ⌘0–⌘9 (stisk v hlavním okně
+  otevře místo v aktivním panelu, i skryté; stejná zkratka se jinému místu
+  odebere; zkratka je vidět i v nabídce disků). Změny platí hned. Lišta disků
   ukazuje disky a vlastní adresáře (servery jen v nabídce). Uložení
   v předvolbách: `placesOrder` (pořadí), `hiddenPlaces` (skryté),
-  `customFolders` (adresáře); dřívější `driveOrder` se převezme.
+  `customFolders` (adresáře), `placeShortcuts` (zkratky); dřívější
+  `driveOrder` se převezme.
+- **Nastavení** (⌘, v aplikačním menu): **Zobrazovat lištu příkazů mezi
+  panely** – svislá lišta s ikonami operací; výchozí je vypnutá, mezi panely
+  je jen úzký dělicí pruh jako v Salamanderu. Změna platí hned (předvolba
+  `showMiddleBar`).
 - **FTP/SFTP servery** (F11, tlačítko FTP/SFTP v liště disků, poslední položka
   nabídky disků): seznam libovolného počtu uložených serverů – **+** přidá,
   **−** odebere (po potvrzení), **Duplikovat** vytvoří kopii vybraného serveru
@@ -224,7 +234,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   řadí, pravé tlačítko – kontextové menu (Finder, kopírovat cestu).
 - **Příkazová řádka** (⌃Tab): Enter spustí příkaz v login shellu v adresáři
   panelu (výstup v prohlížeči), `cd cesta` mění adresář panelu, ↑↓ historie,
-  ⌘↩ v panelu vloží jméno položky, ⌃[ / ⌃] cestu levého/pravého panelu.
+  ⌃↩ v panelu vloží jméno položky, ⌃[ / ⌃] cestu levého/pravého panelu.
 - **Zaheslované archivy:** šifrované položky mají v atributech „E“ (info řádek
   „šifrováno“). Při F3/Enter, F5/F6 nebo ⌥F6 ze zaheslovaného ZIP se aplikace
   zeptá na heslo (jednou pro otevřený archiv); při chybném hesle se zeptá

@@ -184,6 +184,13 @@ README.md       # zadání (aktualizovat na konci)
 
 ## Poslední aktualizace
 
+- 2026-11-13 (27): ⌘Enter spustí položku systémově (⌃Enter vloží jméno do
+  příkazové řádky). Ikona: tlapka vycentrovaná a zmenšená. Zkratky míst
+  ⌘0–⌘9 (placeShortcuts, sloupec Zkratka v Upravit nabídku disků,
+  KeyCode.digitValue/commandDigit). Nastavení (⌘,, Settings.swift):
+  prostřední lišta ikon, výchozí jen úzký pruh (CommandBar.setCollapsed).
+  Oprava: dlouhé popisy se zkracují „…“ (NSAttributedString.truncatingMiddle).
+
 - 2026-11-13 (26): Ikona aplikace (tools/make-icon.swift → `make icon` →
   app/AppIcon.icns, CFBundleIconFile, obnova LaunchServices v `make app`).
   Nabídka disků: číslice i z numerické klávesnice položku otevře

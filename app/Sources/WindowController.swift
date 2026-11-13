@@ -189,6 +189,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         topBar.onCommand = { [weak self] in self?.perform($0) }
         middleBar.onCommand = { [weak self] in self?.perform($0) }
+        // Prostřední lišta podle nastavení; změna v Nastavení se projeví hned.
+        middleBar.setCollapsed(!Settings.showMiddleBar)
+        NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { [weak self] _ in
+            self?.middleBar.setCollapsed(!Settings.showMiddleBar)
+        }
         functionBar.onCommand = { [weak self] in self?.perform($0) }
         driveBar.onPlace = { [weak self] place in
             guard let self else { return }
@@ -217,6 +222,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             // (Shift ignoruje) a akce by se prohodily.
             if let command = self.periodShortcutCommand(event) {
                 self.perform(command)
+                return nil
+            }
+            // ⌘0–⌘9: místo z nabídky disků se zkratkou do aktivního panelu.
+            if let digit = KeyCode.commandDigit(event), let place = PlaceStore.place(forShortcut: digit) {
+                self.open(place, in: self.activePanel)
                 return nil
             }
             // F1–F12 fungují odkudkoli z hlavního okna (i z příkazové řádky).
@@ -478,14 +488,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             return true
         case KeyCode.returnKey, KeyCode.enter:
             panel.endQuickSearch()
-            if ctrlOrCmd, let item = panel.currentItem {
-                // ⌘↩ / Ctrl+Enter: jméno položky do příkazové řádky.
+            // ⌘↩ spustí položku systémově (aplikaci .app místo vstupu do ní).
+            if flags.contains(.command) { launchRow(panel.cursor, in: panel); return true }
+            if flags.contains(.control), let item = panel.currentItem {
+                // ⌃↩ (Ctrl+Enter): jméno položky do příkazové řádky.
                 commandLine.insert(shellQuote(item.name))
                 return true
             }
             if flags.contains(.option) { perform(.calcSize); return true }
-            // ⇧↩ spustí položku systémově (aplikaci .app místo vstupu do ní).
-            if flags.contains(.shift) { launchRow(panel.cursor, in: panel); return true }
             openRow(panel.cursor, in: panel)
             return true
         case KeyCode.backspace:
@@ -709,9 +719,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// nabídka i self-test.
     static func driveChooserItems() -> [(entry: DriveChooser.Entry, choice: DriveChoice)] {
         // Cestu ukážeme jen tam, kde se liší od názvu (kořen „/“ by byl dvakrát).
-        var items = PlaceStore.visiblePlaces().map {
-            (entry: DriveChooser.Entry(title: $0.title, detail: $0.title == $0.detail ? "" : $0.detail, icon: $0.icon),
-             choice: DriveChoice.place($0))
+        // Zkratka ⌘0–⌘9 se připojí k popisu položky.
+        let shortcuts = PlaceStore.shortcuts
+        var items = PlaceStore.visiblePlaces().map { place in
+            let path = place.title == place.detail ? "" : place.detail
+            let shortcut = shortcuts[place.key].map(PlaceStore.shortcutLabel) ?? ""
+            let detail = [path, shortcut].filter { !$0.isEmpty }.joined(separator: "   ")
+            return (entry: DriveChooser.Entry(title: place.title, detail: detail, icon: place.icon),
+                    choice: DriveChoice.place(place))
         }
         items.append((entry: DriveChooser.Entry(title: "FTP/SFTP servery…", detail: "",
                                                 icon: NSImage(systemSymbolName: "network", accessibilityDescription: nil)),
@@ -832,7 +847,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
     }
 
-    /// ⇧Enter: otevře položku výchozí aplikací macOS bez vstupu dovnitř –
+    /// ⌘Enter: otevře položku výchozí aplikací macOS bez vstupu dovnitř –
     /// aplikace (.app) se spustí, balíček/adresář se otevře ve Finderu, soubor
     /// (i archiv) ve výchozí aplikaci.
     func launchRow(_ row: Int, in panel: PanelController) {
@@ -1492,7 +1507,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     private func showHelp() {
         let text = """
         Panely: ↑↓ PgUp PgDn Home End – pohyb, Enter – otevřít (adresář, archiv, soubor),
-        ⇧Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
+        ⌘Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
         ⌫ – nadřazený adresář, Tab – druhý panel, ⌃Tab – příkazová řádka,
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
         ⌘A / ⌘D – označit vše / nic, psaní písmen – rychlé hledání,
@@ -1715,6 +1730,26 @@ enum KeyCode {
     static let period: UInt16 = 47
     /// Číslice 1–9 na hlavní klávesnici (pro ⌥1–⌥6 režimy zobrazení).
     static let digits: [UInt16] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
+    /// Číslice 0 na hlavní klávesnici.
+    static let digitZero: UInt16 = 29
+
+    /// Číslice 0–9 podle stisknuté klávesy: horní řada podle kódu klávesy (česká
+    /// klávesnice dává bez Shiftu +ěšč…), jinak podle znaku (numerická klávesnice,
+    /// jiná rozložení); nil = jiná klávesa.
+    static func digitValue(_ event: NSEvent) -> Int? {
+        if event.keyCode == digitZero { return 0 }
+        if let index = digits.firstIndex(of: event.keyCode) { return index + 1 }
+        if let value = event.charactersIgnoringModifiers?.first?.wholeNumberValue, (0...9).contains(value) {
+            return value
+        }
+        return nil
+    }
+
+    /// Číslice 0–9 stisknutá jen s ⌘; nil = jiná klávesa nebo jiné modifikátory.
+    static func commandDigit(_ event: NSEvent) -> Int? {
+        guard event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command else { return nil }
+        return digitValue(event)
+    }
     /// F1–F12 v pořadí.
     static let functionKeys: [UInt16] = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]
 

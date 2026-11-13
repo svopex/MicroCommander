@@ -70,6 +70,7 @@ enum PlaceStore {
     private static let orderKey = "placesOrder"
     private static let hiddenKey = "hiddenPlaces"
     private static let foldersKey = "customFolders"
+    private static let shortcutsKey = "placeShortcuts"
     /// Dřívější pořadí jen disků (pole cest) – převezme se, dokud není nové.
     private static let legacyOrderKey = "driveOrder"
 
@@ -175,6 +176,32 @@ enum PlaceStore {
         saveOrder(keys)
     }
 
+    // MARK: Klávesové zkratky
+
+    /// Zkratky míst: klíč místa → číslice 0–9 (⌘0–⌘9).
+    static var shortcuts: [String: Int] {
+        (UserDefaults.standard.dictionary(forKey: shortcutsKey) as? [String: Int]) ?? [:]
+    }
+
+    /// Nastaví (nil = zruší) zkratku místa; stejnou číslici ostatním místům odebere.
+    /// Bez oznámení – lišta disků zkratky neukazuje, nabídka je čte při otevření.
+    static func setShortcut(_ key: String, digit: Int?) {
+        var map = shortcuts.filter { $0.key != key && $0.value != digit }
+        if let digit { map[key] = digit }
+        UserDefaults.standard.set(map, forKey: shortcutsKey)
+    }
+
+    /// Místo se zkratkou ⌘<číslice> (i skryté); nil = žádné.
+    static func place(forShortcut digit: Int) -> Place? {
+        guard let key = shortcuts.first(where: { $0.value == digit })?.key else { return nil }
+        return allPlaces().first { $0.key == key }
+    }
+
+    /// Text zkratky pro zobrazení („⌘3“).
+    static func shortcutLabel(_ digit: Int) -> String {
+        "⌘\(digit)"
+    }
+
     // MARK: Skrytí
 
     /// Klíče skrytých míst.
@@ -248,11 +275,13 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
     private let noteLabel = NSTextField(wrappingLabelWithString: "")
     private var places: [Place] = []
     private var hidden: Set<String> = []
+    private var shortcuts: [String: Int] = [:]
 
     /// Typ dat při přetahování řádku (index řádku jako text).
     private static let rowType = NSPasteboard.PasteboardType("com.github.svopex.microcommander.place-row")
     private static let showColumn = NSUserInterfaceItemIdentifier("show")
     private static let titleColumn = NSUserInterfaceItemIdentifier("title")
+    private static let shortcutColumn = NSUserInterfaceItemIdentifier("shortcut")
     private static let detailColumn = NSUserInterfaceItemIdentifier("detail")
 
     /// Zobrazí dialog jako sheet nad hlavním oknem.
@@ -261,7 +290,7 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
     }
 
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 440),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 440),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.title = "Upravit nabídku disků"
         super.init(window: window)
@@ -280,8 +309,9 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
     private func buildLayout() {
         let columns: [(NSUserInterfaceItemIdentifier, String, CGFloat)] = [
             (PlacesWindowController.showColumn, "Zobrazit", 64),
-            (PlacesWindowController.titleColumn, "Název", 220),
-            (PlacesWindowController.detailColumn, "Typ a cesta / adresa", 340),
+            (PlacesWindowController.titleColumn, "Název", 210),
+            (PlacesWindowController.shortcutColumn, "Zkratka", 86),
+            (PlacesWindowController.detailColumn, "Typ a cesta / adresa", 350),
         ]
         for (identifier, title, width) in columns {
             let column = NSTableColumn(identifier: identifier)
@@ -292,6 +322,9 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
         tableView.rowHeight = 22
         tableView.style = .plain
         tableView.usesAlternatingRowBackgroundColors = true
+        // Poslední sloupec vyplní zbytek šířky (nepřetéká mimo viditelnou oblast,
+        // dlouhá cesta se zkrátí „…“ místo oříznutí okrajem).
+        tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         tableView.dataSource = self
         tableView.delegate = self
         // Přetahování řádků myší mění pořadí (vkládání mezi řádky).
@@ -329,7 +362,7 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
         noteLabel.font = NSFont.systemFont(ofSize: 11)
         noteLabel.textColor = .secondaryLabelColor
         noteLabel.stringValue = "Odškrtnutá místa se v nabídce disků (⌥F1/⌥F2) a na liště disků nezobrazí. "
-            + "Pořadí změníte přetažením myší nebo šipkami. "
+            + "Pořadí změníte přetažením myší nebo šipkami. Zkratka ⌘0–⌘9 otevře místo v aktivním panelu. "
             + "Název vlastního adresáře změníte dvojklikem. Servery se přidávají a odebírají ve správě FTP/SFTP serverů (F11)."
 
         let content = NSView()
@@ -348,7 +381,7 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
             buttons.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
             buttons.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
             buttons.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -16),
-            content.widthAnchor.constraint(equalToConstant: 680),
+            content.widthAnchor.constraint(equalToConstant: 780),
             content.heightAnchor.constraint(equalToConstant: 440),
         ])
         window?.contentView = content
@@ -367,6 +400,7 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
     private func reload(selecting row: Int?) {
         places = PlaceStore.allPlaces()
         hidden = PlaceStore.hiddenKeys
+        shortcuts = PlaceStore.shortcuts
         tableView.reloadData()
         if let row, !places.isEmpty {
             tableView.selectRowIndexes(IndexSet(integer: max(0, min(row, places.count - 1))), byExtendingSelection: false)
@@ -399,6 +433,20 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
             checkbox.state = hidden.contains(place.key) ? .off : .on
             checkbox.tag = row
             return centered(checkbox)
+        case PlacesWindowController.shortcutColumn?:
+            // Nabídka zkratky: žádná nebo ⌘0–⌘9 (tag = řádek).
+            let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+            popup.controlSize = .small
+            popup.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+            popup.addItem(withTitle: "—")
+            popup.addItems(withTitles: (0...9).map(PlaceStore.shortcutLabel))
+            if let digit = shortcuts[place.key] {
+                popup.selectItem(at: digit + 1)
+            }
+            popup.target = self
+            popup.action = #selector(shortcutChanged(_:))
+            popup.tag = row
+            return centered(popup)
         case PlacesWindowController.titleColumn?:
             // Ikona + název; u vlastního adresáře upravitelný.
             let cell = NSTableCellView()
@@ -435,8 +483,9 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
                                                  attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)])
             text.append(NSAttributedString(string: place.detail,
                                            attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
-            let label = NSTextField(labelWithAttributedString: text)
-            label.lineBreakMode = .byTruncatingMiddle
+            // Vždy jeden řádek – dlouhá cesta se zkrátí uprostřed, nezalomí.
+            let label = NSTextField(labelWithAttributedString: text.truncatingMiddle())
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             label.toolTip = place.detail
             return centered(label)
         }
@@ -505,6 +554,18 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
         let key = places[sender.tag].key
         PlaceStore.setHidden(key, sender.state == .off)
         if sender.state == .off { hidden.insert(key) } else { hidden.remove(key) }
+    }
+
+    /// Změna zkratky; stejná zkratka se jinému místu odebere (překreslí se tabulka).
+    @objc private func shortcutChanged(_ sender: NSPopUpButton) {
+        guard sender.tag < places.count else { return }
+        let index = sender.indexOfSelectedItem
+        PlaceStore.setShortcut(places[sender.tag].key, digit: index > 0 ? index - 1 : nil)
+        // Mění se jen sloupec zkratek (jinému místu mohla zkratka zmizet).
+        shortcuts = PlaceStore.shortcuts
+        if let column = tableView.tableColumns.firstIndex(where: { $0.identifier == PlacesWindowController.shortcutColumn }) {
+            tableView.reloadData(forRowIndexes: IndexSet(integersIn: 0..<places.count), columnIndexes: IndexSet(integer: column))
+        }
     }
 
     /// Výběr adresářů (i více najednou) a jejich přidání na konec nabídky.

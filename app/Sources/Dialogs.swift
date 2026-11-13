@@ -1235,18 +1235,10 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
         movableGroups.contains { $0.contains(index) && $0.contains(target) }
     }
 
-    /// Index položky (0–8) podle stisknuté číslice 1–9: horní řada podle kódu
-    /// klávesy (česká klávesnice dává bez Shiftu +ěšč…), jinak podle znaku
-    /// (numerická klávesnice, jiná rozložení); nil = jiná klávesa.
+    /// Index položky (0–8) podle stisknuté číslice 1–9; nil = jiná klávesa.
     static func digitIndex(_ event: NSEvent) -> Int? {
-        if let index = KeyCode.digits.firstIndex(of: event.keyCode) {
-            return index
-        }
-        if let character = event.charactersIgnoringModifiers?.first, let value = character.wholeNumberValue,
-           (1...9).contains(value) {
-            return value - 1
-        }
-        return nil
+        guard let value = KeyCode.digitValue(event), value >= 1 else { return nil }
+        return value - 1
     }
 
     /// Přesune položku o krok nahoru/dolů (jen v rámci její skupiny).
@@ -1316,7 +1308,7 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
             text.append(NSAttributedString(string: "   " + entry.detail,
                                            attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
         }
-        return text
+        return text.truncatingMiddle()
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -1376,6 +1368,18 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
     @objc private func moveDownClicked(_ sender: NSButton) {
         let row = tableView.row(for: sender)
         if row >= 0 { move(row, by: 1) }
+    }
+}
+
+extension NSAttributedString {
+    /// Kopie s odstavcovým stylem „zkrátit uprostřed“ – u textu s atributy
+    /// rozhoduje o zalomení/zkrácení styl v textu, ne lineBreakMode políčka.
+    func truncatingMiddle() -> NSAttributedString {
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingMiddle
+        let result = NSMutableAttributedString(attributedString: self)
+        result.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: result.length))
+        return result
     }
 }
 
