@@ -104,6 +104,9 @@ app/                        # tenké UI pro macOS
   Sources/SelfTest.swift    # self-test UI (SAL_SELFTEST=1)
   Sources/main.swift        # NSApplication, hlavní menu
   Info.plist
+  AppIcon.icns              # ikona aplikace (generuje `make icon`)
+tools/make-icon.swift       # vykreslí ikonu: oranžový disk s tlapkou mloka
+                            #   ve stylu Salamandera na macOS dlaždici
 tests/main.swift            # end-to-end smoke test FFI (Swift CLI)
 Makefile                    # build celé aplikace jedním příkazem
 fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)
@@ -117,6 +120,7 @@ Vyžaduje Rust (cargo v `~/.cargo/bin`) a Xcode Command Line Tools (swiftc).
 ```
 make            # sestaví jádro (release) i aplikaci: build/MicroCommander.app
 make run        # sestaví a spustí aplikaci
+make icon       # znovu vykreslí ikonu do app/AppIcon.icns (jen při změně návrhu)
 make test       # unit testy jádra (cargo test)
 make smoke      # end-to-end test FFI vrstvy (Swift CLI binárka)
 make selftest   # self-test UI: klávesy, dialogy, F5/F8 (aplikace se sama ukončí)
@@ -138,6 +142,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 
 - **Panely:** ↑↓ PgUp PgDn Home End – pohyb kurzoru; Enter / dvojklik – otevřít
   adresář, archiv (ZIP/TAR/TAR.GZ jako panel) nebo soubor ve výchozí aplikaci;
+  **⇧Enter** – spustit / otevřít systémově bez vstupu dovnitř (aplikace `.app`
+  se spustí, archiv se otevře ve výchozí aplikaci, adresář ve Finderu;
+  z archivu či FTP se soubor nejdřív rozbalí do dočasného adresáře);
   ⌫ / „..“ – nadřazený adresář (kurzor se vrátí na adresář, ze kterého se
   přišlo; na kořeni archivu/FTP se lokace zavře); Tab – druhý panel;
   Home / End (fn+← / fn+→, ⌘← / ⌘→) a ⌥↑ / ⌥↓ – první položka (obvykle „..“) /
@@ -174,7 +181,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   FTP/SFTP servery** (výběr serveru ho připojí v daném panelu), na konci
   „FTP/SFTP servery…“ (správa) a „Upravit nabídku disků…“; kurzor začíná na
   místě, kde panel je. ↑/↓ cyklí (z poslední položky na první a obráceně),
-  Home/End, číslice 1–9 vyberou přímo, Enter potvrdí, Escape nebo klik mimo
+  Home/End, číslice 1–9 (horní řada i numerická klávesnice) položku rovnou
+  vyberou a otevřou, Enter potvrdí, Escape nebo klik mimo
   zavře. **Pořadí** je jedno společné pro všechny položky (disky, adresáře
   i servery lze libovolně promíchat); výchozí Domů, „/“, svazky, adresáře,
   servery. Mění se šipkami nahoru/dolů vpravo v řádku, klávesami ⌥↑ / ⌥↓

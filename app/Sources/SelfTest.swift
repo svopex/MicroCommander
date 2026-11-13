@@ -587,6 +587,11 @@ final class UIKeyCheck {
         self.check(chooser.selectedIndex == 3, "nabídka disků: End → poslední")
         _ = chooser.handleKey(event(KeyCode.digits[1], Int(("2" as UnicodeScalar).value), []))
         self.check(chosen == 1, "nabídka disků: číslice 2 vybere druhý disk")
+        var keypadChoice: Int?
+        let keypad = DriveChooser(entries: entries, selected: 0) { keypadChoice = $0 }
+        // Kód 85 = „3“ na numerické klávesnici.
+        _ = keypad.handleKey(event(85, Int(("3" as UnicodeScalar).value), [.numericPad]))
+        self.check(keypadChoice == 2, "nabídka disků: 3 na numerické klávesnici vybere třetí položku")
         var cancelledChoice: Int?
         let other = DriveChooser(entries: entries, selected: 0) { cancelledChoice = $0 }
         _ = other.handleKey(event(KeyCode.escape, 0x1b, []))

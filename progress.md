@@ -184,6 +184,12 @@ README.md       # zadání (aktualizovat na konci)
 
 ## Poslední aktualizace
 
+- 2026-11-13 (26): Ikona aplikace (tools/make-icon.swift → `make icon` →
+  app/AppIcon.icns, CFBundleIconFile, obnova LaunchServices v `make app`).
+  Nabídka disků: číslice i z numerické klávesnice položku otevře
+  (allowsTypeSelect = false). ⇧Enter spustí položku systémově (launchRow,
+  společné withLocalFile s openRow).
+
 - 2026-11-13 (25): Nabídka disků = jeden společný seznam míst (Places.swift:
   Place, PlaceStore – placesOrder/hiddenPlaces/customFolders, převod
   driveOrder): disky, vlastní adresáře a servery bez omezení pořadí, skrytí,

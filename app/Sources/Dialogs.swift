@@ -1161,6 +1161,9 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
         tableView.intercellSpacing = NSSize(width: 0, height: 0)
         tableView.style = .plain
         tableView.focusRingType = .none
+        // Bez vestavěného hledání psaním: číslice musí položku otevřít, ne jen
+        // označit řádek, jehož text číslicí začíná.
+        tableView.allowsTypeSelect = false
         tableView.dataSource = self
         tableView.delegate = self
         tableView.chooser = self
@@ -1218,7 +1221,7 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
             cancel()
         default:
             // Číslice 1–9 vyberou položku přímo (jako písmena disků ve Windows).
-            if let digit = KeyCode.digits.firstIndex(of: event.keyCode), digit < count {
+            if let digit = DriveChooser.digitIndex(event), digit < count {
                 choose(digit)
                 return true
             }
@@ -1230,6 +1233,20 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
     /// Lze položku přesunout z `index` na `target` (obě ve stejné skupině)?
     func canMove(_ index: Int, to target: Int) -> Bool {
         movableGroups.contains { $0.contains(index) && $0.contains(target) }
+    }
+
+    /// Index položky (0–8) podle stisknuté číslice 1–9: horní řada podle kódu
+    /// klávesy (česká klávesnice dává bez Shiftu +ěšč…), jinak podle znaku
+    /// (numerická klávesnice, jiná rozložení); nil = jiná klávesa.
+    static func digitIndex(_ event: NSEvent) -> Int? {
+        if let index = KeyCode.digits.firstIndex(of: event.keyCode) {
+            return index
+        }
+        if let character = event.charactersIgnoringModifiers?.first, let value = character.wholeNumberValue,
+           (1...9).contains(value) {
+            return value - 1
+        }
+        return nil
     }
 
     /// Přesune položku o krok nahoru/dolů (jen v rámci její skupiny).

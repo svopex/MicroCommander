@@ -484,6 +484,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 return true
             }
             if flags.contains(.option) { perform(.calcSize); return true }
+            // ⇧↩ spustí položku systémově (aplikaci .app místo vstupu do ní).
+            if flags.contains(.shift) { launchRow(panel.cursor, in: panel); return true }
             openRow(panel.cursor, in: panel)
             return true
         case KeyCode.backspace:
@@ -820,23 +822,39 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.changePath(joinPath(panel.location.path, item.name))
             return
         }
-        // Soubor na lokálním disku: archiv do panelu, jinak výchozí aplikace.
-        if let path = panel.localPath(of: item.name) {
-            if let archive = openArchive(path) {
+        withLocalFile(item, in: panel) { [weak self] path in
+            guard let self else { return }
+            if let archive = self.openArchive(path) {
                 panel.navigate(Location(vfs: archive, path: "/"), nested: true, focus: item.name)
             } else {
                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
             }
+        }
+    }
+
+    /// ⇧Enter: otevře položku výchozí aplikací macOS bez vstupu dovnitř –
+    /// aplikace (.app) se spustí, balíček/adresář se otevře ve Finderu, soubor
+    /// (i archiv) ve výchozí aplikaci.
+    func launchRow(_ row: Int, in panel: PanelController) {
+        guard row >= 0, row < panel.rows.count, !panel.rows[row].isParent else { return }
+        let item = panel.rows[row].item
+        // Adresář ve vzdáleném VFS nebo archivu rozbalit nejde (extractToTemp bere soubor).
+        guard !item.isDir || panel.localPath(of: item.name) != nil else {
+            NSSound.beep()
             return
         }
-        // Soubor v archivu / na FTP: rozbalit do dočasného adresáře a otevřít.
-        extractToTemp(item, from: panel) { [weak self] localPath in
-            guard let self else { return }
-            if let archive = self.openArchive(localPath) {
-                panel.navigate(Location(vfs: archive, path: "/"), nested: true, focus: item.name)
-            } else {
-                NSWorkspace.shared.open(URL(fileURLWithPath: localPath))
-            }
+        withLocalFile(item, in: panel) { path in
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        }
+    }
+
+    /// Zavolá akci s lokální cestou položky: na disku přímo, z archivu / FTP
+    /// po rozbalení do dočasného adresáře.
+    private func withLocalFile(_ item: Item, in panel: PanelController, action: @escaping (String) -> Void) {
+        if let path = panel.localPath(of: item.name) {
+            action(path)
+        } else {
+            extractToTemp(item, from: panel, completion: action)
         }
     }
 
@@ -1474,6 +1492,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     private func showHelp() {
         let text = """
         Panely: ↑↓ PgUp PgDn Home End – pohyb, Enter – otevřít (adresář, archiv, soubor),
+        ⇧Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
         ⌫ – nadřazený adresář, Tab – druhý panel, ⌃Tab – příkazová řádka,
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
         ⌘A / ⌘D – označit vše / nic, psaní písmen – rychlé hledání,
