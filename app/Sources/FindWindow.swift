@@ -1350,10 +1350,9 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         case KeyCode.space where flags.isEmpty:
             focusItem(nil)
             return true
-        case KeyCode.forwardDelete, KeyCode.backspace:
-            // ⌦ / ⌘⌫ do koše, ⇧⌦ / ⇧⌫ trvale (jako v panelu); holé ⌫ nic nedělá.
-            guard let toTrash = KeyCode.deleteIntent(keyCode: event.keyCode, flags: flags) else { return false }
-            confirmDelete(toTrash: toTrash)
+        case KeyCode.forwardDelete:
+            // Delete do koše, ⇧Delete trvale (jako F8 / ⇧F8).
+            confirmDelete(toTrash: !flags.contains(.shift))
             return true
         case KeyCode.escape:
             cancelOperation(nil)
