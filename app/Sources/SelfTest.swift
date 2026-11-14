@@ -590,12 +590,12 @@ final class UIKeyCheck {
         // Značka formátu sedí, ale volba má špatný typ.
         let corruptedRejected = if case .failure(SettingsFileError.corrupted) = read(#"{"format": "\#(format)", "showMiddleBar": "ano"}"#) { true } else { false }
         check(corruptedRejected, "poškozený soubor nastavení se odmítne")
-        // Ručně upravený soubor: neznámý příkaz, vyhrazená klávesa (⌘1) a písmeno
+        // Ručně upravený soubor: neznámý příkaz, vyhrazená klávesa (Enter) a písmeno
         // bez modifikátoru se nepřevezmou, platná zkratka ano.
         var edited = SettingsSnapshot.defaults
         edited.keyBindings = [
             "neznamyPrikaz": [.function(5)],
-            KeyBindings.name(of: .swap): [.code(KeyCode.digits[0], key: "1", .command), .char("x", keyCode: 7, []),
+            KeyBindings.name(of: .swap): [.code(KeyCode.returnKey, key: "\r", []), .char("x", keyCode: 7, []),
                                           .function(11, .option)],
         ]
         // Zápis filtr obchází (ten je jen při čtení) – soubor obsahuje i neplatné zkratky.

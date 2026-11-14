@@ -80,19 +80,14 @@ struct Shortcut: Codable, Hashable {
     }
 
     /// Klávesa vyhrazená pro pevné ovládání (nelze ji přiřadit příkazu):
-    /// navigace a mezerník bez modifikátoru nebo jen s ⇧, ⌘↩ / ⌃↩ (spuštění,
-    /// vložení jména), ⌘Tab / ⌃Tab (řádek terminálu) a ⌘0–⌘9 (místa disků).
+    /// navigace (šipky, PgUp/PgDn, Home/End, Enter, Tab, Esc, ⌫) a mezerník bez
+    /// modifikátoru nebo jen s ⇧. Delete (vpřed) jde přiřadit i bez modifikátoru
+    /// – výchozí mazání do koše. ⌘0–⌘9 přiřadit jde; v panelu má přednost místo
+    /// z nabídky disků se stejnou zkratkou.
     var isReserved: Bool {
-        guard byKeyCode else { return false }
-        let mods = modifiers
-        if (Shortcut.navigationKeys.contains(keyCode) || keyCode == KeyCode.space) && mods.subtracting(.shift).isEmpty {
-            return true
-        }
-        if (keyCode == KeyCode.returnKey || keyCode == KeyCode.enter || keyCode == KeyCode.tab)
-            && (mods == .command || mods == .control) {
-            return true
-        }
-        return mods == .command && (KeyCode.digits.contains(keyCode) || keyCode == KeyCode.digitZero)
+        guard byKeyCode, keyCode != KeyCode.forwardDelete else { return false }
+        return (Shortcut.navigationKeys.contains(keyCode) || keyCode == KeyCode.space)
+            && modifiers.subtracting(.shift).isEmpty
     }
 
     /// Písmeno, číslice nebo symbol bez modifikátoru (nejvýš s ⇧) – jako zkratka
@@ -248,6 +243,19 @@ extension Command {
         case .viewThumbnails: return "Režim Miniatury"
         case .viewTiles: return "Režim Dlaždice"
         case .viewTypes: return "Režim Typy"
+        case .openItem: return "Otevřít položku"
+        case .launchItem: return "Spustit systémově"
+        case .firstItem: return "První položka"
+        case .lastItem: return "Poslední položka"
+        case .toggleMark: return "Označit položku a posunout se"
+        case .insertLeftPath: return "Cesta levého panelu do terminálu"
+        case .insertRightPath: return "Cesta pravého panelu do terminálu"
+        case .toggleTerminalFocus: return "Přepnout panel ↔ řádek terminálu"
+        case .insertNameToTerminal: return "Jméno položky do terminálu"
+        case .terminalTab9: return "Poslední záložka terminálu"
+        case .terminalTab1, .terminalTab2, .terminalTab3, .terminalTab4, .terminalTab5,
+             .terminalTab6, .terminalTab7, .terminalTab8:
+            return "Záložka terminálu \(terminalTabNumber ?? 0)"
         }
     }
 
@@ -299,6 +307,15 @@ enum KeyBindings {
         [char(key, extra.union(.command)), char(key, extra.union(.control))]
     }
 
+    /// Zkratka zvláštní klávesy podle kódu (šipky, Enter, Tab, Delete…).
+    /// - Parameters:
+    ///   - keyCode: kód klávesy
+    ///   - scalar: znak klávesy (NSUpArrowFunctionKey apod.)
+    ///   - modifiers: modifikátory
+    private static func special(_ keyCode: UInt16, _ scalar: Int, _ modifiers: NSEvent.ModifierFlags) -> Shortcut {
+        .code(keyCode, key: String(UnicodeScalar(UInt32(scalar)).map(Character.init) ?? " "), modifiers)
+    }
+
     /// ⌘Fn i ⌃Fn (vrstva Ctrl lišty F-kláves).
     private static func cmdCtrlFunction(_ number: Int) -> [Shortcut] {
         [.function(number, .command), .function(number, .control)]
@@ -318,16 +335,19 @@ enum KeyBindings {
         (.move, [.function(6)]),
         (.mkdir, [.function(7)]),
         // F8 maže do koše, ⇧F8 i ⌘F8 trvale (Delete / ⇧Delete řeší přímo panel).
-        (.delete, [.function(8)]),
-        (.deletePermanent, [.function(8, .shift), .function(8, .command)]),
+        // Delete / ⌘⌫ do koše, ⇧Delete trvale (jako Finder a Salamander).
+        (.delete, [.function(8), special(KeyCode.forwardDelete, NSDeleteFunctionKey, []),
+                   special(KeyCode.backspace, 0x7f, .command)]),
+        (.deletePermanent, [.function(8, .shift), .function(8, .command),
+                            special(KeyCode.forwardDelete, NSDeleteFunctionKey, .shift)]),
         (.terminal, [.function(9)]),
         // ⌘F12 roztáhne vestavěný terminál na celé okno a zpět.
         (.terminalFull, [.function(12, .command)]),
         // Záložky terminálu: ⌘T nová, ⇧⌘W zavřít, ⌥⌘→ / ⌥⌘← další / předchozí.
         (.terminalNewTab, [char("t", .command)]),
         (.terminalCloseTab, [char("w", [.command, .shift])]),
-        (.terminalNextTab, [.code(KeyCode.right, key: String(UnicodeScalar(NSRightArrowFunctionKey)!), [.command, .option])]),
-        (.terminalPreviousTab, [.code(KeyCode.left, key: String(UnicodeScalar(NSLeftArrowFunctionKey)!), [.command, .option])]),
+        (.terminalNextTab, [special(KeyCode.right, NSRightArrowFunctionKey, [.command, .option])]),
+        (.terminalPreviousTab, [special(KeyCode.left, NSLeftArrowFunctionKey, [.command, .option])]),
         (.newWindow, [char("n", .command)]),
         (.quit, [.function(10), .function(4, .option)]),
         (.connect, [.function(11)]),
@@ -357,10 +377,13 @@ enum KeyBindings {
         (.unselectMask, [.code(KeyCode.keypadMinus, key: "-", [])] + cmdCtrl("-")),
         (.invertMarks, [.code(KeyCode.keypadMultiply, key: "*", [])] + cmdCtrl("*", .shift)),
         (.toggleHidden, [char("h", .control)]),
-        (.back, [char("[", .command)]),
-        (.forward, [char("]", .command)]),
-        (.up, [.code(KeyCode.up, key: String(UnicodeScalar(NSUpArrowFunctionKey)!), .command)]),
-        (.root, cmdCtrl("\\")),
+        // Historie: ⌘[ / ⌘] a ⌥← / ⌥→.
+        (.back, [char("[", .command), special(KeyCode.left, NSLeftArrowFunctionKey, .option)]),
+        (.forward, [char("]", .command), special(KeyCode.right, NSRightArrowFunctionKey, .option)]),
+        (.up, [special(KeyCode.up, NSUpArrowFunctionKey, .command), special(KeyCode.pageUp, NSPageUpFunctionKey, .command),
+               special(KeyCode.pageUp, NSPageUpFunctionKey, .control)]),
+        // Kořen: ⌘\ / ⌃\ a ⌃⌫ (⇧⌫ zůstává pevně).
+        (.root, cmdCtrl("\\") + [special(KeyCode.backspace, 0x7f, .control)]),
         (.home, [char("h", [.command, .shift])]),
         (.swap, cmdCtrl("u")),
         (.sameDirOther, [.code(KeyCode.period, key: ".", .command), .code(KeyCode.period, key: ".", .control)]),
@@ -379,7 +402,24 @@ enum KeyBindings {
         (.viewTiles, [.code(KeyCode.digits[4], key: "5", .option)]),
         (.viewTypes, [.code(KeyCode.digits[5], key: "6", .option)]),
         (.editPlaces, []),
+        // Pohyb a označování v panelu (Enter, šipky, Home/End a mezerník zůstávají pevné).
+        (.openItem, [special(KeyCode.down, NSDownArrowFunctionKey, .command),
+                     special(KeyCode.pageDown, NSPageDownFunctionKey, .command),
+                     special(KeyCode.pageDown, NSPageDownFunctionKey, .control)]),
+        (.launchItem, [special(KeyCode.returnKey, 0x0d, .command), special(KeyCode.enter, 0x03, .command)]),
+        (.firstItem, [special(KeyCode.up, NSUpArrowFunctionKey, .option), special(KeyCode.left, NSLeftArrowFunctionKey, .command)]),
+        (.lastItem, [special(KeyCode.down, NSDownArrowFunctionKey, .option), special(KeyCode.right, NSRightArrowFunctionKey, .command)]),
+        (.toggleMark, [special(KeyCode.insert, NSHelpFunctionKey, [])]),
+        // Terminál: ⌘Tab / ⌃Tab fokus, ⌃↩ jméno položky, ⌃[ / ⌃] cesty panelů.
+        (.toggleTerminalFocus, [special(KeyCode.tab, 0x09, .command), special(KeyCode.tab, 0x09, .control)]),
+        (.insertNameToTerminal, [special(KeyCode.returnKey, 0x0d, .control), special(KeyCode.enter, 0x03, .control)]),
+        (.insertLeftPath, [char("[", .control)]),
+        (.insertRightPath, [char("]", .control)]),
     ]
+    // ⌘1–⌘9 v terminálu: záložka podle pořadí, ⌘9 poslední.
+    + Command.terminalTabs.enumerated().map { index, command in
+        (command, [Shortcut.code(KeyCode.digits[index], key: "\(index + 1)", .command)])
+    }
 
     /// Příkazy, kterým lze přiřadit zkratku (v pořadí zobrazení).
     static var commands: [Command] { defaults.map(\.0) }
@@ -460,7 +500,8 @@ enum KeyBindings {
         let modifiers = Shortcut.relevantModifiers(event.modifierFlags)
         for (command, shortcuts) in table {
             for shortcut in shortcuts where shortcut.matches(keyCode: event.keyCode, chars: chars, modifiers: modifiers) {
-                if textEditing && shortcut.isTextEditing { continue }
+                // Psaní v poli má přednost – kromě ovládání terminálu (⌘Tab, ⌃↩).
+                if textEditing && shortcut.isTextEditing && !command.ignoresTextEditing { continue }
                 return command
             }
         }

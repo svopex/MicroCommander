@@ -356,25 +356,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                   window.attachedSheet == nil, NSApp.modalWindow == nil else { return event }
             let inTerminal = self.terminalPane.hasFocus
             let fullTerminal = self.terminalPane.isExpanded
-            // ⌘1–⌘9 v terminálu (řádek pod panely i celé okno): záložka terminálu
-            // podle pořadí, ⌘9 poslední. Neexistující záložka jen pípne – klávesa
-            // nesmí místo toho přepnout panel na místo z nabídky disků.
-            // ⌘0–⌘9 jinde: místo z nabídky disků se zkratkou do aktivního panelu.
-            if let digit = KeyCode.commandDigit(event) {
-                if inTerminal || fullTerminal, digit >= 1 {
-                    if !self.terminalPane.selectTab(number: digit) { NSSound.beep() }
-                    return nil
-                }
-                if !fullTerminal, let place = PlaceStore.place(forShortcut: digit) {
-                    self.open(place, in: self.activePanel)
-                    return nil
-                }
+            // ⌘0–⌘9: místo z nabídky disků se zkratkou do aktivního panelu. V terminálu
+            // má přednost příkaz se stejnou klávesou (výchozí ⌘1–⌘9 = záložky terminálu).
+            let command = self.command(forKey: event)
+            if !fullTerminal, !(inTerminal && command != nil), let digit = KeyCode.commandDigit(event),
+               let place = PlaceStore.place(forShortcut: digit) {
+                self.open(place, in: self.activePanel)
+                return nil
             }
             // Klávesové zkratky příkazů (Nastavení › Klávesnice) dřív než menu a panel:
             // F-klávesy fungují odkudkoli, v textovém poli se nepoužijí zkratky
             // potřebné pro psaní (viz Shortcut.isTextEditing), v terminálu jen
             // některé (viz allowsShortcut).
-            if let command = self.command(forKey: event) {
+            if let command {
                 self.perform(command)
                 return nil
             }
@@ -383,23 +377,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 if inTerminal { self.terminalPane.noteKey(event) }
                 return event
             }
-            // Ctrl+Enter (zachytává se tady, protože macOS jinak ⌃↩ použije jako
-            // „Zobrazit kontextovou nabídku“ a do panelu se klávesa nedostane):
-            // jméno položky pod kurzorem na řádek terminálu.
             let modifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
-            if event.keyCode == KeyCode.returnKey || event.keyCode == KeyCode.enter, modifiers == .control {
-                self.insertCurrentItemIntoTerminal()
-                return nil
-            }
-            // ⌘Tab / Ctrl+Tab: přepínání mezi panelem a řádkem terminálu.
-            if event.keyCode == KeyCode.tab, !event.modifierFlags.intersection([.control, .command]).isEmpty {
-                if inTerminal {
-                    self.focusActivePanel()
-                } else {
-                    self.terminalPane.focus()
-                }
-                return nil
-            }
             if inTerminal {
                 // PgUp/PgDn listují panelem (jeden řádek terminálu není kam posouvat);
                 // ostatní klávesy patří shellu – Tab doplňuje, šipky listují historií.
@@ -450,7 +428,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// a zkratky s ⌘, zbytek (⌃písmeno, ⌥znak…) shellu.
     private func allowsShortcut(_ command: Command, key event: NSEvent) -> Bool {
         if terminalPane.isExpanded { return command.worksInFullTerminal }
+        // Záložky podle čísla jen s fokusem v terminálu – v panelu patří ⌘číslice místům.
+        if command.terminalTabNumber != nil { return terminalPane.hasFocus }
+        // Pohyb a označování v panelu jen s fokusem v panelu.
+        if command.needsPanelFocus { return isPanelResponder(window?.firstResponder) }
         guard terminalPane.hasFocus else { return true }
+        if command.worksInTerminalLine { return true }
+        // Klávesy pohybu a mazání (⌘⌫, ⌥←, ⌘↑…) patří v řádku terminálu shellu.
+        if Shortcut.navigationKeys.contains(event.keyCode) { return false }
         return KeyCode.functionKeys.contains(event.keyCode) || event.modifierFlags.contains(.command)
     }
 
@@ -592,16 +577,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     func panelView(_ view: PanelView, keyDown event: NSEvent) -> Bool {
         let panel = view.panel
         let flags = event.modifierFlags.intersection([.shift, .control, .option, .command])
-        let ctrlOrCmd = flags.contains(.control) || flags.contains(.command)
+
+        // Zkratky příkazů (Nastavení › Klávesnice) mají přednost před pevnými
+        // klávesami níže. Normálně je vyřídí už monitor kláves okna; tady jako
+        // záložní cesta pro klávesy předané panelu jinak (kontrola kláves bez okna).
+        if let command = command(forKey: event) {
+            perform(command)
+            return true
+        }
 
         // Home/End podle znaku klávesy (ne jen kódu): přemapované a externí klávesnice,
         // Karabiner či vzdálená plocha mohou poslat znak Home/End s jiným kódem klávesy.
-        // ⌘← / ⌘→ fungují jako Home / End (konvence macOS „na začátek/konec“).
+        // ⇧⌘← / ⇧⌘→ označí rozsah ke začátku/konci (⌘← / ⌘→ bez ⇧ jsou v Nastavení).
         if let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first.map({ Int($0.value) }) {
+            let extendsWithCommand = flags == [.command, .shift]
             let isHome = scalar == NSHomeFunctionKey || scalar == 0xF73A /* NSBeginOfLineFunctionKey */
-                || (scalar == NSLeftArrowFunctionKey && flags.contains(.command))
+                || (scalar == NSLeftArrowFunctionKey && extendsWithCommand)
             let isEnd = scalar == NSEndFunctionKey || scalar == 0xF73B /* NSEndOfLineFunctionKey */
-                || (scalar == NSRightArrowFunctionKey && flags.contains(.command))
+                || (scalar == NSRightArrowFunctionKey && extendsWithCommand)
             if isHome || isEnd {
                 view.moveCursorToEdge(first: isHome, extend: flags.contains(.shift))
                 return true
@@ -610,25 +603,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
         switch event.keyCode {
         case KeyCode.up:
-            if flags.contains(.command) { panel.goUp(); return true }
-            // ⌥↑ = první položka (konvence seznamů v macOS, obdoba Home).
-            if flags == .option { view.moveCursorToEdge(first: true, extend: false); return true }
             if panel.quickSearch != nil, flags.isEmpty { panel.quickSearchNext(forward: false); return true }
             moveCursor(view, key: .up, flags: flags)
             return true
         case KeyCode.down:
-            if flags.contains(.command) { openRow(panel.cursor, in: panel); return true }
-            // ⌥↓ = poslední položka (obdoba End).
-            if flags == .option { view.moveCursorToEdge(first: false, extend: false); return true }
             if panel.quickSearch != nil, flags.isEmpty { panel.quickSearchNext(forward: true); return true }
             moveCursor(view, key: .down, flags: flags)
             return true
         case KeyCode.pageUp:
-            if ctrlOrCmd { panel.goUp(); return true }
             moveCursor(view, key: .pageUp, flags: flags)
             return true
         case KeyCode.pageDown:
-            if ctrlOrCmd { openRow(panel.cursor, in: panel); return true }
             moveCursor(view, key: .pageDown, flags: flags)
             return true
         case KeyCode.home:
@@ -640,65 +625,34 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             view.moveCursorToEdge(first: false, extend: flags.contains(.shift))
             return true
         case KeyCode.left:
-            // ⌥← zpět v historii; jinak pohyb podle režimu (v Podrobném nic).
-            if flags.contains(.option) { panel.goBack(); return true }
+            // Pohyb podle režimu (v Podrobném nic); ⌥← / ⌘← jsou příkazy z Nastavení.
             moveCursor(view, key: .left, flags: flags)
             return true
         case KeyCode.right:
-            if flags.contains(.option) { panel.goForward(); return true }
             moveCursor(view, key: .right, flags: flags)
             return true
         case KeyCode.returnKey, KeyCode.enter:
+            // ⌘↩ (spustit systémově) je příkaz z Nastavení.
             panel.endQuickSearch()
-            // ⌘↩ spustí položku systémově (aplikaci .app místo vstupu do ní).
-            if flags.contains(.command) { launchRow(panel.cursor, in: panel); return true }
             openRow(panel.cursor, in: panel)
             return true
         case KeyCode.backspace:
+            // ⌫ nadřazený adresář, ⇧⌫ kořen (⌃⌫ a ⌘⌫ jsou příkazy z Nastavení).
             if panel.quickSearch != nil { panel.quickSearchBackspace(); return true }
-            if flags.contains(.command) { perform(.delete); return true }
-            if flags.contains(.shift) || flags.contains(.control) { panel.goRoot(); return true }
+            if flags.contains(.shift) { panel.goRoot(); return true }
             panel.goUp()
-            return true
-        case KeyCode.forwardDelete:
-            // Delete maže do koše, ⇧Delete trvale (jako F8 / ⇧F8).
-            perform(flags.contains(.shift) ? .deletePermanent : .delete)
             return true
         case KeyCode.escape:
             if panel.quickSearch != nil { panel.endQuickSearch(); return true }
             // Escape smaže text rozepsaný na řádku terminálu.
             terminalPane.clearInput()
             return true
-        case KeyCode.space where flags.isEmpty && panel.quickSearch == nil,
-             KeyCode.insert:
-            // Space/Insert: označit položku a posunout kurzor (Insert z Windows).
-            panel.toggleMark(row: panel.cursor)
-            panel.setCursor(panel.cursor + 1)
+        case KeyCode.space where flags.isEmpty && panel.quickSearch == nil:
+            // Mezerník: označit položku a posunout kurzor (Insert je příkaz z Nastavení).
+            perform(.toggleMark)
             return true
         default:
             break
-        }
-
-        // Zkratky příkazů (KeyBindings). Normálně je vyřídí už monitor kláves okna;
-        // tady jako záložní cesta pro klávesy předané panelu jinak (kontrola
-        // kláves bez okna).
-        if let command = command(forKey: event) {
-            perform(command)
-            return true
-        }
-
-        // Zkratky s Ctrl/⌘ a písmenem (Ctrl varianty Salamandera).
-        let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
-        if ctrlOrCmd && !flags.contains(.option) {
-            // Příkazy se zkratkami řeší KeyBindings v monitoru kláves; tady zůstává
-            // jen vkládání cest panelů na řádek terminálu.
-            switch chars {
-            case "[":
-                terminalPane.insert(shellQuote(leftPanel.displayPath) + " "); return true
-            case "]":
-                terminalPane.insert(shellQuote(rightPanel.displayPath) + " "); return true
-            default: break
-            }
         }
 
         // Tisknutelné znaky bez modifikátorů: rychlé hledání (Quick Search).
@@ -1286,6 +1240,27 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         // Cesta tak, jak ji ukazuje řádek adresáře (u archivu/FTP i s popiskem VFS).
         case .copyDirPath: copyTextToPasteboard(activePanel.displayPath)
         case .revealInFinder: commandRevealInFinder()
+        case .openItem: openRow(panel.cursor, in: panel)
+        // ⌘↩ spustí položku systémově (aplikaci .app místo vstupu do ní).
+        case .launchItem:
+            panel.endQuickSearch()
+            launchRow(panel.cursor, in: panel)
+        case .firstItem: view(of: panel).moveCursorToEdge(first: true, extend: false)
+        case .lastItem: view(of: panel).moveCursorToEdge(first: false, extend: false)
+        // Označit položku a posunout kurzor (mezerník, Insert z Windows).
+        case .toggleMark:
+            panel.toggleMark(row: panel.cursor)
+            panel.setCursor(panel.cursor + 1)
+        case .insertLeftPath: terminalPane.insert(shellQuote(leftPanel.displayPath) + " ")
+        case .insertRightPath: terminalPane.insert(shellQuote(rightPanel.displayPath) + " ")
+        // Přepínání fokusu mezi panelem a řádkem terminálu.
+        case .toggleTerminalFocus:
+            if terminalPane.hasFocus { focusActivePanel() } else { terminalPane.focus() }
+        case .insertNameToTerminal: insertCurrentItemIntoTerminal()
+        // Záložka terminálu podle čísla; neexistující jen pípne.
+        case .terminalTab1, .terminalTab2, .terminalTab3, .terminalTab4, .terminalTab5,
+             .terminalTab6, .terminalTab7, .terminalTab8, .terminalTab9:
+            if let number = command.terminalTabNumber, !terminalPane.selectTab(number: number) { NSSound.beep() }
         case .clipboardCopy: commandClipboardCopy(cut: false)
         case .clipboardCut: commandClipboardCopy(cut: true)
         case .clipboardPaste: commandClipboardPaste()
@@ -2053,6 +2028,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⇧F3 zobrazit ve Finderu, ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
         ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌘F1 / ⌃F1 informace o jednotce,
         ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
+
+        Uvedené zkratky jsou výchozí – kromě šipek, PgUp/PgDn, Home/End, Enter, Tab,
+        Esc, ⌫ a mezerníku je lze změnit v Nastavení › Klávesnice.
 
         Tip: na klávesnici Macu F-klávesy vyžadují Fn, nebo zapněte
         „Používat F1, F2 atd. jako standardní funkční klávesy“ v nastavení klávesnice.

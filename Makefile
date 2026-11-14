@@ -121,6 +121,9 @@ app: release $(SWIFTTERM_LIB)
 		-o $(BIN)
 	# Metadata bundle a ikona.
 	cp $(APP)/Info.plist $(APPDIR)/Contents/Info.plist
+	# Commit a datum sestavení pro okno O aplikaci (mimo git repozitář se commit vynechá).
+	-/usr/libexec/PlistBuddy -c "Add :MCBuildCommit string $$(git -C $(ROOT) describe --always --dirty 2>/dev/null)" $(APPDIR)/Contents/Info.plist
+	/usr/libexec/PlistBuddy -c "Add :MCBuildDate string $$(date '+%Y-%m-%d %H:%M')" $(APPDIR)/Contents/Info.plist
 	@mkdir -p $(APPDIR)/Contents/Resources
 	cp $(APP)/AppIcon.icns $(APPDIR)/Contents/Resources/AppIcon.icns
 	# Licence staticky přilinkované knihovny SwiftTerm (MIT) jde s aplikací.

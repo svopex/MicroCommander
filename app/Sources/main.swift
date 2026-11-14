@@ -340,11 +340,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc func showAbout(_ sender: Any?) {
-        // O aplikaci: samostatné okno uprostřed obrazovky (nezávisí na hlavním okně).
-        let version = String(cString: sal_version())
-        PromptDialog.show(title: "MicroCommander",
-                          message: "Dvoupanelový správce souborů pro macOS.\nJádro salcore v\(version) (Rust).\nPřepis Open Salamanderu (bez pluginů).",
-                          icon: NSApp.applicationIconImage, over: nil)
+        // O aplikaci: verze, sestavení a systém (viz AboutInfo).
+        AboutInfo.show()
     }
 }
 

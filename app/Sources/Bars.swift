@@ -20,12 +20,51 @@ enum Command: CaseIterable {
     case clipboardCopy, clipboardCut, clipboardPaste
     case selectMask, unselectMask, invertMarks, selectAll, unselectAll
     case viewMenu, viewBrief, viewDetailed, viewIcons, viewThumbnails, viewTiles, viewTypes
+    // Pohyb a označování v panelu (dřív pevné klávesy, teď v Nastavení › Klávesnice).
+    case openItem, launchItem, firstItem, lastItem, toggleMark, insertLeftPath, insertRightPath
+    // Terminál: fokus panel ↔ terminál, jméno položky na řádek, záložky podle čísla.
+    case toggleTerminalFocus, insertNameToTerminal
+    case terminalTab1, terminalTab2, terminalTab3, terminalTab4, terminalTab5
+    case terminalTab6, terminalTab7, terminalTab8, terminalTab9
+
+    /// Výběr záložky terminálu podle čísla, v pořadí 1–9.
+    static let terminalTabs: [Command] = [.terminalTab1, .terminalTab2, .terminalTab3, .terminalTab4, .terminalTab5,
+                                          .terminalTab6, .terminalTab7, .terminalTab8, .terminalTab9]
+
+    /// Číslo záložky terminálu, kterou příkaz vybírá (9 = poslední); nil = jiný příkaz.
+    var terminalTabNumber: Int? {
+        Command.terminalTabs.firstIndex(of: self).map { $0 + 1 }
+    }
 
     /// Funguje příkaz i při terminálu roztaženém na celé okno? Ostatní příkazy
     /// pracují s panely, které tehdy nejsou vidět – jejich klávesy dostane terminál.
     var worksInFullTerminal: Bool {
         switch self {
         case .terminalFull, .terminalNewTab, .terminalCloseTab, .terminalNextTab, .terminalPreviousTab, .newWindow:
+            return true
+        default:
+            return terminalTabNumber != nil
+        }
+    }
+
+    /// Ovládání terminálu: s fokusem v řádku terminálu dostane příkaz i klávesy,
+    /// které jinak patří shellu (⌃Tab, ⌃↩, ⌥⌘←/→).
+    var worksInTerminalLine: Bool {
+        // Terminálové příkazy z celého okna (bez Nového okna) a přepnutí fokusu / vložení jména.
+        (worksInFullTerminal && self != .newWindow) || ignoresTextEditing
+    }
+
+    /// Příkaz se spustí i v textovém poli (úprava cesty, terminál), přestože jeho
+    /// zkratka (⌘Tab, ⌃↩) jinak patří psaní – jako dřívější pevné klávesy.
+    var ignoresTextEditing: Bool {
+        self == .toggleTerminalFocus || self == .insertNameToTerminal
+    }
+
+    /// Pohyb a označování v panelu: zkratka platí jen s fokusem v panelu
+    /// (v terminálu a v textovém poli patří klávesa jim).
+    var needsPanelFocus: Bool {
+        switch self {
+        case .openItem, .launchItem, .firstItem, .lastItem, .toggleMark, .insertLeftPath, .insertRightPath:
             return true
         default:
             return false

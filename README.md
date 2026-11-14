@@ -321,8 +321,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   najednou), **Odebrat** je smaže, dvojklik na název vlastního adresáře ho
   přejmenuje; pořadí se mění **přetažením myší** nebo šipkami pro vybranou
   položku. Sloupec **Zkratka** přiřadí místu ⌘0–⌘9 (stisk v hlavním okně
-  otevře místo v aktivním panelu, i skryté; s fokusem v terminálu přepínají
-  ⌘1–⌘9 jeho záložky; stejná zkratka se jinému místu
+  otevře místo v aktivním panelu, i skryté; s fokusem v terminálu má přednost
+  příkaz se stejnou zkratkou – výchozí ⌘1–⌘9 přepínají záložky terminálu; stejná zkratka se jinému místu
   odebere; zkratka je vidět i v nabídce disků). Změny platí hned. Lišta disků
   ukazuje disky a vlastní adresáře (servery jen v nabídce). Uložení
   v předvolbách: `placesOrder` (pořadí), `hiddenPlaces` (skryté),
@@ -356,9 +356,15 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     zkratky v menu i popisky lišty F-kláves. V textových polích (úprava
     cesty) se nepoužijí zkratky potřebné pro psaní (⌘A/⌘C/⌘V/⌘X/⌘Z,
     ⌃písmeno, šipky); terminál si nechává ještě víc kláves (viz Vestavěný
-    terminál). Pevné zůstávají navigační klávesy (šipky, Enter, Tab,
-    mezerník, psaní), ⌘Enter / ⌃Enter, ⌘Tab a ⌘0–⌘9 míst. Uloží se jen změny
-    oproti výchozím (předvolba `keyBindings`).
+    terminál). V tabulce jsou i pohyb a označování v panelu (Otevřít položku
+    ⌘↓ / ⌘PgDn, Spustit systémově ⌘↩, První / Poslední položka ⌥↑ / ⌥↓ a ⌘← / ⌘→,
+    Označit položku Insert, historie ⌥← / ⌥→, nadřazený adresář ⌘PgUp, kořen ⌃⌫,
+    mazání Delete / ⌘⌫ / ⇧Delete) a ovládání terminálu (⌘Tab / ⌃Tab panel ↔
+    terminál, ⌃↩ jméno položky, ⌃[ / ⌃] cesty panelů, ⌘1–⌘9 záložky). Pevné
+    zůstávají jen šipky, PgUp/PgDn, Home/End, Enter, Tab, Esc, ⌫ a mezerník
+    (bez modifikátoru nebo s ⇧) a psaní pro rychlé hledání. ⌘0–⌘9 lze přiřadit
+    také; v panelu má přednost místo z nabídky disků se stejnou zkratkou,
+    v terminálu příkaz. Uloží se jen změny oproti výchozím (předvolba `keyBindings`).
   - **Obnovit vše** (vlevo dole): nastaví všechny volby na všech stránkách
     i klávesové zkratky na výchozí hodnoty.
   - **Uložit do souboru… / Načíst ze souboru…** (vlevo dole): nastavení z dialogu
@@ -549,6 +555,12 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   znovu a operaci zopakuje. ⌥F5 (Zabalit do ZIP) má v dialogu uložení volbu
   šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
   (prázdné nebo neshodné heslo dialog nepustí dál).
+- **O aplikaci** (aplikační menu): verze a číslo sestavení, git commit a datum
+  sestavení (doplňuje je Makefile do `Info.plist`), architektura (nativně /
+  přes Rosettu), verze jádra salcore a SwiftTerm, nejstarší podporovaný macOS;
+  o systému verze macOS s číslem sestavení, model Macu, procesor a počet jader,
+  paměť, jazyk a cesta k aplikaci. Tlačítko **Kopírovat informace** dá vše do
+  schránky (k hlášení chyb).
 - Dialogy: Enter potvrdí, Escape zruší. Všechna hlášení a dotazy (chyby,
   upozornění, potvrzení, dotaz na heslo, O aplikaci) mají vlastní vzhled
   aplikace ve stylu Salamandera – ikona, tučný nadpis, text a tlačítka uprostřed –
