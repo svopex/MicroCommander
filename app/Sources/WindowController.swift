@@ -94,7 +94,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             nil,
             (.connect, "network", "FTP/SFTP servery (F11)"),
             (.disconnect, "eject", "Odpojit / zavřít archiv (F12)"),
-            (.terminal, "terminal", "Terminál v adresáři (F9)"),
+            (.terminal, "terminal", "Terminal.app v adresáři (F9)"),
+            nil,
+            (.terminalNewTab, "plus.rectangle.on.rectangle", "Nová záložka terminálu (⌘T)"),
+            (.newWindow, "macwindow.badge.plus", "Nové okno (⌘N)"),
         ], vertical: false)
 
         middleBar = CommandBar(entries: [
@@ -239,10 +242,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             functionBar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         terminalPane.bind(expandedHeight: terminalArea.heightAnchor)
-        lineLayout = [
-            panelArea.bottomAnchor.constraint(equalTo: terminalPane.topAnchor),
-            terminalPane.lineHeightConstraint,
-        ]
+        // Výšku terminálu pod panely určuje on sám: jeden řádek, s více
+        // záložkami navíc lišta záložek.
+        lineLayout = [panelArea.bottomAnchor.constraint(equalTo: terminalPane.topAnchor)]
         // Skryté panely si při roztaženém terminálu drží plochu pod ním (bez
         // vazby by jejich výška nebyla určená).
         fullLayout = [
@@ -435,7 +437,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     /// Smí se klávesa použít jako zkratka příkazu? Terminál s fokusem si většinu
     /// kláves nechává: roztažený přes celé okno všechny kromě příkazů, které
-    /// s ním počítají (⌘F12, ⌘N); v jednom řádku patří aplikaci F-klávesy
+    /// s ním počítají (⌘F12, záložky terminálu, ⌘N); v jednom řádku patří aplikaci F-klávesy
     /// a zkratky s ⌘, zbytek (⌃písmeno, ⌥znak…) shellu.
     private func allowsShortcut(_ command: Command, key event: NSEvent) -> Bool {
         if terminalPane.isExpanded { return command.worksInFullTerminal }
@@ -1185,6 +1187,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .deletePermanent: commandDelete(toTrash: false)
         case .terminal: commandTerminal()
         case .terminalFull: setTerminalExpanded(!terminalPane.isExpanded)
+        case .terminalNewTab: terminalPane.addTab()
+        case .terminalCloseTab: terminalPane.closeCurrentTab()
+        case .terminalNextTab: terminalPane.selectAdjacentTab(offset: 1)
+        case .terminalPreviousTab: terminalPane.selectAdjacentTab(offset: -1)
         case .newWindow: AppDelegate.shared?.openNewWindow(from: self)
         case .quit: NSApp.terminate(nil)
         case .connect: ConnectWindowController.show(parent: self)
@@ -1830,6 +1836,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌘Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
         ⌫ – nadřazený adresář, Tab – druhý panel, ⌃Tab – řádek terminálu pod panely a zpět
         (shell v adresáři aktivního panelu), ⌘F12 – terminál na celé okno a zpět,
+        ⌘T – nová záložka terminálu (⇧⌘W zavřít, ⌥⌘← / ⌥⌘→ přepnout),
         ⌃Enter – jméno položky do terminálu, ⌘N – nové okno,
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
         ⌘A – označit vše (znovu = zrušit), ⌘D – nic, psaní písmen – rychlé hledání,
@@ -1885,6 +1892,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             let command = MainWindowController.menuCommands[menuItem.tag]
             // Klávesy, které si nechává terminál, menu nezachytí (viz allowsShortcut).
             if let keyEvent, !allowsShortcut(command, key: keyEvent) { return false }
+            // Zavření a přepínání záložek terminálu jen s více záložkami.
+            if command.needsTerminalTabs, terminalPane.tabCount < 2 { return false }
             if command == .toggleHidden {
                 menuItem.state = showHiddenFiles ? .on : .off
             } else if let mode = command.viewMode {

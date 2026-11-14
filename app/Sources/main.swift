@@ -168,6 +168,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         editMenu.addItem(makeItem(("Kopírovat cestu adresáře", .copyDirPath)))
 
         let fileEntries: [Entry] = [
+            ("Nové okno", .newWindow),
+            nil,
             ("Zobrazit", .view),
             ("Upravit", .edit),
             ("Nový soubor…", .newFile),
@@ -208,6 +210,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let commandEntries: [Entry] = [
             ("Vyhledat soubory a adresáře…", .find),
             ("Terminál na celé okno", .terminalFull),
+            ("Nová záložka terminálu", .terminalNewTab),
+            ("Zavřít záložku terminálu", .terminalCloseTab),
+            ("Další záložka terminálu", .terminalNextTab),
+            ("Předchozí záložka terminálu", .terminalPreviousTab),
             ("Terminal.app v adresáři", .terminal),
             nil,
             ("FTP/SFTP servery…", .connect),

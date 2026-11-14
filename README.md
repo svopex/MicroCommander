@@ -79,7 +79,8 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   dva panely s prostřední svislou lištou operací (výchozí jen úzký pruh, ikony
   zapne Nastavení), řádek vestavěného terminálu (shell uživatele; ⌘F12 ho
   roztáhne na celé okno)
-  a spodní lišta F-kláves (popisky se mění podle držených Shift/Ctrl/Alt).
+  a spodní lišta F-kláves (popisky se mění podle držených Shift/Ctrl/Alt/⌘ –
+  ukazují jen to, co držený modifikátor s F-klávesou opravdu spustí).
   Oken může být víc (⌘N), každé má vlastní panely i terminál.
   Panel má řádek adresáře (aktivní panel zvýrazněný barvou, tlačítko disku,
   volné místo), sloupce Jméno/Přípona/Velikost/Datum/Čas/Atr, řádek „..“
@@ -446,7 +447,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     PgUp/PgDn listují panelem; vše ostatní dostane shell (Tab doplňuje, šipky
     listují historií, ⌃C, ⌃R…, ⌥ píše znaky české klávesnice). V terminálu
     přes celé okno dostane program všechny klávesy včetně F-kláves (mc, htop,
-    vim) – aplikaci zůstává jen ⌘F12 a ⌘N; příkaz nad panely zvolený z menu
+    vim) – aplikaci zůstává jen ⌘F12, zkratky záložek terminálu a ⌘N; příkaz
+    nad panely zvolený z menu
     nebo tlačítkem lišty nejdřív vrátí panely.
   - **Adresář:** shell jde za aktivním panelem – po změně adresáře (i přepnutí
     panelu Tabem) aplikace do nečinného shellu s prázdným řádkem napíše `cd`
@@ -467,8 +469,18 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     `ZDOTDIR`, načte váš `.zshenv` a před promptem zapne `HIST_IGNORE_SPACE`
     a ohlásí adresář (OSC 7, kvůli cestám přes symbolické odkazy); bash má
     `HISTCONTROL=ignoreboth`, pokud ho prostředí nenastavuje jinak.
+  - **Záložky:** ⌘T (Příkazy › Nová záložka terminálu, ikona na nástrojové
+    liště) přidá další terminál s vlastním shellem v adresáři aktivního
+    panelu. S jedinou záložkou vypadá terminál jako dřív; teprve se dvěma
+    a více se nad ním objeví úzká lišta záložek (pořadí a adresář shellu,
+    klik vybere, × zavře, + přidá) – pod panely i v celém okně. ⌥⌘→ / ⌥⌘←
+    přepínají záložky, ⇧⌘W zavře vybranou (i `exit` v jejím shellu); poslední
+    záložka zůstává. Za panelem jde a panel vede jen vybraná záložka, shelly
+    ostatních běží dál na pozadí.
+  - Kurzor terminálu trvale svítí (neblikající blok).
   - F9 dál otevírá aplikaci Terminal v adresáři panelu.
-- **Více oken:** ⌘N (Okno › Nové okno, také nabídka ikony v Docku) otevře další
+- **Více oken:** ⌘N (Soubory › Nové okno, Okno › Nové okno, ikona na nástrojové
+  liště, také nabídka ikony v Docku) otevře další
   hlavní okno ve stejných adresářích jako to aktuální; každé okno má vlastní
   panely, připojení i terminál. Příkazy z menu provádí naposledy aktivní okno,
   přepínat mezi nimi jde v menu Okno (⌘W okno zavře, poslední zavřené okno
@@ -551,7 +563,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   uložení do JSON), vestavěný terminál se skutečným shellem uživatele (shell
   jde za adresářem panelu, vložené `cd` po sobě smaže řádek, `cd` v shellu
   přesune panel, ⌘F12 roztáhne terminál a vrátí jeden řádek; volitelné snímky
-  obou režimů `SAL_TERMINAL_SNAPSHOT=/cesta/predpona`);
+  obou režimů `SAL_TERMINAL_SNAPSHOT=/cesta/predpona`), záložky terminálu
+  (lišta jen při dvou a více záložkách) a vrstvy lišty F-kláves;
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`
   zapíše každý stisk (kód klávesy, znak, modifikátory, fokus) do

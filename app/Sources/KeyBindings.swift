@@ -117,7 +117,11 @@ struct Shortcut: Codable, Hashable {
         if isFunctionKey { return false }
         let mods = modifiers
         if mods.subtracting(.shift).isEmpty { return true }
-        if Shortcut.navigationKeys.contains(keyCode) && byKeyCode { return true }
+        // Klávesy pohybu patří poli – kromě kombinace s ⌥⌘, kterou textová pole
+        // ani shell nepoužívají (přepínání záložek terminálu).
+        if Shortcut.navigationKeys.contains(keyCode) && byKeyCode {
+            return !(mods.contains(.command) && mods.contains(.option))
+        }
         // ⌘A/⌘C/⌘V/⌘X/⌘Z a ⌃písmeno (emacsové pohyby a mazání v poli) patří poli.
         if mods == .control && !byKeyCode && key.first?.isLetter == true { return true }
         return mods == .command && ["a", "c", "v", "x", "z"].contains(key)
@@ -193,6 +197,10 @@ extension Command {
         case .deletePermanent: return "Smazat trvale (bez koše)"
         case .terminal: return "Terminal.app v adresáři"
         case .terminalFull: return "Terminál na celé okno"
+        case .terminalNewTab: return "Nová záložka terminálu"
+        case .terminalCloseTab: return "Zavřít záložku terminálu"
+        case .terminalNextTab: return "Další záložka terminálu"
+        case .terminalPreviousTab: return "Předchozí záložka terminálu"
         case .newWindow: return "Nové okno"
         case .quit: return "Ukončit"
         case .connect: return "FTP/SFTP servery"
@@ -308,6 +316,11 @@ enum KeyBindings {
         (.terminal, [.function(9)]),
         // ⌘F12 roztáhne vestavěný terminál na celé okno a zpět.
         (.terminalFull, [.function(12, .command)]),
+        // Záložky terminálu: ⌘T nová, ⇧⌘W zavřít, ⌥⌘→ / ⌥⌘← další / předchozí.
+        (.terminalNewTab, [char("t", .command)]),
+        (.terminalCloseTab, [char("w", [.command, .shift])]),
+        (.terminalNextTab, [.code(KeyCode.right, key: String(UnicodeScalar(NSRightArrowFunctionKey)!), [.command, .option])]),
+        (.terminalPreviousTab, [.code(KeyCode.left, key: String(UnicodeScalar(NSLeftArrowFunctionKey)!), [.command, .option])]),
         (.newWindow, [char("n", .command)]),
         (.quit, [.function(10), .function(4, .option)]),
         (.connect, [.function(11)]),
@@ -464,10 +477,10 @@ enum KeyBindings {
         NotificationCenter.default.post(name: changed, object: nil)
     }
 
-    /// Příkaz na F-klávese v dané vrstvě lišty (modifikátory vrstvy).
-    static func functionKeyCommand(number: Int, modifiers: [NSEvent.ModifierFlags]) -> Command? {
+    /// Příkaz na F-klávese v dané vrstvě lišty (modifikátor vrstvy).
+    static func functionKeyCommand(number: Int, modifiers: NSEvent.ModifierFlags) -> Command? {
         table.first { _, shortcuts in
-            shortcuts.contains { $0.functionNumber == number && modifiers.contains($0.modifiers) }
+            shortcuts.contains { $0.functionNumber == number && $0.modifiers == modifiers }
         }?.0
     }
 }

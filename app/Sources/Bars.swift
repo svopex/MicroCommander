@@ -11,7 +11,8 @@ import AppKit
 /// CaseIterable: tag položky menu = index v `Command.allCases`.
 enum Command: CaseIterable {
     case help, rename, view, edit, newFile, copy, move, mkdir, changeDir, delete, deletePermanent
-    case terminal, terminalFull, newWindow, quit, connect, disconnect
+    case terminal, terminalFull, terminalNewTab, terminalCloseTab, terminalNextTab, terminalPreviousTab
+    case newWindow, quit, connect, disconnect
     case sortName, sortExt, sortTime, sortSize, refresh, compare
     case driveLeft, driveRight, driveInfo, editPlaces, pack, unpack, find, calcSize
     case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden, copyDirPath, changeAttributes
@@ -22,7 +23,17 @@ enum Command: CaseIterable {
     /// Funguje příkaz i při terminálu roztaženém na celé okno? Ostatní příkazy
     /// pracují s panely, které tehdy nejsou vidět – jejich klávesy dostane terminál.
     var worksInFullTerminal: Bool {
-        self == .terminalFull || self == .newWindow
+        switch self {
+        case .terminalFull, .terminalNewTab, .terminalCloseTab, .terminalNextTab, .terminalPreviousTab, .newWindow:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Příkaz potřebuje víc než jednu záložku terminálu (zavření, přepnutí).
+    var needsTerminalTabs: Bool {
+        self == .terminalCloseTab || self == .terminalNextTab || self == .terminalPreviousTab
     }
 
     /// Režim zobrazení, který příkaz nastavuje (nil = příkaz není volba režimu).
@@ -65,6 +76,36 @@ private func makeSeparator(vertical: Bool) -> NSView {
         box.widthAnchor.constraint(equalToConstant: 18).isActive = true
     }
     return box
+}
+
+/// Podklad plochého tlačítka lišty (F-klávesy, záložky terminálu): zaoblený
+/// rámeček s výplní.
+/// - Parameters:
+///   - bounds: plocha tlačítka
+///   - highlighted: zvýrazněné tlačítko (stisknuté, vybraná záložka)
+func drawBarButtonBackground(in bounds: NSRect, highlighted: Bool) {
+    let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
+    // Neprůhledné barvy (controlColor je v tmavém režimu poloprůhledná a splývá s textem).
+    (highlighted ? NSColor.selectedContentBackgroundColor : NSColor.unemphasizedSelectedContentBackgroundColor).setFill()
+    path.fill()
+    NSColor.separatorColor.setStroke()
+    path.stroke()
+}
+
+/// Text plochého tlačítka lišty: tučný začátek (číslo klávesy, pořadí záložky)
+/// a popisek běžným písmem.
+/// - Parameters:
+///   - prefix: tučná část
+///   - title: popisek (může být prázdný)
+///   - color: barva textu
+func barButtonLabel(prefix: String, title: String, color: NSColor) -> NSAttributedString {
+    let text = NSMutableAttributedString(string: prefix, attributes: [.font: NSFont.boldSystemFont(ofSize: 11),
+                                                                      .foregroundColor: color])
+    if !title.isEmpty {
+        text.append(NSAttributedString(string: " " + title, attributes: [.font: NSFont.systemFont(ofSize: 11),
+                                                                         .foregroundColor: color]))
+    }
+    return text
 }
 
 /// Lišta s tlačítky příkazů (horní vodorovná nebo prostřední svislá).
@@ -260,24 +301,27 @@ final class DriveBar: NSView {
 
 /// Spodní lišta F-kláves; popisky odpovídají drženým modifikátorům.
 final class FunctionKeyBar: NSView {
-    /// Sada modifikátorů lišty (jako Salamander: žádný, Shift, Ctrl, Alt).
-    enum Layer {
-        case plain, shift, control, option
-    }
+    /// Sada modifikátorů lišty (jako Salamander: žádný, Shift, Ctrl, Alt; na
+    /// Macu navíc ⌘). ⌃ a ⌘ mají vlastní vrstvy – lišta ukazuje jen to, co
+    /// držený modifikátor s F-klávesou opravdu spustí.
+    enum Layer: CaseIterable {
+        case plain, shift, control, command, option
 
-    /// Modifikátory vrstvy (vrstvu Ctrl vyvolá ⌃ i ⌘).
-    private static func modifiers(of layer: Layer) -> [NSEvent.ModifierFlags] {
-        switch layer {
-        case .plain: return [[]]
-        case .shift: return [.shift]
-        case .control: return [.control, .command]
-        case .option: return [.option]
+        /// Modifikátor, který vrstvu vyvolá.
+        var modifiers: NSEvent.ModifierFlags {
+            switch self {
+            case .plain: return []
+            case .shift: return .shift
+            case .control: return .control
+            case .command: return .command
+            case .option: return .option
+            }
         }
     }
 
     /// Příkazy F1–F12 vrstvy podle platných klávesových zkratek (Nastavení › Klávesnice).
     static func entries(for layer: Layer) -> [Command?] {
-        (1...12).map { KeyBindings.functionKeyCommand(number: $0, modifiers: modifiers(of: layer)) }
+        (1...12).map { KeyBindings.functionKeyCommand(number: $0, modifiers: layer.modifiers) }
     }
 
     private var buttons: [FunctionKeyButton] = []
@@ -327,17 +371,9 @@ final class FunctionKeyBar: NSView {
 
     /// Přepne popisky podle modifikátorů (volá monitor flagsChanged).
     func update(modifiers: NSEvent.ModifierFlags) {
+        // Vrstva držená právě jedním modifikátorem; kombinace nechávají základní.
         let flags = Shortcut.relevantModifiers(modifiers)
-        let layer: Layer
-        if flags == .shift {
-            layer = .shift
-        } else if flags == .control || flags == .command {
-            layer = .control
-        } else if flags == .option {
-            layer = .option
-        } else {
-            layer = .plain
-        }
+        let layer = Layer.allCases.first { $0.modifiers == flags } ?? .plain
         // Překreslit jen při změně vrstvy (flagsChanged chodí i pro Caps Lock, fn…).
         if layer != currentLayer { setLayer(layer) }
     }
@@ -384,19 +420,9 @@ final class FunctionKeyButton: NSView {
 
     /// Rámeček, výplň a text; nepoužitá klávesa má jen šedé číslo.
     override func draw(_ dirtyRect: NSRect) {
-        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
-        // Neprůhledné barvy (controlColor je v tmavém režimu poloprůhledná a splývá s textem).
-        (pressed ? NSColor.selectedContentBackgroundColor : NSColor.unemphasizedSelectedContentBackgroundColor).setFill()
-        path.fill()
-        NSColor.separatorColor.setStroke()
-        path.stroke()
-
+        drawBarButtonBackground(in: bounds, highlighted: pressed)
         let textColor: NSColor = pressed ? .white : (isEnabled ? .labelColor : .tertiaryLabelColor)
-        let text = NSMutableAttributedString(string: "F\(number) ",
-                                             attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: textColor])
-        text.append(NSAttributedString(string: title,
-                                       attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: textColor]))
+        let text = barButtonLabel(prefix: "F\(number)", title: title, color: textColor)
         let size = text.size()
         text.draw(at: NSPoint(x: 5, y: (bounds.height - size.height) / 2))
     }

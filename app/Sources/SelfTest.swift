@@ -774,7 +774,42 @@ final class UIKeyCheck {
         check(!terminal.isExpanded && terminal.frame.height == lineHeight && controller.leftPanel.view?.isHiddenOrHasHiddenAncestor == false,
               "terminál: druhé ⌘F12 vrátí jeden řádek a panely")
         check(controller.command(forKey: f5) == .copy, "terminál: po návratu je F5 zase Kopírovat")
+        // Lišta F-kláves: ⌘F12 je vidět jen ve vrstvě ⌘ – s ⌃ F12 terminál nepřepíná.
+        check(FunctionKeyBar.entries(for: .command)[11] == .terminalFull && FunctionKeyBar.entries(for: .control)[11] == nil,
+              "lišta F-kláves: Terminál je na F12 jen s ⌘, ne s ⌃")
+        checkTerminalTabs(lineHeight: lineHeight, snapshot: snapshot)
         done()
+    }
+
+    /// Záložky terminálu: s jedinou záložkou lišta záložek není, druhá záložka ji
+    /// přidá, ⌥⌘→ / ⌥⌘← přepínají a zavření záložky vrátí původní vzhled.
+    /// - Parameters:
+    ///   - lineHeight: výška terminálu s jedinou záložkou (jeden řádek)
+    ///   - snapshot: začátek cesty volitelného snímku okna se dvěma záložkami
+    private func checkTerminalTabs(lineHeight: CGFloat, snapshot: String?) {
+        let terminal = controller.terminalPane
+        let content = controller.window?.contentView
+        let cmdT = event(17, Int(("t" as UnicodeScalar).value), [.command])
+        let next = event(KeyCode.right, NSRightArrowFunctionKey, [.command, .option])
+        check(controller.command(forKey: cmdT) == .terminalNewTab && controller.command(forKey: next) == .terminalNextTab,
+              "záložky terminálu: ⌘T = nová záložka, ⌥⌘→ = další záložka")
+        check(terminal.tabCount == 1, "záložky terminálu: na začátku je jediná záložka bez lišty")
+        controller.perform(.terminalNewTab)
+        content?.layoutSubtreeIfNeeded()
+        check(terminal.tabCount == 2 && terminal.frame.height == lineHeight + TerminalTabBar.height,
+              "záložky terminálu: druhá záložka přidá lištu záložek (\(terminal.frame.height) b.)")
+        // Volitelný snímek okna se dvěma záložkami.
+        if let snapshot {
+            controller.window?.displayIfNeeded()
+            controller.saveSnapshot(to: snapshot + "-zalozky.png")
+        }
+        controller.perform(.terminalNextTab)
+        controller.perform(.terminalCloseTab)
+        content?.layoutSubtreeIfNeeded()
+        check(terminal.tabCount == 1 && terminal.frame.height == lineHeight,
+              "záložky terminálu: po zavření záložky zmizí lišta a zůstane jeden řádek")
+        controller.perform(.terminalCloseTab)
+        check(terminal.tabCount == 1, "záložky terminálu: jedinou záložku zavřít nejde")
     }
 
     /// ⌃⇧. (druhý panel do aktuálního adresáře) a ⌃. (obráceně), i uvnitř ZIP archivu.

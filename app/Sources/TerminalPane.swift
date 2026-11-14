@@ -4,12 +4,16 @@
 // Vestavěný terminál hlavního okna (na místě dřívější příkazové řádky): login
 // shell uživatele v pseudoterminálu, vykreslený emulátorem SwiftTerm.
 // Terminál má stále velikost celé plochy okna pod nástrojovou lištou; v režimu
-// jednoho řádku je z něj vidět jen řádek s kurzorem (zbytek ořízne tento
-// pohled), v režimu celého okna (⌘F12) celý. Shell tak má pořád stejné rozměry
+// jednoho řádku je z něj vidět jen řádek s kurzorem (zbytek ořízne pohled
+// relace), v režimu celého okna (⌘F12) celý. Shell tak má pořád stejné rozměry
 // a výstup příkazů spuštěných z řádku je po přepnutí vidět celý.
 //
 // Adresář shellu sleduje aktivní panel (do nečinného shellu s prázdným řádkem
 // se napíše „cd“) a naopak – po „cd“ v terminálu okno přesune aktivní panel.
+//
+// Terminálů může být víc v záložkách (⌘T): TerminalSession je jeden shell,
+// TerminalPane drží záložky a ukazuje vybranou. Lišta záložek je vidět jen
+// při dvou a více záložkách – jediná záložka vypadá jako terminál bez záložek.
 
 import AppKit
 import Darwin
@@ -102,8 +106,9 @@ private enum ZshIntegration {
     }
 }
 
-/// Vestavěný terminál: ořezový pohled s terminálem SwiftTerm uvnitř.
-final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
+/// Jedna relace terminálu (záložka): ořezový pohled s terminálem SwiftTerm
+/// a shellem uvnitř.
+final class TerminalSession: NSView, LocalProcessTerminalViewDelegate {
     /// Terminál se shellem (cíl fokusu klávesnice).
     let terminalView = ShellTerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 400))
 
@@ -111,20 +116,25 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
     var onDirectoryChanged: ((String) -> Void)?
     /// Doběhl příkaz spuštěný uživatelem – okno znovu načte panely.
     var onCommandFinished: (() -> Void)?
-    /// Shell skončil (exit, ⌃D) a spouští se nový – okno opustí režim celého okna.
+    /// Shell skončil (exit, ⌃D). Co dál – nový shell (restartShell), nebo
+    /// zavření záložky – rozhodne ten, kdo relaci drží.
     var onShellExited: (() -> Void)?
+    /// Změnil se název relace (adresář shellu) – lišta záložek se překreslí.
+    var onTitleChanged: (() -> Void)?
     /// Adresář pro nově spouštěný shell (adresář aktivního panelu).
     var startDirectory: (() -> String?)?
 
     /// Výška pohledu v režimu jednoho řádku (= výška řádku terminálu).
-    private(set) var lineHeightConstraint: NSLayoutConstraint!
+    private var lineHeightConstraint: NSLayoutConstraint!
     /// Svislý posun terminálu uvnitř pohledu (řádek s kurzorem nahoru).
     private var topConstraint: NSLayoutConstraint!
     /// Terminál je roztažený na celé okno (⌘F12); jinak je vidět jeden řádek.
-    private(set) var isExpanded = false
+    private var isExpanded = false
 
     /// Adresář shellu při jeho posledním klidu (prázdný = shell se ještě nespustil).
-    private var shellDirectory = ""
+    private var shellDirectory = "" {
+        didSet { if shellDirectory != oldValue { onTitleChanged?() } }
+    }
     /// Adresář, o který okno požádalo naposledy, nebo do kterého shell přešel
     /// sám – opakovaná žádost o tentýž adresář se ignoruje (neúspěšné „cd“ se
     /// tak nezkouší znovu při každém překreslení okna).
@@ -174,6 +184,8 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
         terminalView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         // ⌥ na české klávesnici píše znaky (@, #, [, ], {, }, |…), ne Meta.
         terminalView.optionAsMetaKey = false
+        // Kurzor trvale svítí (neblikající blok).
+        terminalView.getTerminal().setCursorStyle(.steadyBlock)
         terminalView.processDelegate = self
         terminalView.onOutput = { [weak self] in self?.outputArrived() }
         terminalView.onPaste = { [weak self] text in self?.notePaste(text) }
@@ -186,6 +198,7 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
             terminalView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.horizontalInset),
             terminalView.trailingAnchor.constraint(equalTo: trailingAnchor),
             topConstraint,
+            lineHeightConstraint,
         ])
         applyExpandedAppearance()
     }
@@ -196,9 +209,15 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
 
     /// Sváže výšku terminálu s výškou plochy, kterou zabírá v režimu celého okna
     /// (terminál ji má pořád, i když je z něj vidět jen jeden řádek).
-    /// - Parameter expandedHeight: výška plochy okna pro roztažený terminál
+    /// - Parameter expandedHeight: výška plochy roztaženého terminálu
     func bind(expandedHeight: NSLayoutDimension) {
         terminalView.heightAnchor.constraint(equalTo: expandedHeight).isActive = true
+    }
+
+    /// Název relace na záložce: jméno adresáře shellu („~“ = domovský adresář).
+    var title: String {
+        if shellDirectory.isEmpty { return "shell" }
+        return shellDirectory == NSHomeDirectory() ? "~" : lastComponent(shellDirectory)
     }
 
     // MARK: - Rozvržení a vzhled
@@ -236,6 +255,8 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
     /// Přepne mezi jedním řádkem a celým oknem (rozložení okna mění kontroler).
     func setExpanded(_ expanded: Bool) {
         isExpanded = expanded
+        // Roztažená relace vyplní plochu, kterou jí dá nadřazený pohled.
+        lineHeightConstraint.isActive = !expanded
         applyExpandedAppearance()
         // V jednom řádku je vidět konec výstupu, ne místo, kam se listovalo.
         if !expanded {
@@ -427,6 +448,11 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
         }
     }
 
+    /// Spustí nový shell po skončení předchozího (rozhodnutí z onShellExited).
+    func restartShell() {
+        startShell()
+    }
+
     /// Spustí login shell uživatele v adresáři aktivního panelu.
     private func startShell() {
         guard !isShutDown else { return }
@@ -453,7 +479,7 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
         waitsForRestart = false
     }
 
-    /// Ukončí shell (zavření okna); nový se už nespustí.
+    /// Ukončí shell (zavření okna nebo záložky); nový se už nespustí.
     func shutdown() {
         isShutDown = true
         resetShellState()
@@ -475,7 +501,10 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
 
     /// Výstup terminálu: posun na řádek s kurzorem a odložená kontrola klidu.
     private func outputArrived() {
-        updatePosition()
+        // Skrytá záložka se neposouvá – polohu dopočítá rozvržení po jejím výběru.
+        if !isHidden {
+            updatePosition()
+        }
         lastOutput = ProcessInfo.processInfo.systemUptime
         scheduleIdleCheck(after: Self.idleCheckDelay)
     }
@@ -641,8 +670,9 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
         reportedDirectory = url.path
     }
 
-    /// Shell skončil: spustí se nový; jen shell, který skončil hned po startu,
-    /// počká na klávesu (nespouští se dokola).
+    /// Shell skončil: ohlásí se to (nový shell nebo zavření záložky rozhodne
+    /// onShellExited); jen shell, který skončil hned po startu, počká na
+    /// klávesu (nespouští se dokola).
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         guard !isShutDown else { return }
         let lifetime = Date().timeIntervalSince(startedAt)
@@ -653,7 +683,369 @@ final class TerminalPane: NSView, LocalProcessTerminalViewDelegate {
             updatePosition()
         } else {
             onShellExited?()
-            startShell()
         }
     }
+}
+
+/// Tlačítko lišty záložek terminálu: číslo a název relace s křížkem pro
+/// zavření, nebo „+“ pro novou záložku. Vzhled má společný s lištou F-kláves.
+final class TerminalTabButton: NSView {
+    private let isSelected: Bool
+    private let closable: Bool
+    /// Text záložky (tlačítko se nemění, lišta ho při změně vytvoří znovu).
+    private let label: NSAttributedString
+    /// Klik na záložku (mimo křížek).
+    var onClick: (() -> Void)?
+    /// Klik na křížek.
+    var onClose: (() -> Void)?
+
+    /// Šířka plochy křížku na pravém okraji záložky.
+    private static let closeWidth: CGFloat = 18
+    /// Nejvyšší šířka záložky (delší název se zkrátí).
+    private static let maximumWidth: CGFloat = 220
+
+    /// - Parameters:
+    ///   - number: tučný text před názvem (pořadí záložky, u tlačítka nové záložky „+“)
+    ///   - title: název relace
+    ///   - isSelected: vybraná záložka
+    ///   - closable: kreslit křížek pro zavření
+    init(number: String, title: String, isSelected: Bool, closable: Bool) {
+        self.isSelected = isSelected
+        self.closable = closable
+        label = barButtonLabel(prefix: number, title: title, color: isSelected ? .white : .labelColor)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        setContentHuggingPriority(.required, for: .horizontal)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Není podporováno")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let width = ceil(label.size().width) + 14 + (closable ? Self.closeWidth : 0)
+        return NSSize(width: min(width, Self.maximumWidth), height: NSView.noIntrinsicMetric)
+    }
+
+    /// Podklad, text (dlouhý se zkrátí) a křížek.
+    override func draw(_ dirtyRect: NSRect) {
+        drawBarButtonBackground(in: bounds, highlighted: isSelected)
+        let size = label.size()
+        let textWidth = bounds.width - 12 - (closable ? Self.closeWidth : 0)
+        label.draw(with: NSRect(x: 6, y: (bounds.height - size.height) / 2, width: textWidth, height: size.height),
+                   options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        if closable {
+            let cross = NSAttributedString(string: "×", attributes: [
+                .font: NSFont.systemFont(ofSize: 12), .foregroundColor: isSelected ? NSColor.white : NSColor.secondaryLabelColor,
+            ])
+            let crossSize = cross.size()
+            cross.draw(at: NSPoint(x: bounds.maxX - Self.closeWidth + (Self.closeWidth - crossSize.width) / 2 - 2,
+                                   y: (bounds.height - crossSize.height) / 2))
+        }
+    }
+
+    /// Leží bod v ploše křížku?
+    private func isOnClose(_ event: NSEvent) -> Bool {
+        closable && convert(event.locationInWindow, from: nil).x >= bounds.maxX - Self.closeWidth
+    }
+
+    /// Stisk začal na křížku (zavření platí, jen když na něm myš i skončí).
+    private var pressedOnClose = false
+
+    override func mouseDown(with event: NSEvent) {
+        pressedOnClose = isOnClose(event)
+    }
+
+    /// Klik platí, jen když se myš pustí nad tlačítkem (jako u lišty F-kláves):
+    /// na křížku zavře záložku, jinde ji vybere.
+    override func mouseUp(with event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        if pressedOnClose && isOnClose(event) {
+            onClose?()
+        } else if !pressedOnClose {
+            onClick?()
+        }
+    }
+}
+
+/// Lišta záložek terminálu (vidět jen při dvou a více záložkách).
+final class TerminalTabBar: NSView {
+    /// Výška lišty.
+    static let height: CGFloat = 20
+
+    /// Výběr záložky (index), zavření záložky (index) a nová záložka.
+    var onSelect: ((Int) -> Void)?
+    var onClose: ((Int) -> Void)?
+    var onAdd: (() -> Void)?
+
+    private let stack = NSStackView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        stack.orientation = .horizontal
+        stack.spacing = 2
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Není podporováno")
+    }
+
+    /// Přestaví lištu: záložky s pořadím a názvem a na konci tlačítko „+“.
+    /// - Parameters:
+    ///   - titles: názvy relací v pořadí záložek
+    ///   - selected: index vybrané záložky
+    func setTabs(_ titles: [String], selected: Int) {
+        stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        for (index, title) in titles.enumerated() {
+            let button = TerminalTabButton(number: "\(index + 1)", title: title, isSelected: index == selected, closable: true)
+            button.toolTip = "Terminál \(index + 1): \(title)"
+            button.onClick = { [weak self] in self?.onSelect?(index) }
+            button.onClose = { [weak self] in self?.onClose?(index) }
+            stack.addArrangedSubview(button)
+        }
+        let add = TerminalTabButton(number: "+", title: "", isSelected: false, closable: false)
+        add.toolTip = "Nová záložka terminálu"
+        add.onClick = { [weak self] in self?.onAdd?() }
+        stack.addArrangedSubview(add)
+    }
+}
+
+/// Vestavěný terminál hlavního okna: jedna nebo více relací (záložek), z nichž
+/// je vidět vybraná. Oknu nabízí rozhraní jednoho terminálu – volání předává
+/// vybrané relaci.
+final class TerminalPane: NSView {
+    /// Uživatel změnil adresář shellu ve vybrané záložce (cd) – okno přesune aktivní panel.
+    var onDirectoryChanged: ((String) -> Void)?
+    /// Doběhl příkaz spuštěný uživatelem (v kterékoli záložce) – okno znovu načte panely.
+    var onCommandFinished: (() -> Void)?
+    /// Skončil shell jediné záložky a spouští se nový – okno opustí režim celého okna.
+    var onShellExited: (() -> Void)?
+    /// Adresář pro nově spouštěný shell (adresář aktivního panelu).
+    var startDirectory: (() -> String?)?
+
+    /// Terminál je roztažený na celé okno (⌘F12); jinak je vidět jeden řádek.
+    private(set) var isExpanded = false
+
+    /// Relace v pořadí záložek (vždy aspoň jedna) a index vybrané.
+    private var sessions: [TerminalSession] = []
+    private var selectedIndex = 0
+    private let tabBar = TerminalTabBar()
+    /// Výška lišty záložek (0 = lišta skrytá, záložka je jen jedna).
+    private var tabBarHeight: NSLayoutConstraint!
+    /// Plocha, kterou má relace při terminálu roztaženém na celé okno: plocha
+    /// okna pro terminál bez lišty záložek. Tuto výšku mají terminály všech relací.
+    private let sessionArea = NSLayoutGuide()
+    /// Výška sessionArea = plocha okna pro terminál − výška lišty záložek.
+    private var sessionAreaHeight: NSLayoutConstraint?
+    /// Adresář aktivního panelu, o který okno požádalo naposledy – dostane ho
+    /// i záložka vybraná později.
+    private var panelDirectory: String?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        addLayoutGuide(sessionArea)
+        tabBar.isHidden = true
+        tabBar.onSelect = { [weak self] index in self?.selectTab(index, focus: true) }
+        tabBar.onClose = { [weak self] index in self?.closeTab(at: index) }
+        tabBar.onAdd = { [weak self] in self?.addTab() }
+        addSubview(tabBar)
+        tabBarHeight = tabBar.heightAnchor.constraint(equalToConstant: 0)
+        NSLayoutConstraint.activate([
+            tabBar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            tabBar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            tabBar.topAnchor.constraint(equalTo: topAnchor),
+            tabBarHeight,
+        ])
+        sessions = [makeSession()]
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Není podporováno")
+    }
+
+    /// Vybraná relace.
+    private var current: TerminalSession { sessions[selectedIndex] }
+
+    /// Počet záložek.
+    var tabCount: Int { sessions.count }
+
+    // MARK: - Záložky
+
+    /// Vytvoří relaci, napojí ji na okno a vloží pod lištu záložek.
+    private func makeSession() -> TerminalSession {
+        let session = TerminalSession()
+        session.startDirectory = { [weak self] in self?.startDirectory?() }
+        // Panel vede jen vybraná záložka; „cd“ v záložce na pozadí ho nepřesouvá.
+        session.onDirectoryChanged = { [weak self, weak session] directory in
+            guard let self, let session, session === self.current else { return }
+            self.onDirectoryChanged?(directory)
+        }
+        session.onCommandFinished = { [weak self] in self?.onCommandFinished?() }
+        session.onTitleChanged = { [weak self] in self?.updateTabBar() }
+        session.onShellExited = { [weak self, weak session] in
+            guard let self, let session else { return }
+            self.shellExited(in: session)
+        }
+        addSubview(session)
+        NSLayoutConstraint.activate([
+            session.leadingAnchor.constraint(equalTo: leadingAnchor),
+            session.trailingAnchor.constraint(equalTo: trailingAnchor),
+            session.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
+            session.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        session.bind(expandedHeight: sessionArea.heightAnchor)
+        session.setExpanded(isExpanded)
+        session.applyColors()
+        return session
+    }
+
+    /// ⌘T – nová záložka s vlastním shellem v adresáři aktivního panelu;
+    /// dostane fokus.
+    func addTab() {
+        sessions.append(makeSession())
+        selectTab(sessions.count - 1, focus: true)
+    }
+
+    /// Zavře vybranou záložku (jediná záložka zavřít nejde).
+    func closeCurrentTab() {
+        closeTab(at: selectedIndex)
+    }
+
+    /// Vybere sousední záložku (dokola).
+    /// - Parameter offset: +1 další, −1 předchozí
+    func selectAdjacentTab(offset: Int) {
+        guard sessions.count > 1 else { return }
+        selectTab(DriveChooser.wrappedIndex(selectedIndex, delta: offset, count: sessions.count), focus: hasFocus)
+    }
+
+    /// Ukáže záložku s daným indexem; ostatní relace běží dál na pozadí.
+    /// - Parameters:
+    ///   - index: index záložky
+    ///   - focus: předat vybrané relaci fokus klávesnice
+    private func selectTab(_ index: Int, focus: Bool) {
+        guard sessions.indices.contains(index) else { return }
+        selectedIndex = index
+        for (sessionIndex, session) in sessions.enumerated() {
+            session.isHidden = sessionIndex != index
+        }
+        // Záložka na pozadí se neposouvala na řádek s kurzorem – dopočítá to rozvržení.
+        current.needsLayout = true
+        updateTabBar()
+        // Vybraný shell jde za adresářem aktivního panelu jako jediný terminál.
+        if let panelDirectory {
+            current.requestDirectory(panelDirectory)
+        }
+        if focus {
+            current.focus()
+        }
+    }
+
+    /// Zavře záložku: ukončí její shell a vybere sousední. Poslední záložka zůstává.
+    private func closeTab(at index: Int) {
+        guard sessions.count > 1, sessions.indices.contains(index) else { return }
+        let session = sessions[index]
+        // Fokus zůstane v terminálu, pokud v něm byl (v roztaženém terminálu vždy).
+        let keepFocus = hasFocus || isExpanded
+        session.shutdown()
+        session.removeFromSuperview()
+        sessions.remove(at: index)
+        let selected = index < selectedIndex ? selectedIndex - 1 : min(selectedIndex, sessions.count - 1)
+        selectTab(selected, focus: keepFocus)
+    }
+
+    /// Shell relace skončil (exit, ⌃D): záložka, která není jediná, se zavře;
+    /// jediná dostane nový shell a okno se o tom dozví.
+    private func shellExited(in session: TerminalSession) {
+        if sessions.count > 1 {
+            // Zavření až po doběhnutí oznámení o konci procesu, ze kterého se volá.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let index = self.sessions.firstIndex(where: { $0 === session }) else { return }
+                self.closeTab(at: index)
+            }
+        } else {
+            onShellExited?()
+            session.restartShell()
+        }
+    }
+
+    /// Lišta záložek podle počtu relací: s jedinou záložkou není vidět a nezabírá
+    /// místo, jinak ukáže pořadí a názvy relací.
+    private func updateTabBar() {
+        let visible = sessions.count > 1
+        let height = visible ? TerminalTabBar.height : 0
+        if tabBarHeight.constant != height {
+            tabBarHeight.constant = height
+            tabBar.isHidden = !visible
+            sessionAreaHeight?.constant = -height
+        }
+        if visible {
+            tabBar.setTabs(sessions.map(\.title), selected: selectedIndex)
+        }
+    }
+
+    // MARK: - Rozhraní pro okno
+
+    /// Sváže výšku terminálů s výškou plochy, kterou zabírají v režimu celého okna.
+    /// - Parameter expandedHeight: výška plochy okna pro roztažený terminál
+    func bind(expandedHeight: NSLayoutDimension) {
+        let constraint = sessionArea.heightAnchor.constraint(equalTo: expandedHeight, constant: -tabBarHeight.constant)
+        constraint.isActive = true
+        sessionAreaHeight = constraint
+    }
+
+    /// Přepne mezi jedním řádkem a celým oknem (rozložení okna mění kontroler).
+    func setExpanded(_ expanded: Bool) {
+        isExpanded = expanded
+        sessions.forEach { $0.setExpanded(expanded) }
+    }
+
+    /// Barvy terminálů podle barevného schématu panelů.
+    func applyColors() {
+        sessions.forEach { $0.applyColors() }
+    }
+
+    /// Ukončí shelly všech záložek (zavření okna).
+    func shutdown() {
+        sessions.forEach { $0.shutdown() }
+    }
+
+    /// Požádá vybraný terminál o přechod do adresáře aktivního panelu.
+    func requestDirectory(_ directory: String) {
+        panelDirectory = directory
+        current.requestDirectory(directory)
+    }
+
+    /// Má vybraný terminál fokus klávesnice?
+    var hasFocus: Bool { current.hasFocus }
+    /// Je na řádku vybraného shellu rozepsaný text?
+    var hasPendingInput: Bool { current.hasPendingInput }
+    /// Je vybraný shell nečinný (čeká na příkaz)?
+    var isShellIdle: Bool { current.isShellIdle }
+    /// Text obrazovky vybraného terminálu (pro kontrolu v testech).
+    var screenText: String { current.screenText }
+
+    /// Předá vybranému terminálu fokus klávesnice.
+    func focus() { current.focus() }
+    /// Zaznamená klávesu předávanou vybranému terminálu.
+    func noteKey(_ event: NSEvent) { current.noteKey(event) }
+    /// Vloží text na řádek vybraného shellu.
+    func insert(_ text: String) { current.insert(text) }
+    /// Smaže rozepsaný řádek vybraného shellu.
+    func clearInput() { current.clearInput() }
+    /// Je vybraný shell v daném adresáři?
+    func isShellDirectory(_ directory: String) -> Bool { current.isShellDirectory(directory) }
+
+    /// Spustí příkaz ve vybraném shellu v daném adresáři.
+    /// - Returns: false, když v terminálu běží jiný program nebo je na řádku rozepsaný text
+    func run(_ command: String, in directory: String) -> Bool { current.run(command, in: directory) }
 }
