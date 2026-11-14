@@ -443,7 +443,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **Přetažení myší ven z aplikace:** položku (nebo všechny označené, pokud se
   táhne za označenou) lze přetáhnout do Finderu, Zpráv (iMessage), Mailu
   a dalších aplikací ve všech režimech zobrazení; tažení začne po posunu myši
-  o pár bodů. Jen soubory z lokálního disku (ne z archivu či FTP/SFTP).
+  o pár bodů. Cíl soubory zkopíruje, se stisknutým ⌘ je přesune (stejně jako
+  při přetažení do panelu), s ⌃ vytvoří odkaz; puštěním na Koš v Docku se
+  přesunou do koše. Jen soubory z lokálního disku (ne z archivu či FTP/SFTP).
 - **Přetažení myší do panelu:** soubory a adresáře přetažené z jiné aplikace
   (Finder a další) se zkopírují do adresáře panelu, nad
   kterým se pustí (i na FTP/SFTP server); se stisknutým ⌘ se přesunou. Přijímají
@@ -451,6 +453,11 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   z prohlížeče) – ty zapisuje zdrojová aplikace, proto jen do adresáře na
   lokálním disku. Do archivu přetáhnout nelze (je jen pro čtení); přetahování
   mezi panely MicroCommanderu není – k tomu slouží F5 / F6 nebo schránka.
+  U souboru přetaženého (nebo vloženého ze schránky) ze složky, kterou macOS
+  nedovolí vypsat – typicky z Koše bez Plného přístupu k disku – se čte jen
+  soubor sám, složka se nevypisuje; odepře-li systém i soubor, hlášení poradí
+  povolit MicroCommander v Nastavení systému › Soukromí a zabezpečení › Plný
+  přístup k disku.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (schránka souborů, operace, Finder,
   kopírovat cestu).
@@ -552,9 +559,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 
 ### Testy
 
-- `make test` – 50 unit testů jádra (masky, cesty, operace včetně přesunu
+- `make test` – 51 unit testů jádra (masky, cesty, operace včetně přesunu
   v jednom VFS, konfliktů a přeskakování, symbolických odkazů, odmítnutí
-  přenosu do téhož adresáře a úklidu po zrušení, hledání včetně obsahu
+  přenosu do téhož adresáře, kopie z adresáře, který nejde vypsat,
+  a úklidu po zrušení, hledání včetně obsahu
   souborů, HEX a regulárních výrazů, hledání v archivech ZIP / TAR / TAR.GZ
   včetně obsahu, poškozeného a zaheslovaného archivu, ZIP včetně adresářových záznamů, TAR
   plain i TAR.GZ včetně rekurzivního rozbalení, dlouhých jmen, PAX hlaviček

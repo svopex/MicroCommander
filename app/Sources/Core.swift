@@ -109,6 +109,12 @@ enum CoreError: LocalizedError {
         return false
     }
 
+    /// Je to odepřený přístup (práva souboru, ochrana soukromí macOS)?
+    var isPermissionDenied: Bool {
+        if case .code(let code, _) = self, code == SAL_ERR_PERMISSION { return true }
+        return false
+    }
+
     /// Je to konflikt existujícího cíle (UI se pak ptá na přepsání)?
     var isExistsConflict: Bool {
         if case .code(let code, _) = self, code == SAL_ERR_EXISTS { return true }

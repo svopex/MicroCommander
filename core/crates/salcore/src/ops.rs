@@ -372,7 +372,16 @@ fn transfer_items(
 ) -> SalResult<TransferStats> {
     check_destination(src, src_dir, names, dst, dst_dir)?;
     // Výpis zdrojového adresáře jednou: druhy a velikosti vybraných položek.
-    let listed = src.list(src_dir)?;
+    // Adresář, který systém nedovolí vypsat (Koš na macOS), může jednotlivé
+    // položky přesto zpřístupnit (soubor přetažený z Finderu) – zjistí se po jedné.
+    // VFS, který to neumí, skončí původním odepřeným přístupem.
+    let listed = match src.list(src_dir) {
+        Err(SalError::PermissionDenied) => names
+            .iter()
+            .map(|name| src.item(&join_path(src_dir, name))?.ok_or(SalError::PermissionDenied))
+            .collect::<SalResult<Vec<_>>>()?,
+        other => other?,
+    };
     let items = select_items(&listed, names);
     if items.len() < names.len() {
         return Err(SalError::NotFound);
@@ -486,6 +495,25 @@ mod tests {
         let src = LocalFs::new(src_dir.to_str()).unwrap();
         let dst = LocalFs::new(dst_dir.to_str()).unwrap();
         (src, dst, src_dir, dst_dir)
+    }
+
+    /// Zdrojový adresář nejde vypsat (práva jen pro průchod – jako Koš na
+    /// macOS), jednotlivý soubor ale číst lze: kopírování projde, jméno,
+    /// které v adresáři není, skončí chybou „nenalezeno“.
+    #[cfg(unix)]
+    #[test]
+    fn test_copy_from_unlistable_directory() {
+        use std::os::unix::fs::PermissionsExt;
+        let (src, dst, src_path, _dst_path) = prepare("unlistable");
+        fs::set_permissions(&src_path, fs::Permissions::from_mode(0o300)).unwrap();
+        let copied = copy_items(&src, "/", &["a.txt"], &dst, "/", OverwriteMode::Ask, &mut NoProgress);
+        let missing = copy_items(&src, "/", &["neni.txt"], &dst, "/", OverwriteMode::Ask, &mut NoProgress);
+        // Práva vrátit před kontrolami, aby šel adresář po testu smazat.
+        fs::set_permissions(&src_path, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(copied.unwrap().files, 1);
+        assert!(dst.exists("/a.txt").unwrap());
+        assert_eq!(missing.unwrap_err(), SalError::NotFound);
+        fs::remove_dir_all(src_path.parent().unwrap()).unwrap();
     }
 
     #[test]

@@ -304,6 +304,13 @@ impl Vfs for LocalFs {
         Ok(())
     }
 
+    fn item(&self, path: &str) -> SalResult<Option<VfsItem>> {
+        // Stejná metadata jako ve výpisu (odkaz zůstává odkazem), jméno z cesty.
+        let (_, name) = crate::vfs::split_path(path);
+        let metadata = fs::symlink_metadata(self.disk_path(path))?;
+        Ok(Some(metadata_to_item(&name, &metadata)))
+    }
+
     fn dir_identity(&self, dir: &str) -> Option<String> {
         // Skutečná cesta s rozvinutými odkazy: tentýž adresář může být dosažitelný
         // víc cestami (např. `/tmp` a `/private/tmp`) i přes VFS s jiným kořenem.

@@ -1438,6 +1438,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                         return
                     }
                     // Dotaz zrušen – panely níže ukážou, co se stihlo přenést.
+                case .failure(let error as CoreError) where error.isPermissionDenied:
+                    // Odepřený přístup ke zdroji bývá ochrana soukromí macOS (Koš,
+                    // Mail, jiné aplikace) – hlášení poradí, kde přístup povolit.
+                    self.showAlert(title: verb, text: error.localizedDescription + "\n\nPokud jde o složku chráněnou systémem macOS "
+                                   + "(například Koš), povolte MicroCommander v Nastavení systému › Soukromí "
+                                   + "a zabezpečení › Plný přístup k disku.")
                 case .failure(let error):
                     self.showErrorUnlessCancelled(title: verb, error)
                 case .success:

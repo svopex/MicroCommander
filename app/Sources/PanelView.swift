@@ -871,33 +871,52 @@ extension PanelView {
                     return
                 }
                 self.panel.focus(name: url.lastPathComponent)
-                let reload = #selector(self.reloadAfterPromisedFiles)
-                NSObject.cancelPreviousPerformRequests(withTarget: self, selector: reload, object: nil)
-                self.perform(reload, with: nil, afterDelay: 0.3)
+                self.scheduleReload(after: 0.3)
             }
         }
         return true
     }
 
-    /// Obnoví panel po doručení přislíbených souborů (odložené volání z performDragOperation).
-    @objc private func reloadAfterPromisedFiles() {
+    /// Naplánuje obnovení panelu za chvíli; další naplánování to předchozí
+    /// nahradí (jedno obnovení za dávku souborů, po operaci, kterou dokončuje
+    /// jiná aplikace).
+    /// - Parameter delay: prodleva v sekundách
+    private func scheduleReload(after delay: TimeInterval) {
+        let reload = #selector(reloadDeferred)
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: reload, object: nil)
+        perform(reload, with: nil, afterDelay: delay)
+    }
+
+    /// Odložené obnovení panelu (viz scheduleReload).
+    @objc private func reloadDeferred() {
         panel.reload()
     }
 }
 
-/// Přetahování souborů z panelu: ven z aplikace kopie/odkaz/přesun podle cíle
-/// (Finder, Zprávy, Mail…); mezi panely aplikace se nepřetahuje.
+/// Přetahování souborů z panelu ven z aplikace (Finder, Zprávy, Mail…): cíl
+/// soubory zkopíruje, se stisknutým ⌘ přesune (stejně jako při přetažení do
+/// panelu); mezi panely aplikace se nepřetahuje.
 extension PanelView: NSDraggingSource {
     func draggingSession(_ session: NSDraggingSession,
                          sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .outsideApplication ? [.copy, .link, .generic, .move] : []
+        // Systém masku podle kláves zúží sám: ⌘ nechá jen „generic“ (cíl přesune),
+        // ⌥ jen kopii, ⌃ jen odkaz. Přesun (.move) se záměrně nenabízí – Finder by
+        // pak na stejném svazku přesouval i bez ⌘ a klávesa by nic neměnila.
+        // „delete“ je pro Koš v Docku: smazání pak provede zdroj (viz endedAt).
+        context == .outsideApplication ? [.copy, .link, .generic, .delete] : []
     }
 
-    /// Po přesunu (např. do Koše) se panel obnoví.
+    /// Konec tažení: po puštění na Koš (cíl hlásí „delete“ a smazání nechává na
+    /// zdroji) se tažené soubory přesunou do koše; po přesunu se panel obnoví –
+    /// až za chvíli, protože cíl přesun dokončuje po skončení tažení.
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        if operation.contains(.move) || operation.contains(.delete) {
-            panel.reload()
+        guard !operation.isDisjoint(with: [.generic, .move, .delete]) else { return }
+        if operation.contains(.delete) {
+            for path in FileClipboard.paths(from: session.draggingPasteboard) {
+                try? FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+            }
         }
+        scheduleReload(after: 1)
     }
 }
 

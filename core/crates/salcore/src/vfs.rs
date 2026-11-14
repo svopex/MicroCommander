@@ -202,6 +202,14 @@ pub trait Vfs: Send + Sync {
         Err(SalError::Io("Souborový systém nepodporuje symbolické odkazy.".to_string()))
     }
 
+    /// Údaje o jedné položce zjištěné bez výpisu nadřazeného adresáře.
+    /// Slouží přenosu ze složky, kterou systém nedovolí vypsat, i když
+    /// jednotlivou položku zpřístupní (Koš na macOS po přetažení souboru).
+    /// `Ok(None)` = VFS to neumí; chybějící nebo nepřístupná položka je chyba.
+    fn item(&self, _path: &str) -> SalResult<Option<VfsItem>> {
+        Ok(None)
+    }
+
     /// Identita adresáře `dir` napříč instancemi VFS nad stejným úložištěm
     /// (dva lokální VFS, dvě připojení k témuž serveru): stejný řetězec =
     /// tentýž adresář. Podle ní se odmítá přenos do zdrojového adresáře.
