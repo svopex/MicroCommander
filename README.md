@@ -449,8 +449,11 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   o pár bodů. Platí zvyklosti macOS a rozhoduje cíl: Finder na stejném disku
   soubory přesune a se stisknutým ⌥ (Option) zkopíruje, na jiný disk je
   zkopíruje a s ⌘ přesune, s ⌃ vytvoří odkaz; puštěním na Koš v Docku se
-  přesunou do koše. Tažení se stisknutým ⌘ označení položek nemění. Jen soubory
-  z lokálního disku (ne z archivu či FTP/SFTP).
+  přesunou do koše. Tažení se stisknutým ⌘ označení položek nemění. Aby se
+  kurzor u cíle (zelené plus = kopie) po stisku či puštění klávesy změnil hned,
+  i když myš stojí, vloží panel při změně kláves do fronty událostí umělé
+  nepatrné pohnutí myší (bez něj se kurzor měnil až s dalším pohybem). Jen
+  soubory z lokálního disku (ne z archivu či FTP/SFTP).
 - **Přetažení myší mezi panely:** položky lze přetáhnout do druhého panelu
   (i do panelu jiného okna) se stejnými pravidly jako ve Finderu: na stejném
   disku se přesunou, s ⌥ zkopírují; na jiný disk nebo na FTP/SFTP server se
@@ -610,7 +613,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   vložení z více adresářů, duplikát v témže adresáři, přesun, registrace
   panelu pro přetažení – systémové schránky se nedotkne), tažení mezi panely
   (odmítnutí tažení do téhož panelu, přesun na stejném svazku, kopie s ⌥,
-  přesun s ⌘), zkratky trvalého mazání (⇧F8, ⌘F8) a koš podle svazku;
+  přesun s ⌘, umělé pohnutí myší při změně klávesy během tažení ven), zkratky
+  trvalého mazání (⇧F8, ⌘F8) a koš podle svazku;
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`
   zapíše každý stisk (kód klávesy, znak, modifikátory, fokus) do

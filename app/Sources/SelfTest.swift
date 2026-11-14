@@ -848,6 +848,17 @@ final class UIKeyCheck {
         check([Command.clipboardCopy, .clipboardCut, .clipboardPaste].allSatisfy { tags.contains(MainWindowController.menuCommandIndex($0)) },
               "schránka: kontextové menu panelu nabízí Kopírovat / Vyjmout / Vložit")
         check(view.registeredDraggedTypes.contains(.fileURL), "přetažení: panel přijímá soubory z jiné aplikace")
+        // Tažení ven: změna klávesy vloží do fronty událostí umělé pohnutí myší se
+        // stavem kláves; smyčka tažení si ho z fronty vyzvedne (jako AppKit: maska
+        // tažení myší, režim sledování).
+        let nudge = DragModifierWatcher.nudgeEvents(flags: .maskAlternate)
+        check(nudge.count == 2 && nudge.allSatisfy { $0.type == .leftMouseDragged && $0.modifierFlags.contains(.option) }
+              && nudge.first?.cgEvent?.location.x == (nudge.last?.cgEvent?.location.x ?? 0) + 1,
+              "přetažení: změna klávesy vytvoří dvě události tažení (o bod vedle a zpět) se stavem kláves")
+        if let first = nudge.first { NSApp.postEvent(first, atStart: true) }
+        let queued = NSApp.nextEvent(matching: .leftMouseDragged, until: .distantPast, inMode: .eventTracking, dequeue: true)
+        check(queued?.modifierFlags.contains(.option) == true && queued?.cgEvent?.flags.contains(.maskAlternate) == true,
+              "přetažení: umělou událost lze vyzvednout z fronty událostí aplikace")
         // Trvalé mazání: ⇧F8 i ⌘F8; koš se nabízí jen tam, kde ho svazek má.
         let cmdF8 = event(KeyCode.functionKeys[7], NSF8FunctionKey, [.command])
         let shiftF8 = event(KeyCode.functionKeys[7], NSF8FunctionKey, [.shift])

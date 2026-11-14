@@ -40,6 +40,8 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     /// soubory) a zda tažené soubory leží na stejném svazku jako adresář panelu;
     /// zjišťuje se jednou při vstupu tažení, ne při každém pohybu myši.
     private var dragContent = (hasFiles: false, hasPromises: false, sameVolume: false)
+    /// Hlídání kláves ⌥ / ⌘ / ⌃ během tažení z panelu (viz DragModifierWatcher).
+    private var dragModifierWatcher: DragModifierWatcher?
 
     /// Režim zobrazení panelu (⌥1–⌥6); Podrobný a Typy = tabulka, jinak mřížka.
     var viewMode: ViewMode = .detailed {
@@ -935,10 +937,17 @@ extension PanelView: NSDraggingSource {
         Self.offeredDragOperations
     }
 
+    /// Začátek tažení: po dobu tažení se hlídají klávesy, aby se kurzor u cíle
+    /// (zelené plus kopie) změnil hned po stisku, ne až po pohybu myší.
+    func draggingSession(_ session: NSDraggingSession, willBeginAt screenPoint: NSPoint) {
+        dragModifierWatcher = DragModifierWatcher()
+    }
+
     /// Konec tažení: po puštění na Koš (cíl hlásí „delete“ a smazání nechává na
     /// zdroji) se tažené soubory přesunou do koše; po přesunu se panel obnoví –
     /// až za chvíli, protože cíl přesun dokončuje po skončení tažení.
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        dragModifierWatcher = nil
         guard !operation.isDisjoint(with: [.generic, .move, .delete]) else { return }
         if operation.contains(.delete) {
             // Chyba (např. disk bez koše) se ohlásí jednou za celé tažení.
@@ -955,6 +964,65 @@ extension PanelView: NSDraggingSource {
             }
         }
         scheduleReload(after: 1)
+    }
+}
+
+/// Hlídání kláves během tažení z panelu. Cíl tažení (Finder) se o stavu kláves
+/// ⌥ / ⌘ / ⌃ dozvídá ze zpráv zdroje. Smyčka tažení si události bere z fronty
+/// událostí aplikace a stav kláves čte z nich; v praxi se ale kurzor u cíle
+/// (zelené plus kopie) po stisku klávesy při stojící myši nezměnil, až
+/// s dalším pohybem (aplikace přitom události kláves sama nezachytává –
+/// monitory událostí se během tažení nevolají). Hlídač proto při změně kláves
+/// zařadí do téže fronty umělé nepatrné pohnutí myší s aktuálním stavem kláves:
+/// o bod vedle a zpět, protože spolehlivě ověřený je jen účinek skutečného
+/// pohybu (zda by stačila událost na stejném místě, ověřeno není).
+/// Běží na vlastní frontě, aby nezávisel na režimu smyčky událostí při tažení,
+/// a končí zánikem (konec tažení). Událost, která by dorazila až po konci
+/// tažení, je neškodná – pohled panelu z ní nové tažení nezahájí.
+final class DragModifierWatcher {
+    /// Klávesy, které při tažení mění operaci.
+    private static let watched: CGEventFlags = [.maskAlternate, .maskCommand, .maskControl]
+    private let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInteractive))
+
+    init() {
+        var modifiers = Self.currentModifiers()
+        timer.schedule(deadline: .now(), repeating: .milliseconds(50))
+        // Blok nedrží hlídač samotný (jen stav kláves), aby hlídač mohl zaniknout.
+        timer.setEventHandler {
+            // Po puštění tlačítka už se nic neposílá (do zániku hlídače zbývá okamžik).
+            guard CGEventSource.buttonState(.combinedSessionState, button: .left) else { return }
+            let current = Self.currentModifiers()
+            guard current != modifiers else { return }
+            modifiers = current
+            // postEvent lze podle dokumentace volat i mimo hlavní vlákno.
+            for event in Self.nudgeEvents(flags: current) {
+                NSApp.postEvent(event, atStart: false)
+            }
+        }
+        timer.resume()
+    }
+
+    deinit {
+        timer.cancel()
+    }
+
+    /// Aktuální stav sledovaných kláves.
+    private static func currentModifiers() -> CGEventFlags {
+        CGEventSource.flagsState(.combinedSessionState).intersection(watched)
+    }
+
+    /// Dvě události tažení levým tlačítkem na aktuální pozici myši – o bod vedle
+    /// a zpět – nesoucí daný stav kláves.
+    /// - Parameter flags: stav kláves zapsaný do událostí
+    static func nudgeEvents(flags: CGEventFlags) -> [NSEvent] {
+        guard let location = CGEvent(source: nil)?.location else { return [] }
+        return [1, 0].compactMap { offset -> NSEvent? in
+            let point = CGPoint(x: location.x + CGFloat(offset), y: location.y)
+            guard let event = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged,
+                                      mouseCursorPosition: point, mouseButton: .left) else { return nil }
+            event.flags = flags
+            return NSEvent(cgEvent: event)
+        }
     }
 }
 
