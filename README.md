@@ -266,7 +266,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   tlačítka; Enter potvrdí, Escape zruší),
   F9 aplikace Terminal v adresáři panelu (samostatné okno vedle vestavěného
   terminálu), F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
-  zavřít archiv, **⌘F12 vestavěný terminál na celé okno a zpět**; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌘F1 / ⌃F1 informace o
+  zavřít archiv, **⌘F12 vestavěný terminál na celé okno a zpět**; **⇧F3 Zobrazit ve Finderu** (jako Shift+F3 Salamandera, který otevírá aktivní složku v Exploreru; i v menu Soubory: označené položky, jinak položka pod kurzorem se vyberou ve Finderu, na „..“ se otevře adresář panelu, v archivu se ukáže soubor archivu, na FTP/SFTP nedostupné); ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌘F1 / ⌃F1 informace o
   jednotce; **⌘F2 / ⌃F2 změnit atributy**
   (dialog podle Salamandera: Jen pro čtení a Skrytý třístavově – smíšený stav
   = neměnit, změna data a času Změněno / Vytvořeno / Otevřeno, Nastavit
@@ -321,7 +321,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   najednou), **Odebrat** je smaže, dvojklik na název vlastního adresáře ho
   přejmenuje; pořadí se mění **přetažením myší** nebo šipkami pro vybranou
   položku. Sloupec **Zkratka** přiřadí místu ⌘0–⌘9 (stisk v hlavním okně
-  otevře místo v aktivním panelu, i skryté; stejná zkratka se jinému místu
+  otevře místo v aktivním panelu, i skryté; s fokusem v terminálu přepínají
+  ⌘1–⌘9 jeho záložky; stejná zkratka se jinému místu
   odebere; zkratka je vidět i v nabídce disků). Změny platí hned. Lišta disků
   ukazuje disky a vlastní adresáře (servery jen v nabídce). Uložení
   v předvolbách: `placesOrder` (pořadí), `hiddenPlaces` (skryté),
@@ -486,8 +487,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   a na discích, které změny nehlásí (některé síťové), zůstává ruční obnovení.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (schránka souborů, operace, Zobrazit
-  ve Finderu, Kopírovat cestu; na položce „..“ platí poslední dvě pro adresář
-  panelu – Finder ho otevře v okně).
+  ve Finderu (⇧F3, označené položky, v archivu soubor archivu), Kopírovat cestu;
+  na položce „..“ platí poslední dvě pro adresář panelu – Finder ho otevře v okně).
 - **Vestavěný terminál** (místo dřívější příkazové řádky): pod panely je jeden
   řádek skutečného terminálu s login shellem uživatele (`$SHELL`, prompt
   shellu, historie a doplňování shellu, barvy, interaktivní programy, dotazy
@@ -528,7 +529,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     panelu. S jedinou záložkou vypadá terminál jako dřív; teprve se dvěma
     a více se nad ním objeví úzká lišta záložek (pořadí a adresář shellu,
     klik vybere, × zavře, + přidá) – pod panely i v celém okně. ⌥⌘→ / ⌥⌘←
-    přepínají záložky, ⇧⌘W zavře vybranou (i `exit` v jejím shellu); poslední
+    přepínají záložky, s fokusem v terminálu vybere ⌘1–⌘8 záložku podle
+    pořadí a ⌘9 poslední (jako v Safari), ⇧⌘W zavře vybranou (i `exit` v jejím shellu); poslední
     záložka zůstává. Za panelem jde a panel vede jen vybraná záložka, shelly
     ostatních běží dál na pozadí.
   - Kurzor terminálu trvale svítí (neblikající blok).

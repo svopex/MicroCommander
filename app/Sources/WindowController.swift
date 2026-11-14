@@ -356,10 +356,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                   window.attachedSheet == nil, NSApp.modalWindow == nil else { return event }
             let inTerminal = self.terminalPane.hasFocus
             let fullTerminal = self.terminalPane.isExpanded
-            // ⌘0–⌘9: místo z nabídky disků se zkratkou do aktivního panelu.
-            if !fullTerminal, let digit = KeyCode.commandDigit(event), let place = PlaceStore.place(forShortcut: digit) {
-                self.open(place, in: self.activePanel)
-                return nil
+            // ⌘1–⌘9 v terminálu (řádek pod panely i celé okno): záložka terminálu
+            // podle pořadí, ⌘9 poslední. Neexistující záložka jen pípne – klávesa
+            // nesmí místo toho přepnout panel na místo z nabídky disků.
+            // ⌘0–⌘9 jinde: místo z nabídky disků se zkratkou do aktivního panelu.
+            if let digit = KeyCode.commandDigit(event) {
+                if inTerminal || fullTerminal, digit >= 1 {
+                    if !self.terminalPane.selectTab(number: digit) { NSSound.beep() }
+                    return nil
+                }
+                if !fullTerminal, let place = PlaceStore.place(forShortcut: digit) {
+                    self.open(place, in: self.activePanel)
+                    return nil
+                }
             }
             // Klávesové zkratky příkazů (Nastavení › Klávesnice) dřív než menu a panel:
             // F-klávesy fungují odkudkoli, v textovém poli se nepoužijí zkratky
@@ -813,37 +822,40 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 menu.addItem(.separator())
                 continue
             }
-            // Název příkazu se zkratkou podle Nastavení › Klávesnice.
-            let title = KeyBindings.shortcuts(for: entry).first.map { "\(entry.title) (\($0.display))" } ?? entry.title
-            let item = NSMenuItem(title: title, action: #selector(menuCommand(_:)), keyEquivalent: "")
-            item.tag = MainWindowController.menuCommandIndex(entry)
-            item.target = self
-            menu.addItem(item)
+            menu.addItem(contextMenuItem(entry))
         }
         // Režim zobrazení jako podmenu (⌥1–⌥6).
         menu.addItem(.separator())
         let modes = NSMenuItem(title: "Zobrazení", action: nil, keyEquivalent: "")
         modes.submenu = viewModeMenu()
         menu.addItem(modes)
-        // Lokální soubory: Finder a cesta do schránky. Na „..“ (a v prázdném
-        // adresáři) platí obojí pro adresář panelu – Finder ho otevře v okně.
-        // Mimo lokální disk (archiv, server) nemá cestu položka ani adresář – pak se nenabízí nic.
+        // Zobrazit ve Finderu (stejný příkaz jako ⇧F3) a cesta do schránky – jen
+        // s cestou na disku. Na „..“ (a v prázdném adresáři) platí obojí pro
+        // adresář panelu; v archivu Finder ukáže soubor archivu, cesta se nenabízí.
         let panel = view.panel
-        let item = panel.currentItem
-        if let path = item.flatMap({ panel.localPath(of: $0.name) }) ?? panel.localDirectory {
+        let localPath = panel.currentItem.flatMap { panel.localPath(of: $0.name) } ?? panel.localDirectory
+        if panel.nearestLocalPath != nil {
             menu.addItem(.separator())
-            let finder = NSMenuItem(title: "Zobrazit ve Finderu",
-                                    action: item != nil ? #selector(revealInFinder(_:)) : #selector(openDirectoryInFinder(_:)),
-                                    keyEquivalent: "")
-            finder.representedObject = path
-            finder.target = self
-            menu.addItem(finder)
+            menu.addItem(contextMenuItem(.revealInFinder))
+        }
+        if let path = localPath {
             let copyPath = NSMenuItem(title: "Kopírovat cestu", action: #selector(copyPathToPasteboard(_:)), keyEquivalent: "")
             copyPath.representedObject = path
             copyPath.target = self
             menu.addItem(copyPath)
         }
         return menu
+    }
+
+    /// Položka kontextového menu pro příkaz: název se zkratkou podle
+    /// Nastavení › Klávesnice, provede ho menuCommand(_:).
+    /// - Parameter command: příkaz položky
+    private func contextMenuItem(_ command: Command) -> NSMenuItem {
+        let title = KeyBindings.shortcuts(for: command).first.map { "\(command.title) (\($0.display))" } ?? command.title
+        let item = NSMenuItem(title: title, action: #selector(menuCommand(_:)), keyEquivalent: "")
+        item.tag = MainWindowController.menuCommandIndex(command)
+        item.target = self
+        return item
     }
 
     /// Akce položky nabídky disků.
@@ -958,16 +970,44 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         openRow(activePanel.cursor, in: activePanel)
     }
 
-    @objc private func revealInFinder(_ sender: NSMenuItem) {
-        guard let path = sender.representedObject as? String else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    /// Co ukáže Zobrazit ve Finderu pro panel.
+    enum FinderTarget {
+        /// Vybrat tyto soubory/adresáře v okně Finderu.
+        case select([String])
+        /// Otevřít adresář v okně Finderu.
+        case open(String)
     }
 
-    /// Otevře adresář v okně Finderu (Zobrazit ve Finderu na položce „..“).
-    @objc private func openDirectoryInFinder(_ sender: NSMenuItem) {
-        guard let path = sender.representedObject as? String else { return }
-        // selectFile bez souboru jen otevře okno adresáře (balíček .app nespustí).
-        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
+    /// Cíl příkazu Zobrazit ve Finderu: označené položky, jinak položka pod
+    /// kurzorem; na „..“ (a v prázdném adresáři) adresář panelu. V archivu se
+    /// ukáže soubor archivu na disku, na FTP/SFTP nic (nil).
+    /// - Parameter panel: panel, jehož položky se mají ukázat
+    func finderTarget(of panel: PanelController) -> FinderTarget? {
+        // Lokální disk: položky pro operaci (realPath je nil mimo lokální VFS).
+        let paths = panel.operationItems.compactMap { panel.localPath(of: $0.name) }
+        if !paths.isEmpty { return .select(paths) }
+        if let directory = panel.localDirectory { return .open(directory) }
+        // Archiv (i zanořený): soubor archivu v nejbližší lokální nadřazené lokaci.
+        for parent in panel.parentLocations.reversed() {
+            if let directory = parent.location.vfs.realPath(parent.location.path) {
+                return .select([joinPath(directory, parent.focus)])
+            }
+        }
+        return nil
+    }
+
+    /// ⇧F3 – Zobrazit ve Finderu (Shift+F3 Salamandera otevírá aktivní složku
+    /// v Exploreru); na Macu se položky navíc ve Finderu rovnou vyberou.
+    private func commandRevealInFinder() {
+        switch finderTarget(of: activePanel) {
+        case .select(let paths):
+            NSWorkspace.shared.activateFileViewerSelecting(paths.map { URL(fileURLWithPath: $0) })
+        case .open(let directory):
+            // selectFile bez souboru jen otevře okno adresáře (balíček .app nespustí).
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: directory)
+        case nil:
+            NSSound.beep()
+        }
     }
 
     @objc private func copyPathToPasteboard(_ sender: NSMenuItem) {
@@ -1245,6 +1285,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .properties, .permissions: commandShowInfo()
         // Cesta tak, jak ji ukazuje řádek adresáře (u archivu/FTP i s popiskem VFS).
         case .copyDirPath: copyTextToPasteboard(activePanel.displayPath)
+        case .revealInFinder: commandRevealInFinder()
         case .clipboardCopy: commandClipboardCopy(cut: false)
         case .clipboardCut: commandClipboardCopy(cut: true)
         case .clipboardPaste: commandClipboardPaste()
@@ -1996,7 +2037,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌘Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
         ⌫ – nadřazený adresář, Tab – druhý panel, ⌃Tab – řádek terminálu pod panely a zpět
         (shell v adresáři aktivního panelu), ⌘F12 – terminál na celé okno a zpět,
-        ⌘T – nová záložka terminálu (⇧⌘W zavřít, ⌥⌘← / ⌥⌘→ přepnout),
+        ⌘T – nová záložka terminálu (⇧⌘W zavřít, ⌥⌘← / ⌥⌘→ přepnout, v terminálu ⌘1–⌘9 podle pořadí),
         ⌃Enter – jméno položky do terminálu, ⌘N – nové okno,
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
         ⌘A – označit vše (znovu = zrušit), ⌘D – nic, psaní písmen – rychlé hledání,
@@ -2009,7 +2050,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
         F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout,
         F7 nový adresář, F8 do koše (⇧F8 / ⌘F8 trvale), F9 Terminal.app, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
-        ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
+        ⇧F3 zobrazit ve Finderu, ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
         ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌘F1 / ⌃F1 informace o jednotce,
         ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
 
@@ -2064,6 +2105,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 if clipboardSourcePaths.isEmpty { return false }
             case .clipboardPaste:
                 if !activePanel.location.vfs.writable || !FileClipboard.hasFiles() { return false }
+            // Zobrazit ve Finderu jen s cestou na disku (ne na FTP/SFTP); stejná
+            // podmínka jako finderTarget(of:) == nil, ale bez průchodu řádky.
+            case .revealInFinder:
+                if activePanel.nearestLocalPath == nil { return false }
             default:
                 break
             }

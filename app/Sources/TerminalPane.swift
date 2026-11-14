@@ -928,6 +928,18 @@ final class TerminalPane: NSView {
         selectTab(DriveChooser.wrappedIndex(selectedIndex, delta: offset, count: sessions.count), focus: hasFocus)
     }
 
+    /// ⌘1–⌘9 v terminálu – vybere záložku podle pořadí; ⌘9 vždy poslední
+    /// (zvyklost Safari a dalších aplikací macOS se záložkami).
+    /// - Parameter number: číslo záložky 1–9
+    /// - Returns: false, když záložka s tímto číslem neexistuje
+    @discardableResult
+    func selectTab(number: Int) -> Bool {
+        let index = number == 9 ? sessions.count - 1 : number - 1
+        guard sessions.indices.contains(index) else { return false }
+        selectTab(index, focus: hasFocus)
+        return true
+    }
+
     /// Ukáže záložku s daným indexem; ostatní relace běží dál na pozadí.
     /// - Parameters:
     ///   - index: index záložky

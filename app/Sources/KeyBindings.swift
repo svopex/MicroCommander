@@ -229,6 +229,7 @@ extension Command {
         case .sameDirOther: return "Poslat adresář do druhého panelu"
         case .toggleHidden: return "Zobrazovat skryté soubory"
         case .copyDirPath: return "Kopírovat cestu adresáře"
+        case .revealInFinder: return "Zobrazit ve Finderu"
         case .clipboardCopy: return "Kopírovat do schránky"
         case .clipboardCut: return "Vyjmout do schránky"
         case .clipboardPaste: return "Vložit ze schránky"
@@ -270,6 +271,7 @@ extension Command {
         case .driveLeft: return "Levý disk"
         case .driveRight: return "Pravý disk"
         case .driveInfo: return "Jednotka"
+        case .revealInFinder: return "Finder"
         case .pack: return "Zabalit"
         case .find: return "Hledat"
         case .calcSize: return "Velikost"
@@ -309,6 +311,8 @@ enum KeyBindings {
         (.rename, [.function(2), .function(6, .shift)]),
         (.view, [.function(3), .function(3, .option)]),
         (.edit, [.function(4)]),
+        // ⇧F3 – Shift+F3 Salamandera (otevřít aktivní složku v Exploreru).
+        (.revealInFinder, [.function(3, .shift)]),
         (.newFile, [.function(4, .shift)]),
         (.copy, [.function(5)]),
         (.move, [.function(6)]),

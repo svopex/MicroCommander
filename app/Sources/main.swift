@@ -172,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             nil,
             ("Zobrazit", .view),
             ("Upravit", .edit),
+            ("Zobrazit ve Finderu", .revealInFinder),
             ("Nový soubor…", .newFile),
             nil,
             ("Kopírovat…", .copy),

@@ -15,7 +15,7 @@ enum Command: CaseIterable {
     case newWindow, quit, connect, disconnect
     case sortName, sortExt, sortTime, sortSize, refresh, compare
     case driveLeft, driveRight, driveInfo, editPlaces, pack, unpack, find, calcSize
-    case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden, copyDirPath, changeAttributes
+    case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden, copyDirPath, revealInFinder, changeAttributes
     case properties, permissions
     case clipboardCopy, clipboardCut, clipboardPaste
     case selectMask, unselectMask, invertMarks, selectAll, unselectAll
