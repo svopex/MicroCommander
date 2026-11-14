@@ -387,8 +387,21 @@ final class FileGridView: NSView {
 
     /// ⌘A (Označit › Označit vše, akce selectAll:) = příkaz Označit vše (rozhoduje hlavní okno).
     override func selectAll(_ sender: Any?) {
-        guard let owner else { return }
-        owner.inputHandler?.panelView(owner, perform: .selectAll)
+        owner?.performFromMenu(.selectAll)
+    }
+
+    // Úpravy › Kopírovat / Vyjmout / Vložit (akce copy:/cut:/paste: přes responder
+    // chain) = schránka souborů panelu.
+    @objc func copy(_ sender: Any?) {
+        owner?.performFromMenu(.clipboardCopy)
+    }
+
+    @objc func cut(_ sender: Any?) {
+        owner?.performFromMenu(.clipboardCut)
+    }
+
+    @objc func paste(_ sender: Any?) {
+        owner?.performFromMenu(.clipboardPaste)
     }
 
     /// Rozpracované tažení (místo stisku myši).

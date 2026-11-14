@@ -229,6 +229,9 @@ extension Command {
         case .sameDirOther: return "Poslat adresář do druhého panelu"
         case .toggleHidden: return "Zobrazovat skryté soubory"
         case .copyDirPath: return "Kopírovat cestu adresáře"
+        case .clipboardCopy: return "Kopírovat do schránky"
+        case .clipboardCut: return "Vyjmout do schránky"
+        case .clipboardPaste: return "Vložit ze schránky"
         case .changeAttributes: return "Změnit atributy"
         case .properties: return "Vlastnosti"
         case .permissions: return "Oprávnění"
@@ -360,6 +363,11 @@ enum KeyBindings {
         (.sameDir, [.code(KeyCode.period, key: ".", [.command, .shift]),
                     .code(KeyCode.period, key: ".", [.control, .shift])]),
         (.copyDirPath, [char("c", [.command, .option]), .code(KeyCode.insert, key: "", [.control, .option])]),
+        // Schránka souborů v panelu (Ctrl+C / Ctrl+X / Ctrl+V Salamandera); v textovém
+        // poli a v terminálu tytéž klávesy dál pracují s textem (Shortcut.isTextEditing).
+        (.clipboardCopy, cmdCtrl("c")),
+        (.clipboardCut, cmdCtrl("x")),
+        (.clipboardPaste, cmdCtrl("v")),
         (.viewBrief, [.code(KeyCode.digits[0], key: "1", .option)]),
         (.viewDetailed, [.code(KeyCode.digits[1], key: "2", .option)]),
         (.viewIcons, [.code(KeyCode.digits[2], key: "3", .option)]),

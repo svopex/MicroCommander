@@ -804,7 +804,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         menu.addItem(open)
         menu.addItem(.separator())
         let entries: [Command?] = [
-            .view, .edit, nil, .copy, .move, .rename, .delete, .deletePermanent, nil,
+            .view, .edit, nil, .clipboardCopy, .clipboardCut, .clipboardPaste, nil,
+            .copy, .move, .rename, .delete, .deletePermanent, nil,
             .pack, .unpack, .calcSize, nil, .changeAttributes, .properties,
         ]
         for entry in entries {
@@ -884,6 +885,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     func panelView(_ view: PanelView, perform command: Command) {
         activate(view.panel)
         perform(command)
+    }
+
+    /// Soubory přetažené z jiné aplikace: okno do popředí (průběh a dotazy mají
+    /// být vidět), cílový panel se stane aktivním a soubory se do něj vloží.
+    func panelView(_ view: PanelView, dropFiles paths: [String], move: Bool) {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        activate(view.panel)
+        importFiles(paths, into: view.panel, move: move)
     }
 
     /// Nabídka disků pro panel (⌥F1/⌥F2, tlačítko disku). Výchozí řádek = místo,
@@ -1222,6 +1232,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .properties, .permissions: commandShowInfo()
         // Cesta tak, jak ji ukazuje řádek adresáře (u archivu/FTP i s popiskem VFS).
         case .copyDirPath: copyTextToPasteboard(activePanel.displayPath)
+        case .clipboardCopy: commandClipboardCopy(cut: false)
+        case .clipboardCut: commandClipboardCopy(cut: true)
+        case .clipboardPaste: commandClipboardPaste()
         case .viewMenu: showViewModeMenu()
         case .viewBrief, .viewDetailed, .viewIcons, .viewThumbnails, .viewTiles, .viewTypes:
             if let mode = command.viewMode { setViewMode(mode, for: panel) }
@@ -1306,6 +1319,133 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 }
                 source.reload()
                 target.reload()
+            }
+        }
+        transfer(.ask)
+    }
+
+    // MARK: - Schránka souborů a přetažení do panelu
+
+    /// Cesty položek aktivního panelu pro schránku: označené, jinak položka pod
+    /// kurzorem; jen z lokálního disku (položky archivu a serveru cestu nemají).
+    private var clipboardSourcePaths: [String] {
+        let panel = activePanel
+        return panel.operationItems.compactMap { panel.localPath(of: $0.name) }
+    }
+
+    /// ⌘C / ⌘X – soubory do systémové schránky (vložit je lze v panelu i ve Finderu).
+    /// - Parameter cut: vyjmout – vložení v panelu soubory přesune
+    private func commandClipboardCopy(cut: Bool) {
+        let paths = clipboardSourcePaths
+        guard !paths.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        FileClipboard.write(paths: paths, cut: cut)
+    }
+
+    /// ⌘V – vloží soubory ze schránky do adresáře aktivního panelu: zkopíruje
+    /// je, po Vyjmout (⌘X) přesune.
+    private func commandClipboardPaste() {
+        let paths = FileClipboard.paths()
+        guard !paths.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        let move = FileClipboard.isCut
+        importFiles(paths, into: activePanel, move: move) {
+            // Přesunuté soubory už na původním místě nejsou – schránka se vyprázdní.
+            if move { NSPasteboard.general.clearContents() }
+        }
+    }
+
+    /// Vloží soubory a adresáře z lokálního disku do adresáře panelu (⌘V ze
+    /// schránky, přetažení z jiné aplikace). Cíl může být i server; při konfliktu
+    /// se zeptá na přepsání. Kopie do adresáře, kde položka už leží, vytvoří
+    /// duplikát („jméno kopie“), přesun do téhož adresáře nedělá nic.
+    /// - Parameters:
+    ///   - paths: cesty zdrojových položek na lokálním disku
+    ///   - target: panel, do jehož adresáře se vkládá
+    ///   - move: přesunout místo kopírování
+    ///   - onSuccess: voláno po úspěšném dokončení
+    func importFiles(_ paths: [String], into target: PanelController, move: Bool, onSuccess: (() -> Void)? = nil) {
+        // Během otevřeného sheetu (progress, dialog) se nevkládá.
+        guard window?.attachedSheet == nil else {
+            NSSound.beep()
+            return
+        }
+        let verb = move ? "Přesun" : "Kopírování"
+        let dst = target.location.vfs
+        let dstDir = target.location.path
+        guard dst.writable else {
+            showAlert(title: verb, text: "Cílový souborový systém (\(dst.label)) je jen pro čtení.")
+            return
+        }
+        // Jádro přenáší jména z jednoho adresáře – položky se seskupí podle
+        // zdrojového adresáře (schránka z okna Hledat jich může mít víc).
+        // Položky ležící už v cílovém adresáři jdou zvlášť jako duplikáty.
+        // Adresáře se porovnávají bez symbolických odkazů v cestě (/tmp je na
+        // disku /private/tmp) – stejně je porovnává jádro.
+        func resolved(_ path: String) -> String {
+            URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        }
+        let localTarget = target.localDirectory.map(resolved)
+        var groups: [(dir: String, names: [String])] = []
+        var groupIndex: [String: Int] = [:]
+        var duplicates: [String] = []
+        for path in paths {
+            let dir = parentPath(path)
+            if let index = groupIndex[dir] {
+                groups[index].names.append(lastComponent(path))
+            } else if resolved(dir) == localTarget {
+                if !move { duplicates.append(path) }
+            } else {
+                groupIndex[dir] = groups.count
+                groups.append((dir, [lastComponent(path)]))
+            }
+        }
+        let count = groups.reduce(duplicates.count) { $0 + $1.names.count }
+        guard count > 0 else { return }
+        // Jméno, na které se po vložení postaví kurzor (duplikát dostane nové jméno).
+        let focusName = groups.first?.names.first
+        let what = count == 1 ? "„\(focusName ?? lastComponent(duplicates[0]))“" : "\(count) položek"
+        let transferItems = move ? coreMove : coreCopy
+
+        // Při konfliktu (Ask) se zeptá a operaci spustí znovu s režimem přepsání/přeskočení.
+        func transfer(_ mode: OverwriteMode) {
+            beginProgress(title: "\(verb) \(what)") { state in
+                for group in groups {
+                    // Opakovaný přesun: položky přesunuté před konfliktem už ve zdroji nejsou.
+                    let names = move && mode != .ask
+                        ? group.names.filter { FileManager.default.fileExists(atPath: joinPath(group.dir, $0)) }
+                        : group.names
+                    guard !names.isEmpty else { continue }
+                    try transferItems(.localDisk, group.dir, names, dst, dstDir, mode, state)
+                }
+                // Duplikáty až nakonec: při opakování po konfliktu nevzniknou dvakrát.
+                // Zrušení se kontroluje mezi položkami.
+                for path in duplicates {
+                    guard !state.isCancelled else { throw CoreError.code(SAL_ERR_CANCELLED, "") }
+                    try duplicateLocalItem(atPath: path)
+                }
+            } completion: { [weak self] result in
+                guard let self else { return }
+                self.endProgress()
+                switch result {
+                case .failure(let error) where mode == .ask && (error as? CoreError)?.isExistsConflict == true:
+                    if let choice = self.askOverwrite() {
+                        transfer(choice)
+                        return
+                    }
+                    // Dotaz zrušen – panely níže ukážou, co se stihlo přenést.
+                case .failure(let error):
+                    self.showErrorUnlessCancelled(title: verb, error)
+                case .success:
+                    // Kurzor na první vloženou položku (uplatní se při obnovení panelu).
+                    if let focusName { target.focus(name: focusName) }
+                    onSuccess?()
+                }
+                self.reloadPanels()
             }
         }
         transfer(.ask)
@@ -1841,6 +1981,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
         ⌘A – označit vše (znovu = zrušit), ⌘D – nic, psaní písmen – rychlé hledání,
         ⌥← / ⌥→ – historie, ⌘\\ – kořen, ⌃H – skryté soubory.
+        ⌘C / ⌘X / ⌘V – kopírovat / vyjmout / vložit soubory přes schránku (i z Finderu a do něj);
+        soubory lze do panelu také přetáhnout myší z jiné aplikace (s ⌘ se přesunou).
         ⌘. (⌃.) – poslat aktuální adresář do druhého panelu (přepne se druhý panel).
         ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní panel).
 
@@ -1894,6 +2036,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             if let keyEvent, !allowsShortcut(command, key: keyEvent) { return false }
             // Zavření a přepínání záložek terminálu jen s více záložkami.
             if command.needsTerminalTabs, terminalPane.tabCount < 2 { return false }
+            // Schránka: kopírovat a vyjmout jen položky z lokálního disku, vložit
+            // jen soubory a jen tam, kam lze zapisovat.
+            switch command {
+            case .clipboardCopy, .clipboardCut:
+                if clipboardSourcePaths.isEmpty { return false }
+            case .clipboardPaste:
+                if !activePanel.location.vfs.writable || !FileClipboard.hasFiles() { return false }
+            default:
+                break
+            }
             if command == .toggleHidden {
                 menuItem.state = showHiddenFiles ? .on : .off
             } else if let mode = command.viewMode {
@@ -2209,5 +2361,63 @@ func isShellScript(atPath path: String) -> Bool {
 func copyTextToPasteboard(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
+}
+
+/// Soubory v systémové schránce a v tažení myší (jako odkazy na soubory na
+/// disku – stejně s nimi pracuje Finder, takže kopírování a vkládání funguje
+/// i mezi aplikacemi).
+enum FileClipboard {
+    /// Čtení jen odkazů na soubory (webové adresy se ignorují).
+    private static let fileURLOptions: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+
+    /// Stav schránky (changeCount) po posledním Vyjmout; dokud se schránka
+    /// nezmění, vložení v panelu soubory přesune.
+    private static var cutChangeCount: Int?
+
+    /// Zapíše soubory do schránky (nahradí její obsah).
+    /// - Parameters:
+    ///   - paths: cesty souborů a adresářů na lokálním disku
+    ///   - cut: vyjmout – vložení v panelu je přesune (Finder přesouvá přes ⌥⌘V)
+    static func write(paths: [String], cut: Bool) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects(paths.map { URL(fileURLWithPath: $0) as NSURL })
+        cutChangeCount = cut ? pasteboard.changeCount : nil
+    }
+
+    /// Jsou soubory ve schránce vyjmuté (⌘X) a mají se vložením přesunout?
+    static var isCut: Bool { cutChangeCount == NSPasteboard.general.changeCount }
+
+    /// Obsahuje schránka (nebo tažení) soubory?
+    static func hasFiles(in pasteboard: NSPasteboard = .general) -> Bool {
+        pasteboard.canReadObject(forClasses: [NSURL.self], options: fileURLOptions)
+    }
+
+    /// Cesty souborů ve schránce (nebo v tažení); prázdné, když v ní soubory nejsou.
+    static func paths(from pasteboard: NSPasteboard = .general) -> [String] {
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: fileURLOptions) as? [NSURL] ?? []
+        // Finder může dát odkaz na soubor podle ID (file:///.file/id=…) – převod na cestu.
+        return urls.compactMap { $0.filePathURL?.path }
+    }
+}
+
+/// Zkopíruje soubor nebo adresář do téhož adresáře pod volným jménem
+/// („jméno kopie.txt“, „jméno kopie 2.txt“ … jako Duplikovat ve Finderu).
+/// - Parameter path: cesta položky na lokálním disku
+func duplicateLocalItem(atPath path: String) throws {
+    let manager = FileManager.default
+    var isDirectory: ObjCBool = false
+    _ = manager.fileExists(atPath: path, isDirectory: &isDirectory)
+    // Přípona zůstává na konci jména; adresář se bere celým jménem.
+    let name = lastComponent(path)
+    let parts = isDirectory.boolValue ? (base: name, ext: "") : splitExtension(name)
+    for index in 1... {
+        let suffix = index == 1 ? " kopie" : " kopie \(index)"
+        let target = joinPath(parentPath(path), parts.base + suffix + (parts.ext.isEmpty ? "" : "." + parts.ext))
+        if !manager.fileExists(atPath: target) {
+            try manager.copyItem(atPath: path, toPath: target)
+            return
+        }
+    }
 }
 

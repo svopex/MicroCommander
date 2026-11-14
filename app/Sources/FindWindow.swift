@@ -1655,15 +1655,13 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     }
 
     private func writeFilesToPasteboard(cut: Bool) {
-        let urls = selectedRows.compactMap(localPath(of:)).map { URL(fileURLWithPath: $0) as NSURL }
-        guard !urls.isEmpty else {
+        let paths = selectedRows.compactMap(localPath(of:))
+        guard !paths.isEmpty else {
             NSSound.beep()
             return
         }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects(urls)
-        if cut { setStatus("Soubory jsou ve schránce – ve Finderu je přesunete pomocí ⌥⌘V.") }
+        FileClipboard.write(paths: paths, cut: cut)
+        if cut { setStatus("Soubory jsou ve schránce – v panelu je přesunete pomocí ⌘V, ve Finderu ⌥⌘V.") }
     }
 
     /// Zapíše text označených položek do schránky (jedna položka na řádek).

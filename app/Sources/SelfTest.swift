@@ -708,7 +708,9 @@ final class UIKeyCheck {
             self.checkKeyBindings()
             self.checkSettingsFile()
             self.checkDriveInfo()
-            self.checkSameDir(dir: dir, then: { self.checkTerminal(dir: dir, then: { self.finish(dir: dir) }) })
+            self.checkSameDir(dir: dir, then: {
+                self.checkTerminal(dir: dir, then: { self.checkFileClipboard(dir: dir, then: { self.finish(dir: dir) }) })
+            })
         }
     }
 
@@ -810,6 +812,89 @@ final class UIKeyCheck {
               "záložky terminálu: po zavření záložky zmizí lišta a zůstane jeden řádek")
         controller.perform(.terminalCloseTab)
         check(terminal.tabCount == 1, "záložky terminálu: jedinou záložku zavřít nejde")
+    }
+
+    /// Schránka souborů a přetažení do panelu: zkratky ⌘C/⌘X/⌘V, položky
+    /// kontextového menu, registrace panelu pro přetažení, čtení souborů ze
+    /// schránky a vložení do adresáře panelu – kopie z více adresářů, duplikát
+    /// v témže adresáři a přesun. Systémové schránky se kontrola nedotkne
+    /// (čte se z vlastní pojmenované schránky, vkládá se přímo).
+    private func checkFileClipboard(dir: String, then done: @escaping () -> Void) {
+        let panel = controller.rightPanel
+        guard let view = panel.view, let handler = view.inputHandler else { done(); return }
+        let fm = FileManager.default
+
+        // Zkratky: v panelu schránka souborů, v textovém poli zůstávají textu.
+        let cmdC = event(8, Int(("c" as UnicodeScalar).value), [.command])
+        let cmdX = event(7, Int(("x" as UnicodeScalar).value), [.command])
+        let cmdV = event(9, Int(("v" as UnicodeScalar).value), [.command])
+        check(KeyBindings.command(for: cmdC) == .clipboardCopy && KeyBindings.command(for: cmdX) == .clipboardCut
+              && KeyBindings.command(for: cmdV) == .clipboardPaste,
+              "schránka: ⌘C / ⌘X / ⌘V v panelu = kopírovat / vyjmout / vložit soubory")
+        check(KeyBindings.command(for: cmdC, textEditing: true) == nil && KeyBindings.command(for: cmdV, textEditing: true) == nil,
+              "schránka: v textovém poli ⌘C / ⌘V zůstávají textu")
+        // Kontextové menu panelu (tag položky = index příkazu).
+        let tags = handler.panelView(view, menuForRow: -1)?.items
+            .filter { $0.action == #selector(MainWindowController.menuCommand(_:)) }.map(\.tag) ?? []
+        check([Command.clipboardCopy, .clipboardCut, .clipboardPaste].allSatisfy { tags.contains(MainWindowController.menuCommandIndex($0)) },
+              "schránka: kontextové menu panelu nabízí Kopírovat / Vyjmout / Vložit")
+        check(view.registeredDraggedTypes.contains(.fileURL), "přetažení: panel přijímá soubory z jiné aplikace")
+
+        // Zdrojové soubory ve dvou adresářích a prázdný cílový adresář.
+        let base = (dir as NSString).deletingLastPathComponent
+        let (first, second, target) = (base + "/paste-a", base + "/paste-b", base + "/paste-dst")
+        for directory in [first, second, target] {
+            try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        }
+        for path in [first + "/one.txt", first + "/three.txt", second + "/two.txt"] {
+            fm.createFile(atPath: path, contents: Data("obsah".utf8))
+        }
+
+        // Čtení souborů ze schránky: jen odkazy na soubory, text se nepočítá.
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("sal-keycheck-\(getpid())"))
+        pasteboard.clearContents()
+        pasteboard.setString("text", forType: .string)
+        check(!FileClipboard.hasFiles(in: pasteboard) && FileClipboard.paths(from: pasteboard).isEmpty,
+              "schránka: text ve schránce nejsou soubory")
+        pasteboard.clearContents()
+        pasteboard.writeObjects([URL(fileURLWithPath: first + "/one.txt") as NSURL, URL(fileURLWithPath: second + "/two.txt") as NSURL])
+        // Cesty se porovnávají podle jmen (dočasný adresář má na disku i delší podobu /private/…).
+        let pasted = FileClipboard.paths(from: pasteboard)
+        check(FileClipboard.hasFiles(in: pasteboard) && pasted.map(lastComponent) == ["one.txt", "two.txt"],
+              "schránka: soubory ze schránky se přečtou jako cesty (\(pasted.count))")
+        pasteboard.releaseGlobally()
+
+        /// Vložení doběhlo: soubor existuje, dialog průběhu je zavřený a panel načtený.
+        func pasteFinished(_ name: String) -> Bool {
+            fm.fileExists(atPath: target + "/" + name) && self.controller.window?.attachedSheet == nil
+                && !panel.isLoading && panel.rowIndex(named: name) != nil
+        }
+        controller.activate(panel)
+        panel.changePath(target)
+        poll(until: { panel.location.path == target && !panel.isLoading }) {
+            // Kopie ze dvou zdrojových adresářů najednou.
+            self.controller.importFiles([first + "/one.txt", second + "/two.txt"], into: panel, move: false)
+            self.poll(until: { pasteFinished("one.txt") && pasteFinished("two.txt") }) {
+                self.check(pasteFinished("one.txt") && pasteFinished("two.txt") && fm.fileExists(atPath: first + "/one.txt"),
+                           "vložení: zkopíruje soubory z více adresářů, zdroj zůstává")
+                self.check(panel.currentItem?.name == "one.txt", "vložení: kurzor je na první vložené položce (\(panel.currentItem?.name ?? "-"))")
+                // Kopie do adresáře, kde soubor už leží, vytvoří duplikát – i když
+                // cesta ze schránky vede přes symbolický odkaz na týž adresář.
+                let alias = base + "/paste-odkaz"
+                try? fm.createSymbolicLink(atPath: alias, withDestinationPath: target)
+                self.controller.importFiles([alias + "/one.txt"], into: panel, move: false)
+                self.poll(until: { pasteFinished("one kopie.txt") }) {
+                    self.check(pasteFinished("one kopie.txt"), "vložení: kopie do téhož adresáře vytvoří „one kopie.txt“")
+                    // Přesun (vložení po Vyjmout, přetažení s ⌘).
+                    self.controller.importFiles([first + "/three.txt"], into: panel, move: true)
+                    self.poll(until: { pasteFinished("three.txt") }) {
+                        self.check(pasteFinished("three.txt") && !fm.fileExists(atPath: first + "/three.txt"),
+                                   "vložení: přesun soubor ze zdroje odebere")
+                        done()
+                    }
+                }
+            }
+        }
     }
 
     /// ⌃⇧. (druhý panel do aktuálního adresáře) a ⌃. (obráceně), i uvnitř ZIP archivu.

@@ -20,6 +20,9 @@ protocol PanelInputHandler: AnyObject {
     func panelViewShowDriveChooser(_ view: PanelView, anchor: NSView)
     /// Příkaz vyvolaný z pohledu panelu (např. ⌘A přes Označit › Označit vše).
     func panelView(_ view: PanelView, perform command: Command)
+    /// Soubory přetažené do panelu z jiné aplikace (cesty na lokálním disku);
+    /// move = přesunout místo kopírování.
+    func panelView(_ view: PanelView, dropFiles paths: [String], move: Bool)
 }
 
 /// Celý panel: řádek adresáře + tabulka + informační řádek.
@@ -32,6 +35,9 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     let directoryLine = DirectoryLineView()
     let infoLine = InfoLineView()
     weak var inputHandler: PanelInputHandler?
+    /// Co nese tažení probíhající nad panelem (soubory na disku / přislíbené
+    /// soubory); zjišťuje se jednou při vstupu tažení, ne při každém pohybu myši.
+    private var dragContent = (hasFiles: false, hasPromises: false)
 
     /// Režim zobrazení panelu (⌥1–⌥6); Podrobný a Typy = tabulka, jinak mřížka.
     var viewMode: ViewMode = .detailed {
@@ -53,6 +59,10 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
         buildTable()
         buildLayout()
         gridView.owner = self
+        // Příjem souborů přetažených z jiných aplikací: soubory na disku (Finder)
+        // i přislíbené soubory (Mail, Fotky, prohlížeč). Registruje se celý panel,
+        // přetažení tak platí nad tabulkou, mřížkou i řádkem adresáře.
+        registerForDraggedTypes([.fileURL] + NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) })
         directoryLine.onDriveButton = { [weak self] button in
             guard let self else { return }
             self.inputHandler?.panelViewShowDriveChooser(self, anchor: button)
@@ -333,6 +343,12 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
             return dragItem
         }
         view.beginDraggingSession(with: draggingItems, event: event, source: self)
+    }
+
+    /// Příkaz z menu doručený pohledu panelu přes responder chain
+    /// (selectAll:/copy:/cut:/paste:).
+    func performFromMenu(_ command: Command) {
+        inputHandler?.panelView(self, perform: command)
     }
 
     /// Pravé tlačítko: kurzor na položku a kontextové menu operací.
@@ -711,8 +727,21 @@ final class SalTableView: NSTableView {
 
     /// ⌘A (Označit › Označit vše, akce selectAll:) = příkaz Označit vše (rozhoduje hlavní okno).
     override func selectAll(_ sender: Any?) {
-        guard let owner else { return }
-        owner.inputHandler?.panelView(owner, perform: .selectAll)
+        owner?.performFromMenu(.selectAll)
+    }
+
+    // Úpravy › Kopírovat / Vyjmout / Vložit (akce copy:/cut:/paste: přes responder
+    // chain) = schránka souborů panelu.
+    @objc func copy(_ sender: Any?) {
+        owner?.performFromMenu(.clipboardCopy)
+    }
+
+    @objc func cut(_ sender: Any?) {
+        owner?.performFromMenu(.clipboardCut)
+    }
+
+    @objc func paste(_ sender: Any?) {
+        owner?.performFromMenu(.clipboardPaste)
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -779,8 +808,85 @@ extension PanelView: NSTextFieldDelegate {
     }
 }
 
+/// Příjem souborů přetažených z jiné aplikace do adresáře panelu.
+extension PanelView {
+    /// Operace pro tažení nad panelem: kopie, s ⌘ přesun (jako Finder); prázdná,
+    /// když panel tažení nepřijme.
+    private func dropOperation(for sender: NSDraggingInfo) -> NSDragOperation {
+        // Tažení z panelu MicroCommanderu (i z jiného okna) se nepřijímá, do
+        // archivu zapisovat nelze.
+        guard !(sender.draggingSource is PanelView), panel.location.vfs.writable else { return [] }
+        let hasFiles = dragContent.hasFiles
+        // Přislíbené soubory zapisuje zdrojová aplikace sama – jen na lokální disk.
+        guard hasFiles || (dragContent.hasPromises && panel.localDirectory != nil) else { return [] }
+        let mask = sender.draggingSourceOperationMask
+        if mask.contains(.copy) { return .copy }
+        // Se stisknutým ⌘ nabízí zdroj jen „generic“ – soubory se přesunou.
+        if hasFiles && mask.contains(.generic) { return .generic }
+        if hasFiles && mask.contains(.move) { return .move }
+        return []
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let pasteboard = sender.draggingPasteboard
+        dragContent = (FileClipboard.hasFiles(in: pasteboard),
+                       pasteboard.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil))
+        return dropOperation(for: sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dropOperation(for: sender)
+    }
+
+    /// Puštění souborů nad panelem: soubory z disku převezme hlavní okno
+    /// (kopírování / přesun s průběhem a dotazem na přepsání), přislíbené
+    /// soubory zapíše zdrojová aplikace přímo do adresáře panelu.
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let operation = dropOperation(for: sender)
+        guard !operation.isEmpty else { return false }
+        let pasteboard = sender.draggingPasteboard
+        let paths = FileClipboard.paths(from: pasteboard)
+        if !paths.isEmpty {
+            let move = operation != .copy
+            // Operaci spustit až po skončení tažení – dialog nebo průběh by
+            // jinak držel zdrojovou aplikaci uprostřed přetahování.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.inputHandler?.panelView(self, dropFiles: paths, move: move)
+            }
+            return true
+        }
+        guard let directory = panel.localDirectory,
+              let receivers = pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil)
+                as? [NSFilePromiseReceiver], !receivers.isEmpty else { return false }
+        let destination = URL(fileURLWithPath: directory, isDirectory: true)
+        for receiver in receivers {
+            // Blok se volá pro každý doručený soubor: kurzor se postaví na nový
+            // soubor, chybu zdrojové aplikace ukáže hlášení. Panel se obnoví jednou
+            // za celou dávku (chvíli po posledním souboru), ne po každém souboru.
+            receiver.receivePromisedFiles(atDestination: destination, options: [:], operationQueue: .main) { [weak self] url, error in
+                guard let self else { return }
+                if let error {
+                    PromptDialog.show(title: "Přetažení souboru", message: error.localizedDescription, over: self.window)
+                    return
+                }
+                self.panel.focus(name: url.lastPathComponent)
+                let reload = #selector(self.reloadAfterPromisedFiles)
+                NSObject.cancelPreviousPerformRequests(withTarget: self, selector: reload, object: nil)
+                self.perform(reload, with: nil, afterDelay: 0.3)
+            }
+        }
+        return true
+    }
+
+    /// Obnoví panel po doručení přislíbených souborů (odložené volání z performDragOperation).
+    @objc private func reloadAfterPromisedFiles() {
+        panel.reload()
+    }
+}
+
 /// Přetahování souborů z panelu: ven z aplikace kopie/odkaz/přesun podle cíle
-/// (Finder, Zprávy, Mail…); dovnitř aplikace se přetažení nepřijímá.
+/// (Finder, Zprávy, Mail…); mezi panely aplikace se nepřetahuje.
 extension PanelView: NSDraggingSource {
     func draggingSession(_ session: NSDraggingSession,
                          sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {

@@ -122,7 +122,8 @@ app/                        # tenké UI pro macOS
   Sources/Core.swift        # Swift obálka nad C ABI (Vfs, operace, progress)
   Sources/Panel.swift       # model panelu: lokace, řádky s „..“, kurzor,
                             #   označení, řazení, rychlé hledání, historie
-  Sources/PanelView.swift   # vizuál panelu: řádek adresáře, tabulka, info řádek
+  Sources/PanelView.swift   # vizuál panelu: řádek adresáře, tabulka, info řádek,
+                            #   přetahování souborů ven i dovnitř
   Sources/FileGridView.swift  # režimy zobrazení; mřížka Stručný/Ikony/
                             #   Miniatury/Dlaždice
   Sources/Bars.swift        # nástrojová lišta, disky, prostřední lišta,
@@ -408,7 +409,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   ⇧Enter otevřít všechny označené, mezerník Ukázat (panel přejde na položku),
   F3 zobrazit, F4 upravit, F8 / Delete odstranit do koše, ⇧F8 / ⇧Delete
   trvale, ⌃H skrýt, ⌃⇧H skrýt duplicity,
-  ⌘C / ⌃C kopírovat soubory do schránky (pro Finder), ⌘X vyjmout, ⌥⌘C / ⌥⌘⇧C /
+  ⌘C / ⌃C kopírovat soubory do schránky (pro panel i Finder), ⌘X vyjmout
+  (⌘V v panelu je pak přesune), ⌥⌘C / ⌥⌘⇧C /
   ⌃⌘C cestu + název / název / cestu jako text (i ⌥Insert varianty), ⌘A vybrat vše.
   Dokud je okno aktivní, hlavní menu nahradí menu dialogu (Soubory, Příkazy,
   Upravit, Zobrazit, Možnosti). V archivu či na FTP/SFTP se hledá ve VFS panelu.
@@ -427,13 +429,31 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   celý dekomprimovat.
   Nastavení a historie: předvolby `find*` (`findNamedHistory`,
   `findLookInHistory`, `findContainingHistory`, `findAdvanced`, …).
+- **Schránka souborů** (⌘C / ⌘X / ⌘V, i ⌃C / ⌃X / ⌃V; menu Úpravy, kontextové
+  menu panelu; zkratky jdou změnit v Nastavení › Klávesnice): ⌘C zkopíruje
+  označené položky (jinak položku pod kurzorem) do systémové schránky jako
+  soubory – vložit je lze v druhém panelu, v jiném okně i ve Finderu a naopak
+  soubory zkopírované ve Finderu jdou vložit do panelu. ⌘V vloží soubory ze
+  schránky do adresáře aktivního panelu (i na FTP/SFTP server; při konfliktu se
+  zeptá přepsat / přeskočit); po ⌘X (Vyjmout) je vložení přesune. Vložení do
+  adresáře, kde položka už leží, vytvoří duplikát „jméno kopie.přípona“
+  („kopie 2“, …). Do schránky jdou jen položky z lokálního disku (ne z archivu
+  či FTP/SFTP). V textových polích a v terminálu tytéž klávesy dál pracují
+  s textem.
 - **Přetažení myší ven z aplikace:** položku (nebo všechny označené, pokud se
   táhne za označenou) lze přetáhnout do Finderu, Zpráv (iMessage), Mailu
   a dalších aplikací ve všech režimech zobrazení; tažení začne po posunu myši
-  o pár bodů. Jen soubory z lokálního disku (ne z archivu či FTP/SFTP);
-  přetažení do panelu zatím není.
+  o pár bodů. Jen soubory z lokálního disku (ne z archivu či FTP/SFTP).
+- **Přetažení myší do panelu:** soubory a adresáře přetažené z jiné aplikace
+  (Finder a další) se zkopírují do adresáře panelu, nad
+  kterým se pustí (i na FTP/SFTP server); se stisknutým ⌘ se přesunou. Přijímají
+  se i přislíbené soubory (příloha z Mailu, fotka z Fotek, obrázek
+  z prohlížeče) – ty zapisuje zdrojová aplikace, proto jen do adresáře na
+  lokálním disku. Do archivu přetáhnout nelze (je jen pro čtení); přetahování
+  mezi panely MicroCommanderu není – k tomu slouží F5 / F6 nebo schránka.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
-  řadí, pravé tlačítko – kontextové menu (Finder, kopírovat cestu).
+  řadí, pravé tlačítko – kontextové menu (schránka souborů, operace, Finder,
+  kopírovat cestu).
 - **Vestavěný terminál** (místo dřívější příkazové řádky): pod panely je jeden
   řádek skutečného terminálu s login shellem uživatele (`$SHELL`, prompt
   shellu, historie a doplňování shellu, barvy, interaktivní programy, dotazy
@@ -564,7 +584,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   jde za adresářem panelu, vložené `cd` po sobě smaže řádek, `cd` v shellu
   přesune panel, ⌘F12 roztáhne terminál a vrátí jeden řádek; volitelné snímky
   obou režimů `SAL_TERMINAL_SNAPSHOT=/cesta/predpona`), záložky terminálu
-  (lišta jen při dvou a více záložkách) a vrstvy lišty F-kláves;
+  (lišta jen při dvou a více záložkách), vrstvy lišty F-kláves a schránka
+  souborů (zkratky ⌘C / ⌘X / ⌘V, kontextové menu, čtení souborů ze schránky,
+  vložení z více adresářů, duplikát v témže adresáři, přesun, registrace
+  panelu pro přetažení – systémové schránky se nedotkne);
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`
   zapíše každý stisk (kód klávesy, znak, modifikátory, fokus) do
