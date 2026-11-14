@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // Hlavní okno ve stylu Salamandera: horní nástrojová lišta, lišta disků,
-// dva panely s prostřední lištou, příkazová řádka a lišta F-kláves.
-// Obsahuje veškeré příkazy (F2–F12, Ctrl/Alt varianty) a směrování kláves.
+// dva panely s prostřední lištou, řádek vestavěného terminálu (⌘F12 ho
+// roztáhne na celé okno) a lišta F-kláves. Obsahuje veškeré příkazy (F2–F12,
+// Ctrl/Alt varianty) a směrování kláves. Oken může být víc (⌘N), každé má
+// vlastní panely i terminál.
 
 import AppKit
 
@@ -21,8 +23,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     private let topBar: CommandBar
     private let middleBar: CommandBar
     private let driveBar = DriveBar()
-    let commandLine = CommandLineView()
+    /// Vestavěný terminál: jeden řádek pod panely, nebo celé okno (⌘F12).
+    let terminalPane = TerminalPane()
     let functionBar = FunctionKeyBar()
+    /// Lišta disků a panely – při terminálu roztaženém na celé okno jsou skryté.
+    private let panelArea = NSView()
+    /// Vazby rozložení pro řádek terminálu pod panely a pro terminál přes celé okno.
+    private var lineLayout: [NSLayoutConstraint] = []
+    private var fullLayout: [NSLayoutConstraint] = []
+    /// Fokus byl v terminálu už před jeho roztažením (po návratu tam zůstane).
+    private var terminalHadFocusBeforeFull = false
 
     /// Progress dialog (pokud běží operace).
     private var progressDialog: ProgressDialog?
@@ -31,7 +41,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Monitory klávesnice (F-klávesy, Tab, modifikátory pro lištu F-kláves).
     private var keyMonitor: Any?
     private var flagsMonitor: Any?
-    /// Pozorovatelé aktivace aplikace (odregistrují se v deinit).
+    /// Pozorovatelé oznámení (aktivace aplikace, nastavení); odhlásí se při
+    /// zavření okna.
     private var appObservers: [NSObjectProtocol] = []
 
     /// Jméno automatického ukládání polohy okna.
@@ -42,12 +53,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Neaktivní (cílový) panel.
     var inactivePanel: PanelController { activePanel === leftPanel ? rightPanel : leftPanel }
 
-    init() {
+    /// Vytvoří hlavní okno.
+    /// - Parameter source: okno, ze kterého se otevírá nové (⌘N) – nové okno
+    ///   převezme adresáře jeho panelů a postaví se šikmo pod něj; nil = první
+    ///   okno aplikace (uložené adresáře a poloha)
+    init(openedFrom source: MainWindowController? = nil) {
         // Oba panely nad celým lokálním diskem – cesty ve VFS jsou reálné cesty.
-        // Výchozí adresáře: naposledy otevřené (pokud ještě existují), jinak domov a „/“.
+        // Výchozí adresáře: jako ve zdrojovém okně, jinak naposledy otevřené
+        // (pokud ještě existují), jinak domov a „/“.
         let disk = Vfs.localDisk
-        leftPanel = PanelController(location: Location(vfs: disk, path: Self.savedDirectory("leftPanelPath") ?? NSHomeDirectory()))
-        rightPanel = PanelController(location: Location(vfs: disk, path: Self.savedDirectory("rightPanelPath") ?? "/"))
+        let leftPath = source?.leftPanel.nearestLocalPath ?? Self.savedDirectory("leftPanelPath") ?? NSHomeDirectory()
+        let rightPath = source?.rightPanel.nearestLocalPath ?? Self.savedDirectory("rightPanelPath") ?? "/"
+        leftPanel = PanelController(location: Location(vfs: disk, path: leftPath))
+        rightPanel = PanelController(location: Location(vfs: disk, path: rightPath))
         leftView = PanelView(panel: leftPanel)
         rightView = PanelView(panel: rightPanel)
         activePanel = leftPanel
@@ -104,15 +122,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         window.minSize = NSSize(width: 820, height: 460)
         super.init(window: window)
         window.delegate = self
-        window.setFrameAutosaveName(MainWindowController.frameAutosaveName)
-        if !window.setFrameUsingName(MainWindowController.frameAutosaveName) {
-            window.center()
+        if let sourceWindow = source?.window {
+            // Další okno: stejně velké, posunuté tak, aby byly vidět oba titulky.
+            window.setFrame(sourceWindow.frame, display: false)
+            let topLeft = NSPoint(x: sourceWindow.frame.minX, y: sourceWindow.frame.maxY)
+            window.setFrameTopLeftPoint(sourceWindow.cascadeTopLeft(from: topLeft))
+        } else {
+            // Polohu si pamatuje jen první okno (jméno ukládání může mít jediné okno).
+            window.setFrameAutosaveName(MainWindowController.frameAutosaveName)
+            if !window.setFrameUsingName(MainWindowController.frameAutosaveName) {
+                window.center()
+            }
         }
 
         buildLayout()
         wireCallbacks()
         installKeyMonitors()
-        restoreSettings()
+        restoreSettings(from: source)
 
         leftPanel.reload()
         rightPanel.reload()
@@ -124,14 +150,41 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     }
 
     deinit {
+        removeMonitorsAndObservers()
+    }
+
+    /// Odhlásí monitory kláves a pozorovatele oznámení (zavření okna, zánik
+    /// kontroleru; opakované volání nevadí).
+    private func removeMonitorsAndObservers() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+        keyMonitor = nil
+        flagsMonitor = nil
         appObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        appObservers = []
+    }
+
+    // MARK: - Životní cyklus okna
+
+    /// Okno, které je právě hlavní, dostává příkazy z menu.
+    func windowDidBecomeMain(_ notification: Notification) {
+        AppDelegate.shared?.activeController = self
+    }
+
+    /// Zavření okna: uloží adresáře panelů, ukončí shell terminálu a odhlásí
+    /// monitory kláves a pozorovatele (kontroler pak může zaniknout).
+    func windowWillClose(_ notification: Notification) {
+        savePanelPaths()
+        terminalPane.shutdown()
+        removeMonitorsAndObservers()
+        AppDelegate.shared?.windowClosed(self)
     }
 
     // MARK: - Rozvržení
 
-    /// Svislé skládání: lišta, disky, panely (+ prostřední lišta), příkazová řádka, F-klávesy.
+    /// Svislé skládání: lišta, plocha panelů (disky, panely + prostřední lišta),
+    /// řádek terminálu a F-klávesy. Terminál má dvě rozložení: jeden řádek pod
+    /// panely, nebo celou plochu pod nástrojovou lištou (panely jsou pak skryté).
     private func buildLayout() {
         let container = NSView()
         panelStack.orientation = .horizontal
@@ -150,23 +203,55 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             box.translatesAutoresizingMaskIntoConstraints = false
             return box
         }
-        let views: [NSView] = [topBar, separators[0], driveBar, separators[1], panelStack, separators[2], commandLine, functionBar]
-        for view in views {
+        // Vloží pohled přes celou šířku nadřazeného pohledu.
+        func addFullWidth(_ view: NSView, to parent: NSView) {
             view.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(view)
+            parent.addSubview(view)
             NSLayoutConstraint.activate([
-                view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                view.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
             ])
         }
-        // Řetěz shora dolů.
-        var previous = container.topAnchor
-        for view in views {
-            view.topAnchor.constraint(equalTo: previous).isActive = true
-            previous = view.bottomAnchor
+        // Řetěz shora dolů přes celou šířku nadřazeného pohledu.
+        func stack(_ views: [NSView], in parent: NSView) {
+            var previous = parent.topAnchor
+            for view in views {
+                addFullWidth(view, to: parent)
+                view.topAnchor.constraint(equalTo: previous).isActive = true
+                previous = view.bottomAnchor
+            }
         }
-        functionBar.bottomAnchor.constraint(equalTo: container.bottomAnchor).isActive = true
+        // Plocha panelů: lišta disků, panely a oddělovač nad řádkem terminálu.
+        stack([driveBar, separators[1], panelStack, separators[2]], in: panelArea)
+        separators[2].bottomAnchor.constraint(equalTo: panelArea.bottomAnchor).isActive = true
+        stack([topBar, separators[0], panelArea], in: container)
+
+        addFullWidth(terminalPane, to: container)
+        addFullWidth(functionBar, to: container)
+        // Plocha terminálu roztaženého na celé okno; tuto výšku má terminál pořád,
+        // v režimu jednoho řádku je z něj jen vidět řádek s kurzorem.
+        let terminalArea = NSLayoutGuide()
+        container.addLayoutGuide(terminalArea)
+        NSLayoutConstraint.activate([
+            terminalArea.topAnchor.constraint(equalTo: separators[0].bottomAnchor),
+            terminalArea.bottomAnchor.constraint(equalTo: functionBar.topAnchor),
+            terminalPane.bottomAnchor.constraint(equalTo: functionBar.topAnchor),
+            functionBar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        terminalPane.bind(expandedHeight: terminalArea.heightAnchor)
+        lineLayout = [
+            panelArea.bottomAnchor.constraint(equalTo: terminalPane.topAnchor),
+            terminalPane.lineHeightConstraint,
+        ]
+        // Skryté panely si při roztaženém terminálu drží plochu pod ním (bez
+        // vazby by jejich výška nebyla určená).
+        fullLayout = [
+            panelArea.bottomAnchor.constraint(equalTo: functionBar.topAnchor),
+            terminalPane.topAnchor.constraint(equalTo: terminalArea.topAnchor),
+        ]
+        NSLayoutConstraint.activate(lineLayout)
         window?.contentView = container
+        terminalPane.applyColors()
     }
 
     /// Oba panely stejně široké. Vazba se váže na konkrétní dvojici pohledů,
@@ -192,57 +277,55 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         panel.nearestLocalPath
     }
 
-    /// Při ukončení aplikace uloží adresáře obou panelů (ne při self-testu /
-    /// kontrole kláves – ty pracují v dočasných adresářích).
-    private func observeTermination() {
+    /// Uloží adresáře obou panelů pro další spuštění (zavření okna, ukončení
+    /// aplikace); ne při self-testu / kontrole kláves – ty pracují v dočasných
+    /// adresářích. S více okny platí adresáře toho, které se ukládalo poslední.
+    func savePanelPaths() {
         guard !AppDelegate.isAutomatedRun else { return }
-        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
-                                               queue: .main) { [weak self] _ in
-            guard let self else { return }
-            // Nastavení › Obecné: bez ukládání se příště otevřou výchozí adresáře.
-            let save = Settings.savePanelPaths
-            let defaults = UserDefaults.standard
-            defaults.set(save ? Self.restorableDirectory(of: self.leftPanel) : nil, forKey: "leftPanelPath")
-            defaults.set(save ? Self.restorableDirectory(of: self.rightPanel) : nil, forKey: "rightPanelPath")
-        }
+        // Nastavení › Obecné: bez ukládání se příště otevřou výchozí adresáře.
+        let save = Settings.savePanelPaths
+        let defaults = UserDefaults.standard
+        defaults.set(save ? Self.restorableDirectory(of: leftPanel) : nil, forKey: "leftPanelPath")
+        defaults.set(save ? Self.restorableDirectory(of: rightPanel) : nil, forKey: "rightPanelPath")
     }
 
-    /// Obnoví uložené volby: skryté soubory a režimy zobrazení obou stran.
-    private func restoreSettings() {
+    /// Obnoví volby okna: skryté soubory a režimy zobrazení obou stran –
+    /// převzaté ze zdrojového okna (⌘N), jinak uložené.
+    /// - Parameter source: okno, ze kterého se toto otevírá (nil = první okno)
+    private func restoreSettings(from source: MainWindowController?) {
+        applyHiddenFiles()
         let defaults = UserDefaults.standard
-        if defaults.object(forKey: "showHiddenFiles") != nil {
-            showHiddenFiles = defaults.bool(forKey: "showHiddenFiles")
-        }
-        leftPanel.showHidden = showHiddenFiles
-        rightPanel.showHidden = showHiddenFiles
-        topBar.setSymbol(showHiddenFiles ? "eye" : "eye.slash", for: .toggleHidden)
-        if let mode = ViewMode(rawValue: defaults.integer(forKey: "viewModeLeft")) {
+        if let mode = source?.leftView.viewMode ?? ViewMode(rawValue: defaults.integer(forKey: "viewModeLeft")) {
             leftView.viewMode = mode
         }
-        if let mode = ViewMode(rawValue: defaults.integer(forKey: "viewModeRight")) {
+        if let mode = source?.rightView.viewMode ?? ViewMode(rawValue: defaults.integer(forKey: "viewModeRight")) {
             rightView.viewMode = mode
         }
     }
 
     /// Napojení lišt a panelů na příkazy.
     private func wireCallbacks() {
-        observeTermination()
         for (panel, view) in [(leftPanel, leftView), (rightPanel, rightView)] {
             panel.delegate = self
             view.inputHandler = self
         }
         topBar.onCommand = { [weak self] in self?.perform($0) }
         middleBar.onCommand = { [weak self] in self?.perform($0) }
-        // Prostřední lišta podle nastavení; změna v Nastavení se projeví hned.
+        // Prostřední lišta a skryté soubory podle nastavení; změna (v Nastavení
+        // nebo v jiném okně) se projeví hned.
         middleBar.setCollapsed(!Settings.showMiddleBar)
-        NotificationCenter.default.addObserver(forName: Settings.changed, object: nil, queue: .main) { [weak self] _ in
-            self?.middleBar.setCollapsed(!Settings.showMiddleBar)
-        }
-        // Barevné schéma: panely si znovu načtou barvy.
-        NotificationCenter.default.addObserver(forName: Settings.colorSchemeChanged, object: nil, queue: .main) { [weak self] _ in
+        let center = NotificationCenter.default
+        appObservers.append(center.addObserver(forName: Settings.changed, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.middleBar.setCollapsed(!Settings.showMiddleBar)
+            if self.applyHiddenFiles() { self.updateChrome() }
+        })
+        // Barevné schéma: panely a terminál si znovu načtou barvy.
+        appObservers.append(center.addObserver(forName: Settings.colorSchemeChanged, object: nil, queue: .main) { [weak self] _ in
             self?.leftView.applyColorScheme()
             self?.rightView.applyColorScheme()
-        }
+            self?.terminalPane.applyColors()
+        })
         functionBar.onCommand = { [weak self] in self?.perform($0) }
         driveBar.onPlace = { [weak self] place in
             guard let self else { return }
@@ -250,73 +333,75 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         driveBar.onEditPlaces = { [weak self] in self?.perform(.editPlaces) }
         driveBar.onConnect = { [weak self] in self?.perform(.connect) }
-        commandLine.onExecute = { [weak self] command, inTerminal in
-            self?.executeCommandLine(command, inTerminal: inTerminal)
-        }
-        commandLine.onLeave = { [weak self] in self?.focusActivePanel() }
-        commandLine.onForwardKey = { [weak self] event in
-            guard let self else { return }
-            _ = self.panelView(self.view(of: self.activePanel), keyDown: event)
-        }
+        // Terminál: nový shell startuje v adresáři aktivního panelu, „cd“
+        // v shellu přesune aktivní panel a po doběhnutí příkazu se panely obnoví.
+        terminalPane.startDirectory = { [weak self] in self?.activePanel.nearestLocalPath }
+        terminalPane.onDirectoryChanged = { [weak self] directory in self?.followTerminal(to: directory) }
+        terminalPane.onCommandFinished = { [weak self] in self?.reloadPanels() }
+        terminalPane.onShellExited = { [weak self] in self?.setTerminalExpanded(false) }
     }
 
     /// Monitory: F-klávesy a Tab nad celým oknem, modifikátory pro lištu F-kláves.
     private func installKeyMonitors() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // Diagnostický záznam kláves (zapíná `defaults write com.github.svopex.microcommander keyLog -bool YES`).
-            if KeyLog.enabled {
+            // Monitor má každé hlavní okno – zapisuje jen první z nich, jinak by
+            // byla každá klávesa v záznamu tolikrát, kolik je oken.
+            if KeyLog.enabled, let controller = self, AppDelegate.shared?.windowControllers.first === controller {
                 KeyLog.write(event, responder: event.window?.firstResponder)
             }
             guard let self, let window = self.window, event.window === window,
                   window.attachedSheet == nil, NSApp.modalWindow == nil else { return event }
+            let inTerminal = self.terminalPane.hasFocus
+            let fullTerminal = self.terminalPane.isExpanded
             // ⌘0–⌘9: místo z nabídky disků se zkratkou do aktivního panelu.
-            if let digit = KeyCode.commandDigit(event), let place = PlaceStore.place(forShortcut: digit) {
+            if !fullTerminal, let digit = KeyCode.commandDigit(event), let place = PlaceStore.place(forShortcut: digit) {
                 self.open(place, in: self.activePanel)
                 return nil
             }
             // Klávesové zkratky příkazů (Nastavení › Klávesnice) dřív než menu a panel:
             // F-klávesy fungují odkudkoli, v textovém poli se nepoužijí zkratky
-            // potřebné pro psaní (viz Shortcut.isTextEditing).
+            // potřebné pro psaní (viz Shortcut.isTextEditing), v terminálu jen
+            // některé (viz allowsShortcut).
             if let command = self.command(forKey: event) {
                 self.perform(command)
                 return nil
             }
-            // Enter s modifikátorem (zachytává se tady, protože macOS jinak ⌃↩ použije
-            // jako „Zobrazit kontextovou nabídku“ a do panelu se klávesa nedostane):
-            // - ⌘Enter / Ctrl+Enter v příkazové řádce s příkazem: spustit ho v novém
-            //   okně Terminalu (interaktivní skripty, dotazy na heslo, průběžný výstup),
-            // - Ctrl+Enter jinde (panel, prázdná řádka): jméno položky do řádky.
+            // Terminál přes celé okno dostane všechny ostatní klávesy.
+            if fullTerminal {
+                if inTerminal { self.terminalPane.noteKey(event) }
+                return event
+            }
+            // Ctrl+Enter (zachytává se tady, protože macOS jinak ⌃↩ použije jako
+            // „Zobrazit kontextovou nabídku“ a do panelu se klávesa nedostane):
+            // jméno položky pod kurzorem na řádek terminálu.
             let modifiers = event.modifierFlags.intersection([.shift, .control, .option, .command])
-            if event.keyCode == KeyCode.returnKey || event.keyCode == KeyCode.enter,
-               modifiers == .command || modifiers == .control {
-                if self.commandLineHasFocus, modifiers == .command || self.commandLine.hasCommand {
-                    self.commandLine.submit(inTerminal: true)
-                    return nil
-                }
-                guard modifiers == .control else { return event }
-                if let item = self.activePanel.currentItem {
-                    // Soubor na začátku prázdné řádky = „./jméno“ připravené ke spuštění;
-                    // fokus pak do řádky (kurzor na konec), aby Enter příkaz spustil.
-                    if self.commandLine.insert(shellQuote(item.name), asCommand: !item.isDir),
-                       !self.commandLineHasFocus {
-                        window.makeFirstResponder(self.commandLine.field)
-                        self.commandLine.field.currentEditor()?.moveToEndOfDocument(nil)
-                    }
-                }
+            if event.keyCode == KeyCode.returnKey || event.keyCode == KeyCode.enter, modifiers == .control {
+                self.insertCurrentItemIntoTerminal()
                 return nil
             }
-            // ⌘Tab / Ctrl+Tab: přepínání mezi panelem a příkazovou řádkou.
+            // ⌘Tab / Ctrl+Tab: přepínání mezi panelem a řádkem terminálu.
             if event.keyCode == KeyCode.tab, !event.modifierFlags.intersection([.control, .command]).isEmpty {
-                if self.commandLineHasFocus {
+                if inTerminal {
                     self.focusActivePanel()
                 } else {
-                    window.makeFirstResponder(self.commandLine.field)
+                    self.terminalPane.focus()
                 }
                 return nil
             }
-            // Tab v příkazové řádce i v panelu přepíná panely (jako Salamander).
+            if inTerminal {
+                // PgUp/PgDn listují panelem (jeden řádek terminálu není kam posouvat);
+                // ostatní klávesy patří shellu – Tab doplňuje, šipky listují historií.
+                if event.keyCode == KeyCode.pageUp || event.keyCode == KeyCode.pageDown, modifiers.isEmpty {
+                    _ = self.panelView(self.view(of: self.activePanel), keyDown: event)
+                    return nil
+                }
+                self.terminalPane.noteKey(event)
+                return event
+            }
+            // Tab v panelu přepíná panely (jako Salamander).
             if event.keyCode == KeyCode.tab, event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
-               self.commandLineHasFocus || isPanelResponder(window.firstResponder) {
+               isPanelResponder(window.firstResponder) {
                 self.activate(self.inactivePanel)
                 return nil
             }
@@ -326,11 +411,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             self?.functionBar.update(modifiers: event.modifierFlags)
             return event
         }
-        // Puštění modifikátoru v jiné aplikaci (např. ⌃↩ spustí Terminal) aplikace
+        // Puštění modifikátoru v jiné aplikaci (např. po přepnutí ⌘Tab) aplikace
         // nedostane – lišta F-kláves by zůstala ve vrstvě Ctrl/Shift/Alt. Při
         // deaktivaci se vrátí základní vrstva, při aktivaci aktuální stav kláves.
         let center = NotificationCenter.default
-        appObservers = [
+        appObservers += [
             center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
                 self?.functionBar.update(modifiers: [])
             },
@@ -340,16 +425,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ]
     }
 
-    /// Má fokus příkazová řádka (její field editor)?
-    private var commandLineHasFocus: Bool {
-        guard let editor = window?.firstResponder as? NSTextView else { return false }
-        return editor.delegate as? NSTextField === commandLine.field
+    /// Příkaz pro stisknutou klávesu podle platných zkratek; v textovém poli
+    /// (úprava cesty či jména, terminál) bez zkratek potřebných pro psaní.
+    func command(forKey event: NSEvent) -> Command? {
+        guard let command = KeyBindings.command(for: event, textEditing: !isPanelResponder(window?.firstResponder)),
+              allowsShortcut(command, key: event) else { return nil }
+        return command
     }
 
-    /// Příkaz pro stisknutou klávesu podle platných zkratek; v textovém poli
-    /// (příkazová řádka, úprava cesty či jména) bez zkratek potřebných pro psaní.
-    func command(forKey event: NSEvent) -> Command? {
-        KeyBindings.command(for: event, textEditing: !isPanelResponder(window?.firstResponder))
+    /// Smí se klávesa použít jako zkratka příkazu? Terminál s fokusem si většinu
+    /// kláves nechává: roztažený přes celé okno všechny kromě příkazů, které
+    /// s ním počítají (⌘F12, ⌘N); v jednom řádku patří aplikaci F-klávesy
+    /// a zkratky s ⌘, zbytek (⌃písmeno, ⌥znak…) shellu.
+    private func allowsShortcut(_ command: Command, key event: NSEvent) -> Bool {
+        if terminalPane.isExpanded { return command.worksInFullTerminal }
+        guard terminalPane.hasFocus else { return true }
+        return KeyCode.functionKeys.contains(event.keyCode) || event.modifierFlags.contains(.command)
     }
 
     // MARK: - Aktivní panel
@@ -366,14 +457,19 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         leftView.refreshAppearance()
         rightView.refreshAppearance()
-        if !commandLineHasFocus {
+        if !terminalPane.hasFocus {
             focusActivePanel()
         }
         updateChrome()
     }
 
-    /// Fokus klávesnice do tabulky aktivního panelu.
+    /// Fokus klávesnice do tabulky aktivního panelu; při terminálu roztaženém
+    /// na celé okno (panely nejsou vidět) do terminálu.
     func focusActivePanel() {
+        if terminalPane.isExpanded {
+            terminalPane.focus()
+            return
+        }
         let target = view(of: activePanel).focusView
         if window?.firstResponder !== target {
             window?.makeFirstResponder(target)
@@ -385,7 +481,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         panel === leftPanel ? leftView : rightView
     }
 
-    /// Obnoví řádky adresáře, informační řádky a prompt příkazové řádky.
+    /// Obnoví řádky adresáře, informační řádky a titulek okna; terminál
+    /// požádá o přechod do adresáře aktivního panelu.
     private func updateChrome() {
         for panel in [leftPanel, rightPanel] {
             let panelView = view(of: panel)
@@ -395,7 +492,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panelView.directoryLine.editablePath = panel.location.path
             panelView.infoLine.text = infoText(for: panel)
         }
-        commandLine.prompt = activePanel.displayPath
+        syncTerminalDirectory()
         window?.title = "MicroCommander – \(activePanel.displayPath)"
     }
 
@@ -558,7 +655,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             return true
         case KeyCode.escape:
             if panel.quickSearch != nil { panel.endQuickSearch(); return true }
-            commandLine.field.stringValue = ""
+            // Escape smaže text rozepsaný na řádku terminálu.
+            terminalPane.clearInput()
             return true
         case KeyCode.space where flags.isEmpty && panel.quickSearch == nil,
              KeyCode.insert:
@@ -571,8 +669,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
 
         // Zkratky příkazů (KeyBindings). Normálně je vyřídí už monitor kláves okna;
-        // tady jako záložní cesta pro klávesy předané panelu jinak (z příkazové
-        // řádky, kontrola kláves bez okna).
+        // tady jako záložní cesta pro klávesy předané panelu jinak (kontrola
+        // kláves bez okna).
         if let command = command(forKey: event) {
             perform(command)
             return true
@@ -582,12 +680,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
         if ctrlOrCmd && !flags.contains(.option) {
             // Příkazy se zkratkami řeší KeyBindings v monitoru kláves; tady zůstává
-            // jen vkládání cest panelů do příkazové řádky.
+            // jen vkládání cest panelů na řádek terminálu.
             switch chars {
             case "[":
-                commandLine.insert(shellQuote(leftPanel.displayPath)); return true
+                terminalPane.insert(shellQuote(leftPanel.displayPath) + " "); return true
             case "]":
-                commandLine.insert(shellQuote(rightPanel.displayPath)); return true
+                terminalPane.insert(shellQuote(rightPanel.displayPath) + " "); return true
             default: break
             }
         }
@@ -667,17 +765,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     // MARK: - Skryté soubory
 
-    /// Zobrazovat skryté soubory (tečka na začátku, příznak UF_HIDDEN) – globálně pro oba panely.
-    private(set) var showHiddenFiles = SettingsSnapshot.defaults.showHiddenFiles
+    /// Zobrazovat skryté soubory (tečka na začátku, příznak UF_HIDDEN) – volba
+    /// společná pro oba panely všech oken (Settings.showHiddenFiles).
+    var showHiddenFiles: Bool { Settings.showHiddenFiles }
 
-    /// Přepne zobrazení skrytých souborů v obou panelech a uloží volbu.
+    /// Přepne zobrazení skrytých souborů; okna se o změně dozvědí oznámením.
     func toggleHiddenFiles() {
-        showHiddenFiles.toggle()
-        leftPanel.showHidden = showHiddenFiles
-        rightPanel.showHidden = showHiddenFiles
-        UserDefaults.standard.set(showHiddenFiles, forKey: "showHiddenFiles")
-        topBar.setSymbol(showHiddenFiles ? "eye" : "eye.slash", for: .toggleHidden)
-        updateChrome()
+        Settings.showHiddenFiles.toggle()
+    }
+
+    /// Použije volbu skrytých souborů v obou panelech a na tlačítku lišty
+    /// (výpis panelu se přestaví jen při změně).
+    /// - Returns: true, pokud se zobrazení některého panelu změnilo
+    @discardableResult
+    private func applyHiddenFiles() -> Bool {
+        let show = Settings.showHiddenFiles
+        var changed = false
+        for panel in [leftPanel, rightPanel] where panel.showHidden != show {
+            panel.showHidden = show
+            changed = true
+        }
+        topBar.setSymbol(show ? "eye" : "eye.slash", for: .toggleHidden)
+        return changed
     }
 
     func panelView(_ view: PanelView, openRow row: Int) {
@@ -909,8 +1018,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             panel.changePath(joinPath(panel.location.path, item.name))
             return
         }
-        // Spustitelný shell skript na lokálním disku: spustit v Terminalu v adresáři
-        // panelu (⌘Enter ho naopak otevře podle přípony).
+        // Spustitelný shell skript na lokálním disku: spustit ve vestavěném
+        // terminálu v adresáři panelu (⌘Enter ho naopak otevře podle přípony).
         if let path = panel.localPath(of: item.name), isShellScript(atPath: path) {
             runInTerminal("./" + shellQuote(item.name), in: parentPath(path))
             return
@@ -1056,6 +1165,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         // Během otevřeného sheetu (progress, dialog) příkazy neběží.
         guard window?.attachedSheet == nil else { return }
+        // Příkaz nad panely (menu, tlačítko lišty) při terminálu roztaženém na
+        // celé okno: nejdřív zpět k panelům, ať je vidět, s čím příkaz pracuje.
+        if terminalPane.isExpanded, !command.worksInFullTerminal {
+            setTerminalExpanded(false)
+        }
         let panel = activePanel
         switch command {
         case .help: showHelp()
@@ -1070,6 +1184,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .delete: commandDelete(toTrash: true)
         case .deletePermanent: commandDelete(toTrash: false)
         case .terminal: commandTerminal()
+        case .terminalFull: setTerminalExpanded(!terminalPane.isExpanded)
+        case .newWindow: AppDelegate.shared?.openNewWindow(from: self)
         case .quit: NSApp.terminate(nil)
         case .connect: ConnectWindowController.show(parent: self)
         case .editPlaces: PlacesWindowController.show(parent: self)
@@ -1412,7 +1528,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         openInEditor(path)
     }
 
-    /// F9 – Terminál v adresáři aktivního panelu.
+    /// F9 – aplikace Terminal v adresáři aktivního panelu (samostatné okno
+    /// vedle vestavěného terminálu).
     private func commandTerminal() {
         guard let dir = activePanel.location.vfs.realPath(activePanel.location.path) else {
             showAlert(title: "Terminál", text: "Terminál lze otevřít jen v adresáři na lokálním disku.")
@@ -1633,111 +1750,87 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         activate(activePanel)
     }
 
-    /// Terminal macOS (F9, ⌘Enter / ⌃Enter v příkazové řádce).
+    /// Aplikace Terminal macOS (F9).
     private static let terminalApp = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
-    /// Login shell uživatele pro příkazovou řádku.
-    private static var userShell: String { ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh" }
 
-    /// Příkazová řádka: „cd cesta“ mění adresář panelu, jinak spustí příkaz
-    /// v shellu v adresáři panelu – na pozadí s výstupem v prohlížeči, nebo
-    /// v novém okně Terminalu.
-    /// - Parameters:
-    ///   - command: text příkazu
-    ///   - inTerminal: spustit v Terminalu (⌘Enter / ⌃Enter)
-    private func executeCommandLine(_ command: String, inTerminal: Bool) {
-        let panel = activePanel
-        if command == "cd" || command.hasPrefix("cd ") {
-            let target = command.count > 3 ? String(command.dropFirst(3)) : "~"
-            if panel.location.vfs.kind == SAL_VFS_LOCAL {
-                panel.goToTypedPath(target.trimmingCharacters(in: CharacterSet(charactersIn: "\"' ")))
-            } else {
-                panel.goToTypedPath(target)
-            }
-            focusActivePanel()
-            return
+    // MARK: - Vestavěný terminál
+
+    /// ⌘F12 – roztáhne terminál na celé okno (panely a lišta disků se skryjí),
+    /// nebo ho vrátí na jeden řádek pod panely.
+    private func setTerminalExpanded(_ expanded: Bool) {
+        guard expanded != terminalPane.isExpanded else { return }
+        if expanded {
+            terminalHadFocusBeforeFull = terminalPane.hasFocus
+            // Úprava cesty či jména v panelu se ukončí dřív, než panely zmizí.
+            window?.makeFirstResponder(nil)
         }
-        guard let dir = panel.location.vfs.realPath(panel.location.path) else {
-            showAlert(title: "Příkazová řádka", text: "Příkazy lze spouštět jen v adresáři na lokálním disku.")
-            return
-        }
-        if inTerminal {
-            runInTerminal(command, in: dir)
+        NSLayoutConstraint.deactivate(expanded ? lineLayout : fullLayout)
+        NSLayoutConstraint.activate(expanded ? fullLayout : lineLayout)
+        panelArea.isHidden = expanded
+        terminalPane.setExpanded(expanded)
+        if expanded || terminalHadFocusBeforeFull {
+            terminalPane.focus()
         } else {
-            runInBackground(command, in: dir)
+            focusActivePanel()
         }
     }
 
-    /// Spustí příkaz v novém okně Terminalu přes dočasný skript `.command`, který
-    /// Terminal sám spustí (bez oprávnění k ovládání Terminalu přes AppleScript);
-    /// po doběhnutí příkazu zůstane v okně interaktivní shell.
+    /// Požádá terminál o přechod do lokálního adresáře aktivního panelu
+    /// (opakovanou žádost o stejný adresář terminál ignoruje; v archivu a na
+    /// serveru zůstává shell, kde byl).
+    private func syncTerminalDirectory() {
+        if let directory = activePanel.localDirectory {
+            terminalPane.requestDirectory(directory)
+        }
+    }
+
+    /// „cd“ v terminálu: aktivní panel přejde do adresáře shellu.
+    private func followTerminal(to directory: String) {
+        let panel = activePanel
+        if let current = panel.localDirectory, terminalPane.isShellDirectory(current) { return }
+        openDrive(directory, in: panel)
+    }
+
+    /// ⌃↩ – jméno položky pod kurzorem na řádek terminálu a fokus do terminálu.
+    /// Soubor na prázdném řádku se vloží jako spuštění „./jméno“; je-li shell
+    /// v jiném adresáři než panel (rozepsaný řádek, běžící program), vloží se
+    /// celá cesta.
+    private func insertCurrentItemIntoTerminal() {
+        guard let item = activePanel.currentItem else { return }
+        let directory = activePanel.localDirectory
+        let text: String
+        if let directory, !terminalPane.isShellDirectory(directory), let path = activePanel.localPath(of: item.name) {
+            text = shellQuote(path)
+        } else {
+            let asCommand = !item.isDir && !terminalPane.hasPendingInput
+            text = (asCommand ? "./" : "") + shellQuote(item.name)
+        }
+        terminalPane.insert(text + " ")
+        terminalPane.focus()
+    }
+
+    /// Spustí příkaz ve vestavěném terminálu v daném adresáři a terminál
+    /// roztáhne na celé okno, aby byl vidět výstup.
     /// - Parameters:
     ///   - command: text příkazu
     ///   - dir: pracovní adresář
     private func runInTerminal(_ command: String, in dir: String) {
-        let shell = Self.userShell
-        // Skript se po spuštění sám smaže; příkaz běží v login shellu uživatele.
-        let script = """
-        #!\(shell) -l
-        rm -f "$0"
-        cd \(shellQuote(dir)) || exit 1
-        \(command)
-        exec \(shellQuote(shell)) -l
-        """
-        let path = TempFiles.newPath(suffix: ".command")
-        do {
-            try script.write(toFile: path, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
-        } catch {
-            showAlert(title: "Příkazová řádka", text: error.localizedDescription)
+        guard terminalPane.run(command, in: dir) else {
+            showAlert(title: "Terminál",
+                      text: "V terminálu běží jiný program nebo je na jeho řádku rozepsaný příkaz. Dokončete ho a zkuste to znovu.")
             return
         }
-        NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: Self.terminalApp,
-                                configuration: NSWorkspace.OpenConfiguration())
-    }
-
-    /// Spustí příkaz na pozadí v login shellu uživatele (bez terminálu);
-    /// výstup se po doběhnutí zobrazí v prohlížeči.
-    /// - Parameters:
-    ///   - command: text příkazu
-    ///   - dir: pracovní adresář
-    private func runInBackground(_ command: String, in dir: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: Self.userShell)
-        process.arguments = ["-lc", command]
-        process.currentDirectoryURL = URL(fileURLWithPath: dir)
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        process.standardInput = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            showAlert(title: "Příkazová řádka", text: error.localizedDescription)
-            return
-        }
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            DispatchQueue.main.async {
-                guard let self else { return }
-                let output = String(decoding: data, as: UTF8.self)
-                if !output.isEmpty || process.terminationStatus != 0 {
-                    let text = output + "\n[návratový kód \(process.terminationStatus)]"
-                    ViewerWindowController.open(text: text, title: "\(dir)> \(command)")
-                }
-                self.leftPanel.reload()
-                self.rightPanel.reload()
-            }
-        }
+        setTerminalExpanded(true)
     }
 
     /// F1 – přehled ovládání.
     private func showHelp() {
         let text = """
-        Panely: ↑↓ PgUp PgDn Home End – pohyb, Enter – otevřít (adresář, archiv, soubor; shell skript spustit v Terminalu),
+        Panely: ↑↓ PgUp PgDn Home End – pohyb, Enter – otevřít (adresář, archiv, soubor; shell skript spustit v terminálu),
         ⌘Enter – spustit systémově (aplikace .app, soubor ve výchozí aplikaci),
-        ⌫ – nadřazený adresář, Tab – druhý panel, ⌘Tab (⌃Tab) – příkazová řádka
-        (v ní Enter spustí s výstupem v prohlížeči, ⌘Enter / ⌃Enter v Terminalu),
+        ⌫ – nadřazený adresář, Tab – druhý panel, ⌃Tab – řádek terminálu pod panely a zpět
+        (shell v adresáři aktivního panelu), ⌘F12 – terminál na celé okno a zpět,
+        ⌃Enter – jméno položky do terminálu, ⌘N – nové okno,
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
         ⌘A – označit vše (znovu = zrušit), ⌘D – nic, psaní písmen – rychlé hledání,
         ⌥← / ⌥→ – historie, ⌘\\ – kořen, ⌃H – skryté soubory.
@@ -1745,7 +1838,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní panel).
 
         F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout,
-        F7 nový adresář, F8 do koše (⇧F8 trvale), F9 terminál, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
+        F7 nový adresář, F8 do koše (⇧F8 trvale), F9 Terminal.app, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
         ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
         ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌘F1 / ⌃F1 informace o jednotce,
         ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
@@ -1783,13 +1876,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         // Zkratku potřebnou pro psaní (⌃písmeno, ⌘C…) nechá menu textovému poli –
         // stejné pravidlo jako monitor kláves (KeyBindings.isTextEditingKey).
-        if let event = NSApp.currentEvent, event.type == .keyDown, event.window === window,
-           !isPanelResponder(window?.firstResponder), KeyBindings.isTextEditingKey(event) {
+        let keyEvent = NSApp.currentEvent.flatMap { $0.type == .keyDown && $0.window === window ? $0 : nil }
+        if let keyEvent, !isPanelResponder(window?.firstResponder), KeyBindings.isTextEditingKey(keyEvent) {
             return false
         }
         if menuItem.action == #selector(menuCommand(_:)),
            menuItem.tag >= 0, menuItem.tag < MainWindowController.menuCommands.count {
             let command = MainWindowController.menuCommands[menuItem.tag]
+            // Klávesy, které si nechává terminál, menu nezachytí (viz allowsShortcut).
+            if let keyEvent, !allowsShortcut(command, key: keyEvent) { return false }
             if command == .toggleHidden {
                 menuItem.state = showHiddenFiles ? .on : .off
             } else if let mode = command.viewMode {
@@ -1898,7 +1993,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 }
 
 /// Dočasné soubory aplikace: kopie položek rozbalených z archivů a serverů
-/// (F3, Enter, ⌘Enter) a skripty pro Terminal. Kopie vzniklé za běhu se
+/// (F3, Enter, ⌘Enter). Kopie vzniklé za běhu se
 /// smažou při ukončení aplikace; co zbylo po pádu, uklidí další spuštění.
 enum TempFiles {
     /// Společný začátek jmen (podle něj se pozná, co uklízet).

@@ -21,6 +21,17 @@ enum Settings {
     private static let markDirsKey = "selectAllIncludesDirs"
     private static let savePanelPathsKey = "savePanelPaths"
     private static let colorSchemeKey = "colorScheme"
+    private static let showHiddenKey = "showHiddenFiles"
+
+    /// Zobrazovat skryté soubory a adresáře – společně pro oba panely všech
+    /// oken; výchozí ne. Změna se oknům oznámí.
+    static var showHiddenFiles: Bool {
+        get { UserDefaults.standard.object(forKey: showHiddenKey) as? Bool ?? SettingsSnapshot.defaults.showHiddenFiles }
+        set {
+            UserDefaults.standard.set(newValue, forKey: showHiddenKey)
+            NotificationCenter.default.post(name: changed, object: nil)
+        }
+    }
 
     /// Zobrazovat svislou lištu příkazů mezi panely; výchozí ne = jen úzký
     /// dělicí pruh jako v Salamanderu.
@@ -125,18 +136,13 @@ struct SettingsSnapshot: Codable, Equatable {
         case markingIncludesDirs = "selectAllIncludesDirs"
     }
 
-    /// Hlavní okno aplikace (drží volbu skrytých souborů).
-    private static var mainController: MainWindowController? {
-        (NSApp.delegate as? AppDelegate)?.windowController
-    }
-
     // MARK: Platné nastavení
 
     /// Právě platné (uložené) nastavení aplikace.
     static var current: SettingsSnapshot {
         var snapshot = SettingsSnapshot()
         snapshot.savePanelPaths = Settings.savePanelPaths
-        snapshot.showHiddenFiles = mainController?.showHiddenFiles ?? defaults.showHiddenFiles
+        snapshot.showHiddenFiles = Settings.showHiddenFiles
         snapshot.markingIncludesDirs = Settings.markingIncludesDirs
         snapshot.showMiddleBar = Settings.showMiddleBar
         snapshot.colorScheme = Settings.colorScheme
@@ -156,8 +162,8 @@ struct SettingsSnapshot: Codable, Equatable {
         if Settings.colorScheme != colorScheme {
             Settings.colorScheme = colorScheme
         }
-        if let controller = Self.mainController, controller.showHiddenFiles != showHiddenFiles {
-            controller.toggleHiddenFiles()
+        if Settings.showHiddenFiles != showHiddenFiles {
+            Settings.showHiddenFiles = showHiddenFiles
         }
         if KeyBindings.overrides != keyBindings {
             KeyBindings.overrides = keyBindings

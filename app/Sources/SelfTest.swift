@@ -708,8 +708,73 @@ final class UIKeyCheck {
             self.checkKeyBindings()
             self.checkSettingsFile()
             self.checkDriveInfo()
-            self.checkSameDir(dir: dir, then: { self.finish(dir: dir) })
+            self.checkSameDir(dir: dir, then: { self.checkTerminal(dir: dir, then: { self.finish(dir: dir) }) })
         }
+    }
+
+    /// Vestavěný terminál: shell jde za adresářem aktivního panelu, „cd“ v shellu
+    /// přesune panel, po příkazu se panel obnoví a ⌘F12 přepíná terminál mezi
+    /// jedním řádkem a celým oknem. Běží se skutečným shellem uživatele.
+    private func checkTerminal(dir: String, then done: @escaping () -> Void) {
+        let panel = controller.leftPanel
+        let terminal = controller.terminalPane
+        let subdir = "terminal-test"
+        controller.activate(panel)
+        panel.changePath(dir)
+        // Panel → shell: nečinný shell přejde do adresáře aktivního panelu.
+        poll(until: { terminal.isShellIdle && terminal.isShellDirectory(dir) }) {
+            self.check(terminal.isShellDirectory(dir), "terminál: shell přešel do adresáře aktivního panelu")
+            // Vlastní „cd“ po sobě nenechá na obrazovce příkaz ani jeho zbytky.
+            self.check(!terminal.screenText.contains("printf"), "terminál: vložené cd po sobě smaže svůj řádek")
+            // Shell → panel: po „cd“ v shellu jde panel za ním.
+            // Mezera na začátku: testovací příkaz nepatří do historie shellu uživatele.
+            self.check(terminal.run(" mkdir \(subdir) && cd \(subdir)", in: dir), "terminál: příkaz jde spustit v nečinném shellu")
+            self.poll(until: { panel.location.path == dir + "/" + subdir && !panel.isLoading }) {
+                self.check(panel.location.path == dir + "/" + subdir, "terminál: po cd v shellu jde panel za ním (\(panel.location.path))")
+                // Panel zpět nahoru: shell ho následuje, kurzor je na vytvořeném adresáři.
+                panel.goUp()
+                self.poll(until: { terminal.isShellIdle && terminal.isShellDirectory(dir) && !panel.isLoading }) {
+                    self.check(terminal.isShellDirectory(dir), "terminál: shell jde za panelem zpět do nadřazeného adresáře")
+                    self.check(panel.currentItem?.name == subdir, "terminál: adresář vytvořený v shellu je v panelu vidět")
+                    self.checkTerminalLayout(then: done)
+                }
+            }
+        }
+    }
+
+    /// ⌘F12: terminál přes celou plochu pod nástrojovou lištou a zpět na jeden řádek.
+    private func checkTerminalLayout(then done: @escaping () -> Void) {
+        let terminal = controller.terminalPane
+        let content = controller.window?.contentView
+        let snapshot = ProcessInfo.processInfo.environment["SAL_TERMINAL_SNAPSHOT"]
+        content?.layoutSubtreeIfNeeded()
+        let lineHeight = terminal.frame.height
+        check(lineHeight > 8 && lineHeight < 30, "terminál: pod panely je jeden řádek (\(lineHeight) b.)")
+        // Volitelné snímky okna v obou režimech (kontrola vzhledu okem).
+        if let snapshot {
+            controller.window?.displayIfNeeded()
+            controller.saveSnapshot(to: snapshot + "-radek.png")
+        }
+        let cmdF12 = event(KeyCode.functionKeys[11], NSF12FunctionKey, [.command])
+        check(controller.command(forKey: cmdF12) == .terminalFull, "terminál: ⌘F12 = terminál na celé okno")
+        controller.perform(.terminalFull)
+        content?.layoutSubtreeIfNeeded()
+        check(terminal.isExpanded && terminal.frame.height > 300 && controller.leftPanel.view?.isHiddenOrHasHiddenAncestor == true,
+              "terminál: ⌘F12 roztáhne terminál a skryje panely (\(terminal.frame.height) b.)")
+        // Roztažený terminál si nechává klávesy příkazů nad panely (F5 patří programu v něm).
+        let f5 = event(KeyCode.functionKeys[4], NSF5FunctionKey, [])
+        check(controller.command(forKey: f5) == nil && controller.command(forKey: cmdF12) == .terminalFull,
+              "terminál: v roztaženém terminálu F5 není příkaz, ⌘F12 ano")
+        if let snapshot {
+            controller.window?.displayIfNeeded()
+            controller.saveSnapshot(to: snapshot + "-cele-okno.png")
+        }
+        controller.perform(.terminalFull)
+        content?.layoutSubtreeIfNeeded()
+        check(!terminal.isExpanded && terminal.frame.height == lineHeight && controller.leftPanel.view?.isHiddenOrHasHiddenAncestor == false,
+              "terminál: druhé ⌘F12 vrátí jeden řádek a panely")
+        check(controller.command(forKey: f5) == .copy, "terminál: po návratu je F5 zase Kopírovat")
+        done()
     }
 
     /// ⌃⇧. (druhý panel do aktuálního adresáře) a ⌃. (obráceně), i uvnitř ZIP archivu.

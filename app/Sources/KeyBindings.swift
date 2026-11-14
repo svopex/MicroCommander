@@ -81,7 +81,7 @@ struct Shortcut: Codable, Hashable {
 
     /// Klávesa vyhrazená pro pevné ovládání (nelze ji přiřadit příkazu):
     /// navigace a mezerník bez modifikátoru nebo jen s ⇧, ⌘↩ / ⌃↩ (spuštění,
-    /// vložení jména), ⌘Tab / ⌃Tab (příkazová řádka) a ⌘0–⌘9 (místa disků).
+    /// vložení jména), ⌘Tab / ⌃Tab (řádek terminálu) a ⌘0–⌘9 (místa disků).
     var isReserved: Bool {
         guard byKeyCode else { return false }
         let mods = modifiers
@@ -191,7 +191,9 @@ extension Command {
         case .changeDir: return "Změnit adresář"
         case .delete: return "Smazat (do koše)"
         case .deletePermanent: return "Smazat trvale (bez koše)"
-        case .terminal: return "Terminál v adresáři"
+        case .terminal: return "Terminal.app v adresáři"
+        case .terminalFull: return "Terminál na celé okno"
+        case .newWindow: return "Nové okno"
         case .quit: return "Ukončit"
         case .connect: return "FTP/SFTP servery"
         case .disconnect: return "Odpojit / zavřít archiv"
@@ -261,7 +263,8 @@ extension Command {
         case .find: return "Hledat"
         case .calcSize: return "Velikost"
         case .changeAttributes: return "Atributy"
-        case .terminal: return "Terminál"
+        case .terminal: return "Terminal.app"
+        case .terminalFull: return "Terminál"
         default: return title
         }
     }
@@ -303,6 +306,9 @@ enum KeyBindings {
         (.delete, [.function(8)]),
         (.deletePermanent, [.function(8, .shift)]),
         (.terminal, [.function(9)]),
+        // ⌘F12 roztáhne vestavěný terminál na celé okno a zpět.
+        (.terminalFull, [.function(12, .command)]),
+        (.newWindow, [char("n", .command)]),
         (.quit, [.function(10), .function(4, .option)]),
         (.connect, [.function(11)]),
         (.disconnect, [.function(12)]),

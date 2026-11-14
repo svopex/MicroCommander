@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 // Lišty hlavního okna podle Salamandera: horní nástrojová lišta, lišta disků,
-// prostřední lišta mezi panely, příkazová řádka a spodní lišta F-kláves
-// (popisky se mění podle držených modifikátorů Shift/Ctrl/Alt).
+// prostřední lišta mezi panely a spodní lišta F-kláves (popisky se mění podle
+// držených modifikátorů Shift/Ctrl/Alt). Vestavěný terminál je v TerminalPane.swift.
 
 import AppKit
 
@@ -11,13 +11,19 @@ import AppKit
 /// CaseIterable: tag položky menu = index v `Command.allCases`.
 enum Command: CaseIterable {
     case help, rename, view, edit, newFile, copy, move, mkdir, changeDir, delete, deletePermanent
-    case terminal, quit, connect, disconnect
+    case terminal, terminalFull, newWindow, quit, connect, disconnect
     case sortName, sortExt, sortTime, sortSize, refresh, compare
     case driveLeft, driveRight, driveInfo, editPlaces, pack, unpack, find, calcSize
     case back, forward, up, root, home, swap, sameDir, sameDirOther, toggleHidden, copyDirPath, changeAttributes
     case properties, permissions
     case selectMask, unselectMask, invertMarks, selectAll, unselectAll
     case viewMenu, viewBrief, viewDetailed, viewIcons, viewThumbnails, viewTiles, viewTypes
+
+    /// Funguje příkaz i při terminálu roztaženém na celé okno? Ostatní příkazy
+    /// pracují s panely, které tehdy nejsou vidět – jejich klávesy dostane terminál.
+    var worksInFullTerminal: Bool {
+        self == .terminalFull || self == .newWindow
+    }
 
     /// Režim zobrazení, který příkaz nastavuje (nil = příkaz není volba režimu).
     var viewMode: ViewMode? {
@@ -252,143 +258,6 @@ final class DriveBar: NSView {
     }
 }
 
-/// Příkazová řádka: „cesta>“ + vstup; Enter spustí příkaz v adresáři panelu.
-final class CommandLineView: NSView, NSTextFieldDelegate {
-    private let promptLabel = NSTextField(labelWithString: "")
-    let field = NSTextField()
-    private var history: [String] = []
-    private var historyIndex = 0
-
-    /// Spuštění příkazu: text a zda v novém okně Terminalu (⌘Enter / ⌃Enter).
-    var onExecute: ((String, _ inTerminal: Bool) -> Void)?
-
-    /// Obsahuje řádka příkaz (ne jen mezery)?
-    var hasCommand: Bool {
-        !field.stringValue.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-    var onLeave: (() -> Void)?
-    /// Předání klávesy panelu (navigace při prázdné příkazové řádce).
-    var onForwardKey: ((NSEvent) -> Void)?
-
-    /// Prompt (aktuální adresář aktivního panelu).
-    var prompt: String = "" {
-        didSet { promptLabel.stringValue = prompt + ">" }
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        translatesAutoresizingMaskIntoConstraints = false
-        promptLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        promptLabel.lineBreakMode = .byTruncatingHead
-        promptLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        promptLabel.setContentHuggingPriority(.required, for: .horizontal)
-        field.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        field.delegate = self
-        field.focusRingType = .none
-        field.bezelStyle = .squareBezel
-        field.placeholderString = "příkazová řádka (⌘Tab) – Enter spustí příkaz v adresáři panelu, ⌘Enter / ⌃Enter v Terminalu, cd změní adresář"
-        for view in [promptLabel, field] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(view)
-        }
-        NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 24),
-            promptLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            promptLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            promptLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, multiplier: 0.45),
-            field.leadingAnchor.constraint(equalTo: promptLabel.trailingAnchor, constant: 2),
-            field.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            field.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
-    }
-
-    /// Odešle příkaz z řádky (uloží ho do historie a řádku vyprázdní).
-    /// - Parameter inTerminal: spustit v novém okně Terminalu (⌘Enter),
-    ///   jinak na pozadí s výstupem v prohlížeči (Enter)
-    func submit(inTerminal: Bool) {
-        guard hasCommand else {
-            onLeave?()
-            return
-        }
-        let command = field.stringValue.trimmingCharacters(in: .whitespaces)
-        history.append(command)
-        historyIndex = history.count
-        field.stringValue = ""
-        onExecute?(command, inTerminal)
-    }
-
-    /// Vloží text do příkazové řádky na pozici kurzoru, jinak na konec.
-    /// - Parameters:
-    ///   - text: vkládaný text (jméno položky, cesta)
-    ///   - asCommand: na začátku příkazu se vloží jako spuštění „./text“
-    ///     (⌃↩ nad souborem); jinde v řádce jen text jako argument
-    /// - Returns: true, pokud se vložilo jako příkaz „./text“
-    @discardableResult
-    func insert(_ text: String, asCommand: Bool = false) -> Bool {
-        // Text před místem vložení: při psaní v řádce po kurzor, jinak celá řádka.
-        let editor = field.currentEditor() as? NSTextView
-        let prefix: String
-        if let editor {
-            let content = editor.string as NSString
-            prefix = content.substring(to: min(editor.selectedRange().location, content.length))
-        } else {
-            prefix = field.stringValue
-        }
-        // Na začátku příkazu (prázdný text před kurzorem) spuštění „./jméno“;
-        // jinak mezera za předchozím slovem (ne za mezerou ani za lomítkem, např. „./“).
-        let runsAsCommand = asCommand && prefix.trimmingCharacters(in: .whitespaces).isEmpty
-        let separator = prefix.isEmpty || prefix.hasSuffix(" ") || prefix.hasSuffix("/") ? "" : " "
-        let inserted = runsAsCommand ? "./" + text : separator + text
-        if let editor {
-            editor.insertText(inserted, replacementRange: editor.selectedRange())
-        } else {
-            field.stringValue = prefix + inserted
-        }
-        return runsAsCommand
-    }
-
-    /// Enter spustí, Escape vymaže a vrátí se do panelu, šipky listují historií.
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        // Prázdná řádka: Home/End/PgUp/PgDn ovládají panel (jako v Salamanderu).
-        let navigation: Set<Selector> = [
-            #selector(NSResponder.moveToBeginningOfDocument(_:)), #selector(NSResponder.moveToEndOfDocument(_:)),
-            #selector(NSResponder.scrollToBeginningOfDocument(_:)), #selector(NSResponder.scrollToEndOfDocument(_:)),
-            #selector(NSResponder.scrollPageUp(_:)), #selector(NSResponder.scrollPageDown(_:)),
-            #selector(NSResponder.pageUp(_:)), #selector(NSResponder.pageDown(_:)),
-        ]
-        if field.stringValue.isEmpty, navigation.contains(commandSelector),
-           let event = NSApp.currentEvent, event.type == .keyDown {
-            onForwardKey?(event)
-            return true
-        }
-        switch commandSelector {
-        case #selector(NSResponder.insertNewline(_:)):
-            submit(inTerminal: false)
-            return true
-        case #selector(NSResponder.cancelOperation(_:)):
-            field.stringValue = ""
-            onLeave?()
-            return true
-        case #selector(NSResponder.moveUp(_:)):
-            guard !history.isEmpty else { return true }
-            historyIndex = max(0, historyIndex - 1)
-            field.stringValue = history[historyIndex]
-            return true
-        case #selector(NSResponder.moveDown(_:)):
-            guard !history.isEmpty else { return true }
-            historyIndex = min(history.count, historyIndex + 1)
-            field.stringValue = historyIndex < history.count ? history[historyIndex] : ""
-            return true
-        default:
-            return false
-        }
-    }
-}
-
 /// Spodní lišta F-kláves; popisky odpovídají drženým modifikátorům.
 final class FunctionKeyBar: NSView {
     /// Sada modifikátorů lišty (jako Salamander: žádný, Shift, Ctrl, Alt).
@@ -414,6 +283,8 @@ final class FunctionKeyBar: NSView {
     private var buttons: [FunctionKeyButton] = []
     private(set) var currentLayer: Layer = .plain
     var onCommand: ((Command) -> Void)?
+    /// Pozorovatel změny zkratek (odhlásí se se zánikem lišty – oken může být víc).
+    private var bindingsObserver: NSObjectProtocol?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -439,10 +310,15 @@ final class FunctionKeyBar: NSView {
         ])
         setLayer(.plain)
         // Změna zkratek v Nastavení přepíše popisky lišty.
-        NotificationCenter.default.addObserver(forName: KeyBindings.changed, object: nil, queue: .main) { [weak self] _ in
+        bindingsObserver = NotificationCenter.default.addObserver(forName: KeyBindings.changed, object: nil,
+                                                                  queue: .main) { [weak self] _ in
             guard let self else { return }
             self.setLayer(self.currentLayer)
         }
+    }
+
+    deinit {
+        if let bindingsObserver { NotificationCenter.default.removeObserver(bindingsObserver) }
     }
 
     required init?(coder: NSCoder) {

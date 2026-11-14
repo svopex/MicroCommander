@@ -77,8 +77,10 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
 - **UI** (Swift/AppKit) rozvržené podle originálu (help: `main.png`, `panel.png`):
   horní nástrojová lišta, lišta disků (kořen, domov, připojené svazky, FTP/SFTP servery),
   dva panely s prostřední svislou lištou operací (výchozí jen úzký pruh, ikony
-  zapne Nastavení), příkazová řádka `cesta>`
+  zapne Nastavení), řádek vestavěného terminálu (shell uživatele; ⌘F12 ho
+  roztáhne na celé okno)
   a spodní lišta F-kláves (popisky se mění podle držených Shift/Ctrl/Alt).
+  Oken může být víc (⌘N), každé má vlastní panely i terminál.
   Panel má řádek adresáře (aktivní panel zvýrazněný barvou, tlačítko disku,
   volné místo), sloupce Jméno/Přípona/Velikost/Datum/Čas/Atr, řádek „..“
   (UP-DIR), kurzor oddělený od označení (označené položky červeně) a informační
@@ -123,7 +125,10 @@ app/                        # tenké UI pro macOS
   Sources/FileGridView.swift  # režimy zobrazení; mřížka Stručný/Ikony/
                             #   Miniatury/Dlaždice
   Sources/Bars.swift        # nástrojová lišta, disky, prostřední lišta,
-                            #   příkazová řádka, lišta F-kláves
+                            #   lišta F-kláves
+  Sources/TerminalPane.swift  # vestavěný terminál (SwiftTerm): shell
+                            #   v pseudoterminálu, řádek / celé okno,
+                            #   adresář shellu ↔ aktivní panel, integrace zsh
   Sources/WindowController.swift  # hlavní okno, příkazy, směrování kláves
   Sources/Dialogs.swift     # progress, správa FTP/SFTP serverů,
                             #   interní prohlížeč, nabídka disků, dialog
@@ -154,6 +159,9 @@ tests/main.swift            # end-to-end smoke test FFI (Swift CLI)
 tests/sftp_test.sh          # SFTP end-to-end proti dočasnému sshd (make sftp-test)
 Makefile                    # build celé aplikace jedním příkazem
 fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)
+fetch-swiftterm.sh          # stáhne SwiftTerm v připnuté verzi do vendor/
+vendor/SwiftTerm/           # zdrojáky emulátoru terminálu (MIT; mimo repozitář,
+                            #   stáhnou se při prvním `make`)
 CODESIGNING.md              # vlastní certifikát pro podpis (trvalá oprávnění macOS)
 samandarin/                 # původní Windows zdrojáky (reference, nemění se)
 ```
@@ -163,6 +171,13 @@ samandarin/                 # původní Windows zdrojáky (reference, nemění s
 Vyžaduje Rust (cargo v `~/.cargo/bin`) a Xcode Command Line Tools (swiftc).
 Aplikace se sestavuje pro macOS 13 a novější (Makefile bere minimum
 z `LSMinimumSystemVersion` v `app/Info.plist`).
+
+Vestavěný terminál používá knihovnu [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm)
+(licence MIT). První `make` si její zdrojáky stáhne z GitHubu do `vendor/SwiftTerm`
+(verze připnutá tagem i commitem v Makefile, skript `fetch-swiftterm.sh`)
+a přeloží je přes `swiftc` jako statickou knihovnu do `build/`; další sestavení
+už síť nepotřebují. Licence knihovny se kopíruje do balíčku aplikace
+(`Contents/Resources/SwiftTerm-LICENSE.txt`).
 
 ```
 make            # sestaví jádro (release) i aplikaci: build/MicroCommander.app
@@ -197,8 +212,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   adresář, archiv (ZIP/TAR/TAR.GZ jako panel; pozná se podle obsahu, samostatný
   `.gz` bez TAR uvnitř archiv není) nebo soubor ve výchozí aplikaci;
   **spustitelný shell skript** (právo `+x` a shebang `sh`/`bash`/`zsh`/`dash`/`ksh`,
-  i přes `/usr/bin/env`; přípona nerozhoduje) Enter spustí v Terminalu
-  v adresáři panelu – skript bez `+x` nebo bez shebangu se jen otevře;
+  i přes `/usr/bin/env`; přípona nerozhoduje) Enter spustí ve vestavěném
+  terminálu v adresáři panelu (terminál se roztáhne na celé okno, aby byl
+  vidět výstup) – skript bez `+x` nebo bez shebangu se jen otevře;
   **⌘Enter** – spustit / otevřít systémově bez vstupu dovnitř (aplikace `.app`
   se spustí, archiv se otevře ve výchozí aplikaci, adresář ve Finderu, skript
   se shebangem se otevře podle přípony – bez přípony v textovém editoru;
@@ -207,8 +223,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   přišlo; na kořeni archivu/FTP se lokace zavře); Tab – druhý panel;
   Home / End (fn+← / fn+→, ⌘← / ⌘→) a ⌥↑ / ⌥↓ – první položka (obvykle „..“) /
   poslední položka ve všech režimech zobrazení (i když systém nebo klávesnice
-  posílá Home/End jako příkaz začátek/konec dokumentu); funguje i z prázdné
-  příkazové řádky, stejně jako PgUp/PgDn;
+  posílá Home/End jako příkaz začátek/konec dokumentu); PgUp/PgDn listují
+  panelem i z řádku terminálu;
   ⌥← / ⌥→ – historie; ⌘\ – kořen; ⌘. (⌃.) – poslat aktuální adresář do druhého panelu (přepne se druhý panel);
   ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní; oba směry fungují
   i v archivu a na FTP/SFTP – panel převezme i zanoření, „..“ vede ven); ⇧F7 / ⌘G / dvojklik na řádek adresáře – zadat cestu
@@ -243,8 +259,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   potvrzení mazání i konflikt existujících cílů jsou dialogy ve stylu
   Salamandera, stejné jako Informace o jednotce: text, vstupní pole, dole
   tlačítka; Enter potvrdí, Escape zruší),
-  F9 terminál v adresáři, F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
-  zavřít archiv; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌘F1 / ⌃F1 informace o
+  F9 aplikace Terminal v adresáři panelu (samostatné okno vedle vestavěného
+  terminálu), F10 ukončit, F11 FTP/SFTP servery, F12 odpojit /
+  zavřít archiv, **⌘F12 vestavěný terminál na celé okno a zpět**; ⇧F4 nový soubor, ⇧F6 přejmenovat; ⌘F1 / ⌃F1 informace o
   jednotce; **⌘F2 / ⌃F2 změnit atributy**
   (dialog podle Salamandera: Jen pro čtení a Skrytý třístavově – smíšený stav
   = neměnit, změna data a času Změněno / Vytvořeno / Otevřeno, Nastavit
@@ -330,9 +347,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     zkratka používaná jiným příkazem se po potvrzení přeřadí, písmeno bez
     modifikátoru se odmítne (blokovalo by rychlé hledání); Odebrat zkratku…,
     Výchozí (vybraný příkaz) a Obnovit zkratky (všechny příkazy). Podle zkratek se řídí obsluha kláves,
-    zkratky v menu i popisky lišty F-kláves. V textových polích (příkazová
-    řádka, úprava cesty) se nepoužijí zkratky potřebné pro psaní (⌘A/⌘C/⌘V/⌘X/⌘Z,
-    ⌃písmeno, šipky). Pevné zůstávají navigační klávesy (šipky, Enter, Tab,
+    zkratky v menu i popisky lišty F-kláves. V textových polích (úprava
+    cesty) se nepoužijí zkratky potřebné pro psaní (⌘A/⌘C/⌘V/⌘X/⌘Z,
+    ⌃písmeno, šipky); terminál si nechává ještě víc kláves (viz Vestavěný
+    terminál). Pevné zůstávají navigační klávesy (šipky, Enter, Tab,
     mezerník, psaní), ⌘Enter / ⌃Enter, ⌘Tab a ⌘0–⌘9 míst. Uloží se jen změny
     oproti výchozím (předvolba `keyBindings`).
   - **Obnovit vše** (vlevo dole): nastaví všechny volby na všech stránkách
@@ -415,14 +433,48 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   přetažení do panelu zatím není.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (Finder, kopírovat cestu).
-- **Příkazová řádka** (⌘Tab, také ⌃Tab): Enter spustí příkaz v login shellu v adresáři
-  panelu (na pozadí, bez terminálu; výstup v prohlížeči po doběhnutí), **⌘Enter**
-  nebo **⌃Enter** ho spustí v novém okně Terminalu v adresáři panelu (interaktivní skripty, dotazy
-  na heslo, průběžný výstup; po doběhnutí zůstane v okně shell), `cd cesta` mění adresář panelu, ↑↓ historie,
-  ⌃↩ v panelu (nebo v prázdné příkazové řádce) vloží jméno položky pod kurzorem na pozici
-  kurzoru v řádce – u souboru na začátku prázdné řádky jako `./jméno` a fokus
-  přejde do řádky, takže Enter skript/program rovnou spustí; jinde jako argument
-  (za „./“ bez mezery), ⌃[ / ⌃] cestu levého/pravého panelu.
+- **Vestavěný terminál** (místo dřívější příkazové řádky): pod panely je jeden
+  řádek skutečného terminálu s login shellem uživatele (`$SHELL`, prompt
+  shellu, historie a doplňování shellu, barvy, interaktivní programy, dotazy
+  na heslo). **⌘F12** (Příkazy › Terminál na celé okno) ho roztáhne na celou
+  plochu okna pod nástrojovou lištou – panely a lišta disků se skryjí – a druhý
+  stisk vrátí jeden řádek. Terminál má pořád velikost celé plochy, v řádku je
+  z něj jen vidět řádek s kurzorem: výstup příkazu spuštěného z řádku je po
+  ⌘F12 vidět celý a programy mají správné rozměry.
+  - **Fokus:** ⌃Tab (⌘Tab) nebo klik přepne mezi panelem a řádkem terminálu.
+    V řádku patří aplikaci F-klávesy a zkratky s ⌘ (F5 kopíruje i z terminálu),
+    PgUp/PgDn listují panelem; vše ostatní dostane shell (Tab doplňuje, šipky
+    listují historií, ⌃C, ⌃R…, ⌥ píše znaky české klávesnice). V terminálu
+    přes celé okno dostane program všechny klávesy včetně F-kláves (mc, htop,
+    vim) – aplikaci zůstává jen ⌘F12 a ⌘N; příkaz nad panely zvolený z menu
+    nebo tlačítkem lišty nejdřív vrátí panely.
+  - **Adresář:** shell jde za aktivním panelem – po změně adresáře (i přepnutí
+    panelu Tabem) aplikace do nečinného shellu s prázdným řádkem napíše `cd`
+    (začíná mezerou, takže nejde do historie, a po sobě svůj řádek smaže);
+    běží-li v terminálu program nebo je na řádku rozepsaný příkaz, počká se.
+    Naopak `cd` v terminálu přesune aktivní panel a po doběhnutí každého
+    příkazu se oba panely obnoví. V archivu a na FTP/SFTP zůstává shell
+    v posledním lokálním adresáři.
+  - **⌃↩** vloží na řádek terminálu jméno položky pod kurzorem a předá mu
+    fokus – soubor na prázdném řádku jako `./jméno` (Enter ho rovnou spustí),
+    jinak jako argument; je-li shell v jiném adresáři než panel, vloží se celá
+    cesta. ⌃[ / ⌃] vloží cestu levého/pravého panelu, Escape v panelu smaže
+    rozepsaný řádek terminálu.
+  - Shell, který skončí (`exit`, ⌃D), se spustí znovu v adresáři aktivního
+    panelu. Barvy terminálu se řídí barevným schématem panelů. **zsh** dostane
+    přes `ZDOTDIR` integrační `.zshenv` (uložený v
+    `~/Library/Application Support/MicroCommander/zsh`), který vrátí původní
+    `ZDOTDIR`, načte váš `.zshenv` a před promptem zapne `HIST_IGNORE_SPACE`
+    a ohlásí adresář (OSC 7, kvůli cestám přes symbolické odkazy); bash má
+    `HISTCONTROL=ignoreboth`, pokud ho prostředí nenastavuje jinak.
+  - F9 dál otevírá aplikaci Terminal v adresáři panelu.
+- **Více oken:** ⌘N (Okno › Nové okno, také nabídka ikony v Docku) otevře další
+  hlavní okno ve stejných adresářích jako to aktuální; každé okno má vlastní
+  panely, připojení i terminál. Příkazy z menu provádí naposledy aktivní okno,
+  přepínat mezi nimi jde v menu Okno (⌘W okno zavře, poslední zavřené okno
+  ukončí aplikaci). Skryté soubory, zkratky a barvy platí pro všechna okna;
+  polohu si pamatuje první okno a pro příští spuštění se ukládají adresáře
+  naposledy aktivního (zavíraného) okna.
 - **Zaheslované archivy:** šifrované položky mají v atributech „E“ (info řádek
   „šifrováno“). Při F3/Enter, F5/F6 nebo ⌥F6 ze zaheslovaného ZIP se aplikace
   zeptá na heslo (jednou pro otevřený archiv); při chybném hesle se zeptá
@@ -449,7 +501,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   Archivační utilita macOS (7-Zip, Keka, WinZip, bsdtar ano)
 - F3/Enter nad souborem v archivu či na FTP ho nejprve rozbalí do dočasného
   adresáře (smaže se při ukončení aplikace, zbytky po pádu při dalším
-  spuštění); F4 a příkazová řádka fungují jen na lokálním disku
+  spuštění); F4 funguje jen na lokálním disku a terminál zůstává v posledním
+  lokálním adresáři
 - koš funguje jen na lokálním disku; v archivu a na FTP/SFTP je mazání trvalé
 - FTP bez TLS (FTPS není zapojeno)
 - SFTP neověřuje klíč serveru proti ~/.ssh/known_hosts (připojí se k jakémukoli
@@ -495,7 +548,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   dokumentu ve všech šesti režimech s 500 soubory v okně skutečné velikosti
   (kurzor na „..“ / poslední položku a zůstane vidět), cyklení a změna pořadí
   v nabídce disků, řazení míst podle uloženého pořadí, uložené FTP/SFTP servery (název, adresa, potřeba hesla,
-  uložení do JSON);
+  uložení do JSON), vestavěný terminál se skutečným shellem uživatele (shell
+  jde za adresářem panelu, vložené `cd` po sobě smaže řádek, `cd` v shellu
+  přesune panel, ⌘F12 roztáhne terminál a vrátí jeden řádek; volitelné snímky
+  obou režimů `SAL_TERMINAL_SNAPSHOT=/cesta/predpona`);
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`
   zapíše každý stisk (kód klávesy, znak, modifikátory, fokus) do

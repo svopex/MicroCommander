@@ -6,6 +6,9 @@
 /samandarin/
 /.samandarin-tmp.*/
 
+# Zdrojáky knihovny SwiftTerm (stahuje fetch-swiftterm.sh v připnuté verzi)
+/vendor/
+
 # Pracovní a lokální soubory nástrojů
 /.zwork/
 /.claude/

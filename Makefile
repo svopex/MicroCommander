@@ -9,6 +9,10 @@
 #   make sftp-test  – SFTP přihlášení klíčem/agentem proti dočasnému lokálnímu sshd
 #   make icon       – vykreslí ikonu (tools/make-icon.swift) do app/AppIcon.icns
 #   make clean      – smaže build adresář
+#
+# Vestavěný terminál používá knihovnu SwiftTerm (MIT). Její zdrojáky v připnuté
+# verzi se při prvním sestavení stáhnou do vendor/SwiftTerm (mimo repozitář)
+# a přeloží se jako statická knihovna do build adresáře.
 
 RUST ?= $(HOME)/.cargo/bin
 export PATH := $(RUST):$(PATH)
@@ -31,6 +35,18 @@ export MACOSX_DEPLOYMENT_TARGET := $(MACOS_MIN)
 # oprávnění macOS (přístup ke Stahování, Dokumentům…) i po novém buildu;
 # bez certifikátu v klíčence zůstane ad-hoc podpis linkeru.
 SIGN_IDENTITY ?= MicroCommander Dev
+# Další přepínače pro swiftc (např. -module-cache-path při sestavení v sandboxu).
+SWIFTFLAGS ?=
+
+# SwiftTerm – emulátor terminálu (licence MIT). Verze je připnutá tagem
+# i commitem; fetch-swiftterm.sh odmítne tag, který ukazuje jinam.
+SWIFTTERM_VERSION := v1.20.0
+SWIFTTERM_COMMIT := 5d14406844143538cd8f8851d2d8a67c1fe443e5
+SWIFTTERM_SRC := $(ROOT)/vendor/SwiftTerm
+SWIFTTERM_STAMP := $(SWIFTTERM_SRC)/.fetched-$(SWIFTTERM_VERSION)
+# Výstup závisí na verzi i cílové platformě – změna jedné z nich knihovnu přeloží znovu.
+SWIFTTERM_OUT := $(BUILD)/swiftterm-$(SWIFTTERM_VERSION)-$(SWIFT_TARGET)
+SWIFTTERM_LIB := $(SWIFTTERM_OUT)/libSwiftTerm.a
 
 .PHONY: all app release test smoke selftest keycheck sftp-test icon clean run
 
@@ -39,6 +55,34 @@ all: app
 # Jádro: release build Rust knihovny (cdylib).
 release:
 	cd $(CORE) && cargo build --release
+
+# Zdrojáky SwiftTermu v připnuté verzi (stáhnou se jen jednou).
+$(SWIFTTERM_STAMP):
+	$(ROOT)/fetch-swiftterm.sh $(SWIFTTERM_VERSION) $(SWIFTTERM_COMMIT)
+	@# Bez značky stažené verze se nepokračuje (knihovna by se přeložila prázdná).
+	@test -f $@
+
+# SwiftTerm jako statická knihovna + modul pro `import SwiftTerm`. Překládá se
+# přímo přes swiftc (projekt nepoužívá SwiftPM); BuildInfo.swift v balíčku
+# generuje build plugin SwiftPM, tady ho nahrazuje soubor s připnutou verzí.
+# Shader pro Metal se nepřekládá – terminál kreslí přes CoreGraphics.
+$(SWIFTTERM_LIB): $(SWIFTTERM_STAMP)
+	@mkdir -p $(SWIFTTERM_OUT)
+	@printf '%s\n' \
+		'// Generováno Makefilem (v balíčku SwiftPM soubor vytváří build plugin).' \
+		'public enum SwiftTermBuildInfo {' \
+		'    public static let branch: String? = nil' \
+		'    public static let tag: String? = "$(SWIFTTERM_VERSION)"' \
+		'    public static let commit: String? = "$(SWIFTTERM_COMMIT)"' \
+		'    public static let hasUncommittedChanges: Bool? = false' \
+		'    public static let version: String = "$(SWIFTTERM_VERSION)"' \
+		'}' > $(SWIFTTERM_OUT)/BuildInfo.swift
+	swiftc -O -wmo -parse-as-library -swift-version 5 -suppress-warnings \
+		-target $(SWIFT_TARGET) $(SWIFTFLAGS) \
+		-module-name SwiftTerm \
+		-emit-module -emit-module-path $(SWIFTTERM_OUT)/SwiftTerm.swiftmodule \
+		-emit-library -static -o $(SWIFTTERM_LIB) \
+		$$(find $(SWIFTTERM_SRC)/Sources/SwiftTerm -name '*.swift') $(SWIFTTERM_OUT)/BuildInfo.swift
 
 # Unit testy jádra.
 test:
@@ -56,17 +100,21 @@ smoke: release
 
 # .app bundle: vždy celá sekvence (install name → kopie dylib → swiftc → plist).
 # cargo i make jsou no-op při nezměněných vstupech, celý krok je rychlý.
-app: release
+app: release $(SWIFTTERM_LIB)
 	@mkdir -p $(APPDIR)/Contents/MacOS $(APPDIR)/Contents/Frameworks
 	# Install name knihovny přepneme na relativní rpath, aby bundle byl přenositelný.
 	install_name_tool -id @rpath/libsalcore.dylib $(DYLIB)
 	cp $(DYLIB) $(APPDIR)/Contents/Frameworks/
-	# Kompilace Swift UI; jádro se linkuje z target/release, runtime přes rpath.
+	# Kompilace Swift UI; jádro se linkuje z target/release, runtime přes rpath,
+	# SwiftTerm staticky (jeho systémové frameworky se přilinkují automaticky).
 	swiftc -O \
-		-target $(SWIFT_TARGET) \
+		-target $(SWIFT_TARGET) $(SWIFTFLAGS) \
 		-I $(CORE)/include \
 		-L $(CORE)/target/release \
 		-lsalcore \
+		-I $(SWIFTTERM_OUT) \
+		-L $(SWIFTTERM_OUT) \
+		-lSwiftTerm \
 		-Xlinker -rpath -Xlinker @executable_path/../Frameworks \
 		-framework AppKit \
 		$(APP)/Sources/*.swift \
@@ -75,6 +123,8 @@ app: release
 	cp $(APP)/Info.plist $(APPDIR)/Contents/Info.plist
 	@mkdir -p $(APPDIR)/Contents/Resources
 	cp $(APP)/AppIcon.icns $(APPDIR)/Contents/Resources/AppIcon.icns
+	# Licence staticky přilinkované knihovny SwiftTerm (MIT) jde s aplikací.
+	cp $(SWIFTTERM_SRC)/LICENSE $(APPDIR)/Contents/Resources/SwiftTerm-LICENSE.txt
 	# Podpis stálou identitou (nejdřív knihovna, pak bundle), pokud je certifikát v klíčence.
 	@if security find-identity -p codesigning | grep -q "\"$(SIGN_IDENTITY)\""; then \
 		codesign --force --timestamp=none -s "$(SIGN_IDENTITY)" $(APPDIR)/Contents/Frameworks/libsalcore.dylib && \

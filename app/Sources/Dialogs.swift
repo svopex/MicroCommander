@@ -689,11 +689,6 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
         show(ViewerWindowController(title: title, text: decodeForViewing(data, truncated: truncated)))
     }
 
-    /// Otevře hotový text (např. výstup příkazové řádky).
-    static func open(text: String, title: String) {
-        show(ViewerWindowController(title: title, text: text))
-    }
-
     private static func show(_ controller: ViewerWindowController) {
         openViewers.append(controller)
         controller.showWindow(nil)

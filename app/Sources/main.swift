@@ -7,9 +7,16 @@
 import AppKit
 import microcommander
 
-/// Delegát aplikace: hlavní okno a menu (položky volají příkazy okna).
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    var windowController: MainWindowController?
+/// Delegát aplikace: hlavní okna a menu (položky volají příkazy aktivního okna).
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+    /// Delegát běžící aplikace.
+    static var shared: AppDelegate? { NSApp.delegate as? AppDelegate }
+
+    /// Otevřená hlavní okna (⌘N přidá další; každé má vlastní panely a terminál).
+    private(set) var windowControllers: [MainWindowController] = []
+    /// Naposledy aktivní hlavní okno – cíl příkazů z menu, i když má fokus
+    /// jiné okno aplikace (Hledat, prohlížeč).
+    weak var activeController: MainWindowController?
     /// Běžící self-test (drží se po dobu testu).
     var selfTest: UISelfTest?
     /// Běžící kontrola kláves bez okna.
@@ -29,8 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Vzhled podle barevného schématu ještě před vytvořením okna.
         Settings.applyAppearance()
         let controller = MainWindowController()
-        windowController = controller
-        buildMenu(controller)
+        windowControllers = [controller]
+        activeController = controller
+        buildMenu()
         // Kontrola kláves bez okna – neaktivuje aplikaci ani neukáže okno.
         if ProcessInfo.processInfo.environment["SAL_KEYCHECK"] != nil {
             let check = UIKeyCheck(controller: controller)
@@ -58,9 +66,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Při ukončení se smažou dočasné kopie souborů rozbalených z archivů a serverů.
+    /// Při ukončení se uloží adresáře panelů aktivního okna a smažou dočasné
+    /// kopie souborů rozbalených z archivů a serverů.
     func applicationWillTerminate(_ notification: Notification) {
+        activeController?.savePanelPaths()
         TempFiles.removeCreated()
+    }
+
+    // MARK: - Okna
+
+    /// ⌘N – otevře další hlavní okno ve stejných adresářích jako zdrojové okno.
+    /// - Parameter source: okno, ze kterého příkaz přišel (nil = aktivní okno)
+    func openNewWindow(from source: MainWindowController? = nil) {
+        let controller = MainWindowController(openedFrom: source ?? activeController)
+        windowControllers.append(controller)
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+        controller.focusActivePanel()
+    }
+
+    /// Hlavní okno se zavírá: příkazy z menu převezme jiné okno a kontroler se
+    /// přestane držet – až po doběhnutí zavírání (volá se z windowWillClose,
+    /// kontroler nesmí zaniknout uprostřed něj).
+    func windowClosed(_ controller: MainWindowController) {
+        if activeController === controller || activeController == nil {
+            activeController = windowControllers.last { $0 !== controller }
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.windowControllers.removeAll { $0 === controller }
+        }
+    }
+
+    /// Nabídka ikony v Docku: nové okno.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        let item = menu.addItem(withTitle: "Nové okno", action: #selector(newWindowFromDock(_:)), keyEquivalent: "")
+        item.target = self
+        return menu
+    }
+
+    @objc private func newWindowFromDock(_ sender: Any?) {
+        openNewWindow()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: - Menu
+
+    /// Je položka menu příkazem Nové okno? Ten jediný nepotřebuje hlavní okno
+    /// (aplikaci může držet naživu jen okno Hledat nebo prohlížeč).
+    private func opensNewWindow(_ item: NSMenuItem) -> Bool {
+        item.tag == MainWindowController.menuCommandIndex(.newWindow)
+    }
+
+    /// Položka menu s příkazem: provede ho naposledy aktivní hlavní okno.
+    @objc func menuCommand(_ sender: NSMenuItem) {
+        if let controller = activeController {
+            controller.menuCommand(sender)
+        } else if opensNewWindow(sender) {
+            openNewWindow()
+        }
+    }
+
+    /// Dostupnost a zaškrtnutí položek příkazů určuje aktivní hlavní okno.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(menuCommand(_:)) else { return true }
+        return activeController?.validateMenuItem(menuItem) ?? opensNewWindow(menuItem)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -70,8 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Položka menu: titulek a příkaz; zkratku dodá KeyBindings (Nastavení › Klávesnice).
     private typealias Entry = (title: String, command: Command)?
 
-    /// Sestaví hlavní menu podle Salamandera (Soubory, Příkazy, Panel, Označit, Zobrazení).
-    private func buildMenu(_ controller: MainWindowController) {
+    /// Sestaví hlavní menu podle Salamandera (Soubory, Příkazy, Panel, Označit,
+    /// Zobrazení) a menu Okno.
+    private func buildMenu() {
         let mainMenu = NSMenu()
 
         // Aplikační menu.
@@ -94,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Vložit", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(.separator())
         // Cesta aktuálního adresáře aktivního panelu (Ctrl+Alt+Insert v Salamanderu).
-        editMenu.addItem(makeItem(("Kopírovat cestu adresáře", .copyDirPath), controller))
+        editMenu.addItem(makeItem(("Kopírovat cestu adresáře", .copyDirPath)))
 
         let fileEntries: [Entry] = [
             ("Zobrazit", .view),
@@ -115,7 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Rozbalit…", .unpack),
             ("Spočítat velikost", .calcSize),
         ]
-        addSubmenu(makeMenu("Soubory", fileEntries, controller), title: "Soubory", to: mainMenu)
+        addSubmenu(makeMenu("Soubory", fileEntries), title: "Soubory", to: mainMenu)
         addSubmenu(editMenu, title: "Úpravy", to: mainMenu)
 
         let markEntries: [Entry] = [
@@ -126,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nil,
             ("Porovnat adresáře", .compare),
         ]
-        let markMenu = makeMenu("Označit", markEntries, controller)
+        let markMenu = makeMenu("Označit", markEntries)
         // ⌘A přes responder chain (cíl nil): v panelu označí vše (selectAll: →
         // příkaz Označit vše), v textových polích a dialozích vybere text.
         let selectAllItem = markMenu.insertItem(withTitle: "Označit vše", action: #selector(NSText.selectAll(_:)),
@@ -136,14 +207,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let commandEntries: [Entry] = [
             ("Vyhledat soubory a adresáře…", .find),
-            ("Terminál v adresáři", .terminal),
+            ("Terminál na celé okno", .terminalFull),
+            ("Terminal.app v adresáři", .terminal),
             nil,
             ("FTP/SFTP servery…", .connect),
             ("Odpojit / zavřít archiv", .disconnect),
             nil,
             ("Nápověda ke klávesám", .help),
         ]
-        addSubmenu(makeMenu("Příkazy", commandEntries, controller), title: "Příkazy", to: mainMenu)
+        addSubmenu(makeMenu("Příkazy", commandEntries), title: "Příkazy", to: mainMenu)
 
         let panelEntries: [Entry] = [
             ("Zpět", .back),
@@ -168,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Obnovit", .refresh),
             ("Prohodit panely", .swap),
         ]
-        addSubmenu(makeMenu("Panel", panelEntries, controller), title: "Panel", to: mainMenu)
+        addSubmenu(makeMenu("Panel", panelEntries), title: "Panel", to: mainMenu)
 
         // Zobrazení – režimy panelu jako v Salamanderu (Alt+1..6 → ⌥1..⌥6) a skryté soubory.
         let viewEntries: [Entry] = [
@@ -181,7 +253,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             nil,
             ("Zobrazovat skryté soubory", .toggleHidden),
         ]
-        addSubmenu(makeMenu("Zobrazení", viewEntries, controller), title: "Zobrazení", to: mainMenu)
+        addSubmenu(makeMenu("Zobrazení", viewEntries), title: "Zobrazení", to: mainMenu)
+
+        // Okno – nové okno (⌘N) a standardní položky; macOS sem sám doplňuje
+        // seznam otevřených oken.
+        let windowMenu = makeMenu("Okno", [("Nové okno", .newWindow)])
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Minimalizovat", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zavřít okno", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        addSubmenu(windowMenu, title: "Okno", to: mainMenu)
+        NSApplication.shared.windowsMenu = windowMenu
 
         NSApplication.shared.mainMenu = mainMenu
         // Změna zkratek v Nastavení › Klávesnice se hned projeví v menu.
@@ -190,28 +271,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Sestaví menu z popisů (cíl = okno, tag = index příkazu).
-    private func makeMenu(_ title: String, _ entries: [Entry], _ controller: MainWindowController) -> NSMenu {
+    /// Sestaví menu z popisů (tag položky = index příkazu).
+    private func makeMenu(_ title: String, _ entries: [Entry]) -> NSMenu {
         let menu = NSMenu(title: title)
         for entry in entries {
             guard let entry else {
                 menu.addItem(.separator())
                 continue
             }
-            menu.addItem(makeItem(entry, controller))
+            menu.addItem(makeItem(entry))
         }
         return menu
     }
 
-    /// Položka menu volající příkaz hlavního okna (tag = index příkazu).
-    /// - Parameters:
-    ///   - entry: titulek a příkaz (zkratku dodá KeyBindings)
-    ///   - controller: hlavní okno, které příkaz provede
-    private func makeItem(_ entry: (title: String, command: Command), _ controller: MainWindowController) -> NSMenuItem {
-        let item = NSMenuItem(title: entry.title, action: #selector(MainWindowController.menuCommand(_:)),
-                              keyEquivalent: "")
+    /// Položka menu volající příkaz aktivního hlavního okna (tag = index
+    /// příkazu). Cílem je delegát aplikace, který příkaz předá oknu – oken může
+    /// být víc a položka nesmí být svázaná s jedním z nich.
+    /// - Parameter entry: titulek a příkaz (zkratku dodá KeyBindings)
+    private func makeItem(_ entry: (title: String, command: Command)) -> NSMenuItem {
+        let item = NSMenuItem(title: entry.title, action: #selector(menuCommand(_:)), keyEquivalent: "")
         item.tag = MainWindowController.menuCommandIndex(entry.command)
-        item.target = controller
+        item.target = self
         AppDelegate.applyShortcut(to: item)
         return item
     }
@@ -220,7 +300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// nebo Označit vše (akce selectAll: přes responder chain).
     static func applyShortcut(to item: NSMenuItem) {
         let command: Command
-        if item.action == #selector(MainWindowController.menuCommand(_:)) {
+        if item.action == #selector(menuCommand(_:)) {
             command = MainWindowController.menuCommands[item.tag]
         } else if item.action == #selector(NSText.selectAll(_:)) {
             command = .selectAll

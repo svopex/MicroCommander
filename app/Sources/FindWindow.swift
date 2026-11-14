@@ -473,7 +473,17 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     /// Maximální délka historie rozbalovacích polí.
     private static let historyLimit = 20
 
-    private weak var mainController: MainWindowController?
+    /// Hlavní okno, ze kterého se hledání otevřelo (může se mezitím zavřít).
+    private weak var ownerController: MainWindowController?
+    /// Hlavní okno pro akce nad nálezy (Ukázat, Zobrazit, Upravit…): vlastník,
+    /// po jeho zavření naposledy aktivní hlavní okno.
+    private var mainController: MainWindowController? {
+        let delegate = AppDelegate.shared
+        if let owner = ownerController, delegate?.windowControllers.contains(where: { $0 === owner }) == true {
+            return owner
+        }
+        return delegate?.activeController
+    }
     /// Prohledávaný souborový systém: lokální disk (cesty = skutečné cesty)
     /// nebo VFS aktivního panelu (archiv, FTP/SFTP – cesty uvnitř VFS).
     private let vfs: Vfs
@@ -562,7 +572,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     }
 
     private init(owner: MainWindowController) {
-        self.mainController = owner
+        self.ownerController = owner
         let panel = owner.activePanel
         // Lokální panel: hledá se přes kořen disku (skutečné cesty, Hledat v lze
         // libovolně měnit); jinak ve VFS panelu (archiv, FTP/SFTP).
