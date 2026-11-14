@@ -65,7 +65,7 @@ func lastComponent(_ path: String) -> String {
 }
 
 /// Jedna položka výpisu adresáře.
-struct Item {
+struct Item: Equatable {
     let name: String
     let size: UInt64
     let mtime: Int64

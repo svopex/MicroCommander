@@ -463,7 +463,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **Přetažení myší do panelu:** pro soubory a adresáře přetažené z jiné
   aplikace (Finder a další) do adresáře panelu, nad kterým se pustí, platí
   totéž: ze stejného disku se přesunou, s ⌥ zkopírují; z jiného disku (a na
-  FTP/SFTP server) se zkopírují, s ⌘ přesunou. Přijímají se i přislíbené
+  FTP/SFTP server) se zkopírují, s ⌘ přesunou. Stav kláves si panel čte i sám,
+  takže se kurzor (zelené plus) změní hned po stisku klávesy, i když myš stojí
+  a zdrojová aplikace o klávese ještě nedala vědět. Přijímají se i přislíbené
   soubory (příloha z Mailu, fotka z Fotek, obrázek z prohlížeče) – ty zapisuje
   zdrojová aplikace, proto jen jako kopie do adresáře na lokálním disku. Do
   archivu přetáhnout nelze (je jen pro čtení).
@@ -472,6 +474,16 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   soubor sám, složka se nevypisuje; odepře-li systém i soubor, hlášení poradí
   povolit MicroCommander v Nastavení systému › Soukromí a zabezpečení › Plný
   přístup k disku.
+- **Automatické obnovení panelu:** panel sleduje svůj adresář na lokálním
+  disku a po změně zvenku (jiná aplikace, Finder, terminál, druhý panel) se
+  zhruba do půl vteřiny sám tiše obnoví (velký adresář méně často, nejpozději
+  po 5 s) – bez hlášení „Načítám…“ a bez posunu výpisu; kurzor i označení
+  zůstávají. Projeví se tak i přesun dokončený Finderem až po potvrzení jeho
+  dialogu. Obnovení počká během operace s dialogem, při přejmenování v panelu,
+  při otevřené nabídce či tažení myší a když panel není vidět (terminál přes
+  celé okno). Sleduje se přibývání, mizení a přejmenování položek; změnu
+  velikosti či času existujícího souboru ukáže až ⌘R. V archivu, na FTP/SFTP
+  a na discích, které změny nehlásí (některé síťové), zůstává ruční obnovení.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
   řadí, pravé tlačítko – kontextové menu (schránka souborů, operace, Zobrazit
   ve Finderu, Kopírovat cestu; na položce „..“ platí poslední dvě pro adresář
@@ -613,8 +625,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   vložení z více adresářů, duplikát v témže adresáři, přesun, registrace
   panelu pro přetažení – systémové schránky se nedotkne), tažení mezi panely
   (odmítnutí tažení do téhož panelu, přesun na stejném svazku, kopie s ⌥,
-  přesun s ⌘, umělé pohnutí myší při změně klávesy během tažení ven), zkratky
-  trvalého mazání (⇧F8, ⌘F8) a koš podle svazku;
+  přesun s ⌘, zúžení nabídky podle držených kláves, umělé pohnutí myší při
+  změně klávesy během tažení ven), zkratky trvalého mazání (⇧F8, ⌘F8), koš
+  podle svazku a automatické obnovení panelu po změně adresáře zvenku;
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`
   zapíše každý stisk (kód klávesy, znak, modifikátory, fokus) do

@@ -42,6 +42,8 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private var dragContent = (hasFiles: false, hasPromises: false, sameVolume: false)
     /// Hlídání kláves ⌥ / ⌘ / ⌃ během tažení z panelu (viz DragModifierWatcher).
     private var dragModifierWatcher: DragModifierWatcher?
+    /// Právě držené klávesy pro tažení nad panelem (self-test dosazuje vlastní stav).
+    var dragModifiers: () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags }
 
     /// Režim zobrazení panelu (⌥1–⌥6); Podrobný a Typy = tabulka, jinak mřížka.
     var viewMode: ViewMode = .detailed {
@@ -253,6 +255,9 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     /// Editační pole přejmenování a jeho dokončení (nil = žádné probíhá).
     private var renameField: NSTextField?
     private var renameCompletion: ((String?) -> Void)?
+
+    /// Probíhá přejmenování přímo v panelu?
+    var isRenaming: Bool { renameField != nil }
 
     /// Přejmenování položky pod kurzorem přímo v panelu (F2 / ⇧F6, bez dialogu):
     /// nad jménem se objeví editační pole, Enter potvrdí, Escape zruší, klik
@@ -832,8 +837,11 @@ extension PanelView {
             return []
         }
         // Klávesy zúží nabídku zdroje už v systému: ⌥ nechá jen kopii, ⌘ jen
-        // „generic“ (= přesun), ⌃ jen odkaz (ten panel nepřijímá).
-        let mask = sender.draggingSourceOperationMask
+        // „generic“ (= přesun), ⌃ jen odkaz (ten panel nepřijímá). Systém se ale
+        // řídí stavem kláves ze zpráv zdroje, které při stojící myši nemusí přijít
+        // – panel proto nabídku zúží i sám podle právě držených kláves (dotaz
+        // se opakuje i při stojící myši, viz periodické draggingUpdated).
+        let mask = Self.narrowed(sender.draggingSourceOperationMask, by: dragModifiers())
         let copy: NSDragOperation? = mask.contains(.copy) ? .copy : nil
         let move: NSDragOperation? = mask.contains(.move) ? .move : mask.contains(.generic) ? .generic : nil
         // Přislíbené soubory zapisuje zdrojová aplikace sama – jen kopie a jen na lokální disk.
@@ -842,6 +850,30 @@ extension PanelView {
         }
         // Na stejném svazku má přednost přesun, jinak kopie; nedovolí-li ji zdroj, ta druhá.
         return (dragContent.sameVolume ? move ?? copy : copy ?? move) ?? []
+    }
+
+    /// Zúží operace nabízené zdrojem tažení podle držených kláves se stejným
+    /// významem kláves jako v systému: ⌥ kopie, ⌘ „generic“ (přesun), ⌃ nebo
+    /// ⌥⌘ odkaz.
+    /// - Parameters:
+    ///   - offered: operace nabízené zdrojem
+    ///   - modifiers: držené klávesy
+    /// - Returns: zúžená nabídka. Na rozdíl od systému (ten by nabídku vynuloval)
+    ///   zůstane nezměněná, když zdroj zvolenou operaci nenabízí – panel tak
+    ///   neodmítne tažení ze zdroje, který klávesy ignoruje
+    static func narrowed(_ offered: NSDragOperation, by modifiers: NSEvent.ModifierFlags) -> NSDragOperation {
+        let wanted: NSDragOperation
+        if modifiers.contains(.control) || modifiers.isSuperset(of: [.option, .command]) {
+            wanted = .link
+        } else if modifiers.contains(.option) {
+            wanted = .copy
+        } else if modifiers.contains(.command) {
+            wanted = .generic
+        } else {
+            return offered
+        }
+        let narrowed = offered.intersection(wanted)
+        return narrowed.isEmpty ? offered : narrowed
     }
 
     /// Leží cesta na stejném svazku jako adresář panelu? (Server ani archiv svazek nemají.)

@@ -71,6 +71,40 @@ protocol PanelDelegate: AnyObject {
     func panel(_ panel: PanelController, failedWithPath path: String, error: Error)
 }
 
+/// Sledování změn adresáře na lokálním disku: zavolá `onChange`, když v něm
+/// přibude, ubude nebo se přejmenuje položka (i z jiné aplikace), a také když
+/// adresář sám zanikne (smazání, přejmenování, odpojení svazku). Sledování
+/// končí zánikem objektu.
+final class DirectoryWatcher {
+    /// Cesta sledovaného adresáře.
+    let path: String
+    private let source: DispatchSourceFileSystemObject
+
+    /// - Parameters:
+    ///   - path: cesta adresáře na lokálním disku
+    ///   - onChange: voláno na hlavním vlákně; parametr říká, zda adresář sám
+    ///     zanikl – sledování pak už nic dalšího neohlásí
+    init?(path: String, onChange: @escaping (_ directoryGone: Bool) -> Void) {
+        // O_EVTONLY: jen pro oznámení změn, nebrání odpojení svazku.
+        let descriptor = open(path, O_EVTONLY)
+        guard descriptor >= 0 else { return nil }
+        let gone: DispatchSource.FileSystemEvent = [.delete, .rename, .revoke]
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor,
+                                                               eventMask: gone.union(.write), queue: .main)
+        source.setEventHandler { [unowned source] in
+            onChange(!source.data.isDisjoint(with: gone))
+        }
+        source.setCancelHandler { close(descriptor) }
+        source.resume()
+        self.path = path
+        self.source = source
+    }
+
+    deinit {
+        source.cancel()
+    }
+}
+
 /// Kontroler jednoho panelu (levý/pravý).
 final class PanelController: NSObject {
     /// Aktuální lokace (VFS + cesta).
@@ -117,6 +151,20 @@ final class PanelController: NSObject {
     /// Lokace, jejíž výpis je právě zobrazen (rozlišení obnovení vs. změny adresáře).
     private weak var loadedVfs: Vfs?
     private var loadedPath = ""
+    /// Pořadí požadavků na načtení – použije se jen výsledek toho posledního.
+    private var loadGeneration = 0
+    /// Běží načítání výpisu (i tiché, které `isLoading` nenastavuje)?
+    private var loadInFlight = false
+    /// Sledování změn zobrazeného adresáře na lokálním disku.
+    private var directoryWatcher: DirectoryWatcher?
+    /// Načtení, které bylo poslední v okamžiku poslední změny adresáře zvenku;
+    /// začalo-li od té doby novější, změnu už zahrnulo a tiché obnovení netřeba.
+    private var externalChangeLoad = 0
+    /// Je naplánované tiché obnovení po změně adresáře zvenku?
+    private var silentReloadScheduled = false
+    /// Jak dlouho trvalo poslední načtení a přestavění výpisu (podle toho se
+    /// volí prodleva tichého obnovení – velký adresář se obnovuje méně často).
+    private var lastLoadDuration: TimeInterval = 0
 
     /// Jméno, na které se má po načtení postavit kurzor (návrat z podadresáře).
     private var pendingFocus: String?
@@ -299,20 +347,44 @@ final class PanelController: NSObject {
 
     /// Obnoví výpis na pozadí; kurzor a označení zůstanou na stejných jménech.
     func reload() {
+        load(silent: false)
+    }
+
+    /// Načte výpis adresáře na pozadí.
+    /// - Parameter silent: tiché obnovení po změně adresáře zvenku (viz
+    ///   directoryChangedExternally): bez hlášení „Načítám…“, bez posunu výpisu
+    ///   ke kurzoru a bez chybového hlášení, když adresář mezitím zmizel
+    private func load(silent: Bool) {
         let vfs = location.vfs
         let path = location.path
         // Kurzor se drží na stejném jménu jen při obnovení téhož adresáře;
         // v jiném adresáři začíná na začátku (nebo na požadovaném jménu).
         let sameLocation = loadedVfs === vfs && loadedPath == path
         let focusName = pendingFocus ?? (sameLocation ? currentRow?.item.name : nil)
-        isLoading = true
-        delegate?.panelStateChanged(self)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        loadGeneration += 1
+        let generation = loadGeneration
+        loadInFlight = true
+        if !silent {
+            isLoading = true
+            delegate?.panelStateChanged(self)
+        }
+        let started = Date()
+        // Tiché obnovení si nikdo nevyžádal – nemá soupeřit s prací uživatele.
+        DispatchQueue.global(qos: silent ? .utility : .userInitiated).async { [weak self] in
             let result = Result { try vfs.list(path) }
             DispatchQueue.main.async {
-                guard let self, self.location.isSame(as: Location(vfs: vfs, path: path)) else { return }
+                // Výsledek staršího načtení (mezitím začalo další – i po změně
+                // lokace) se zahodí, jinak by mohl přepsat novější výpis i kurzor.
+                guard let self, generation == self.loadGeneration else { return }
+                self.loadInFlight = false
                 self.isLoading = false
+                defer { self.lastLoadDuration = Date().timeIntervalSince(started) }
                 switch result {
+                case .success(let listed) where silent && sameLocation && listed == self.items:
+                    // Výpis se nezměnil (změnu už zahrnulo dřívější načtení, dočasný
+                    // soubor vznikl a zase zmizel) – panel se nepřestavuje; jen se
+                    // případně znovu naváže sledování (adresář vznikl znovu).
+                    self.watchDirectory(vfs.realPath(path))
                 case .success(let listed):
                     self.items = listed
                     // Označení necháme jen u jmen, která stále existují.
@@ -321,15 +393,22 @@ final class PanelController: NSObject {
                     // Spočítané velikosti adresářů zůstávají jen při obnovení téhož
                     // adresáře a jen u jmen, která stále existují.
                     self.dirSizes = sameLocation ? self.dirSizes.filter { names.contains($0.key) } : [:]
-                    self.pendingFocus = focusName
+                    // Tiché obnovení kurzor nevnucuje: uživatel jím během načítání
+                    // mohl pohnout, platí jeho aktuální poloha.
+                    if !silent { self.pendingFocus = focusName }
                     if !sameLocation {
                         self.cursor = 0
                         self.view?.directoryChanged()
                     }
                     self.loadedVfs = vfs
                     self.loadedPath = path
-                    self.rebuildRows(keepFocus: true)
+                    self.watchDirectory(vfs.realPath(path))
+                    self.rebuildRows(keepFocus: true, scrollToCursor: !silent)
                     self.delegate?.panelDidReload(self)
+                case .failure where silent:
+                    // Adresář mezitím zmizel nebo nejde přečíst: výpis zůstane a chybu
+                    // ohlásí až příští běžné načtení, které také znovu naváže sledování.
+                    self.directoryWatcher = nil
                 case .failure(let error):
                     self.items = []
                     self.loadedVfs = nil
@@ -341,10 +420,66 @@ final class PanelController: NSObject {
         }
     }
 
+    // MARK: - Sledování změn adresáře
+
+    /// Začne sledovat změny právě načteného adresáře (jen lokální disk; archiv
+    /// a server cestu nemají). Tentýž adresář se sleduje dál beze změny.
+    private func watchDirectory(_ path: String?) {
+        guard path != directoryWatcher?.path else { return }
+        directoryWatcher = path.flatMap { path in
+            DirectoryWatcher(path: path) { [weak self] directoryGone in
+                guard let self else { return }
+                // Zaniklý adresář už změny nehlásí – příští načtení naváže sledování znovu.
+                if directoryGone { self.directoryWatcher = nil }
+                self.directoryChangedExternally()
+            }
+        }
+    }
+
+    /// Zobrazený adresář se změnil zvenku (jiná aplikace, terminál, druhý panel):
+    /// panel se za chvíli sám tiše obnoví. Série změn se sloučí do jednoho obnovení.
+    private func directoryChangedExternally() {
+        externalChangeLoad = loadGeneration
+        guard !silentReloadScheduled else { return }
+        silentReloadScheduled = true
+        // Prodleva sloučí sérii změn a omezí zátěž: aspoň půl vteřiny, u velkého
+        // adresáře desetinásobek doby jeho načtení (nejvýš 5 s). Odložené volání
+        // běží jen ve výchozím režimu smyčky událostí – během otevřené nabídky,
+        // tažení myší nebo modálního dialogu obnovení počká.
+        let delay = min(5, max(0.5, 10 * lastLoadDuration))
+        perform(#selector(silentReloadDue), with: nil, afterDelay: delay)
+    }
+
+    /// Nastal čas tichého obnovení (viz directoryChangedExternally).
+    @objc private func silentReloadDue() {
+        silentReloadScheduled = false
+        // Od poslední změny začalo novější načtení (vlastní operace, přechod jinam)
+        // – změnu už zahrnulo.
+        guard loadGeneration == externalChangeLoad else { return }
+        if loadInFlight || !allowsSilentReload {
+            // Běží načítání, které mohlo začít před změnou, nebo panel teď rušit
+            // nelze – zkusit znovu později.
+            directoryChangedExternally()
+        } else {
+            load(silent: true)
+        }
+    }
+
+    /// Smí se panel právě teď sám tiše obnovit? Ne, když je nad oknem dialog
+    /// (běžící operace obnoví panely sama), když se v panelu přejmenovává nebo
+    /// když panel není vidět (terminál přes celé okno).
+    private var allowsSilentReload: Bool {
+        guard let view else { return true }
+        return view.window?.attachedSheet == nil && !view.isRenaming && !view.isHiddenOrHasHiddenAncestor
+    }
+
     // MARK: - Řádky a řazení
 
     /// Sestaví řádky z výpisu (filtr skrytých, řazení, „..“) a obnoví tabulku.
-    private func rebuildRows(keepFocus: Bool) {
+    /// - Parameters:
+    ///   - keepFocus: kurzor zůstane na stejném jménu (jinak na začátku)
+    ///   - scrollToCursor: posunout výpis tak, aby byl kurzor vidět
+    private func rebuildRows(keepFocus: Bool, scrollToCursor: Bool = true) {
         let focusName = keepFocus ? (pendingFocus ?? currentRow?.item.name) : nil
         pendingFocus = nil
 
@@ -366,7 +501,7 @@ final class PanelController: NSObject {
             if !keepFocus { cursor = 0 }
         }
         view?.reloadTable()
-        view?.scrollCursorVisible()
+        if scrollToCursor { view?.scrollCursorVisible() }
         delegate?.panelStateChanged(self)
     }
 

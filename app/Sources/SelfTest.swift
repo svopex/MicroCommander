@@ -710,7 +710,9 @@ final class UIKeyCheck {
             self.checkDriveInfo()
             self.checkSameDir(dir: dir, then: {
                 self.checkTerminal(dir: dir, then: {
-                    self.checkFileClipboard(dir: dir, then: { self.checkPanelDrop(dir: dir, then: { self.finish(dir: dir) }) })
+                    self.checkFileClipboard(dir: dir, then: {
+                        self.checkPanelDrop(dir: dir, then: { self.checkAutoReload(dir: dir, then: { self.finish(dir: dir) }) })
+                    })
                 })
             })
         }
@@ -848,6 +850,12 @@ final class UIKeyCheck {
         check([Command.clipboardCopy, .clipboardCut, .clipboardPaste].allSatisfy { tags.contains(MainWindowController.menuCommandIndex($0)) },
               "schránka: kontextové menu panelu nabízí Kopírovat / Vyjmout / Vložit")
         check(view.registeredDraggedTypes.contains(.fileURL), "přetažení: panel přijímá soubory z jiné aplikace")
+        // Tažení do panelu: nabídku zdroje zúží panel i sám podle držených kláves.
+        let offered = PanelView.offeredDragOperations
+        check(PanelView.narrowed(offered, by: [.option]) == .copy && PanelView.narrowed(offered, by: [.command]) == .generic
+              && PanelView.narrowed(offered, by: [.control]) == .link && PanelView.narrowed(offered, by: [.option, .command]) == .link
+              && PanelView.narrowed(offered, by: []) == offered && PanelView.narrowed(.copy, by: [.command]) == .copy,
+              "přetažení: nabídka zdroje se zúží podle kláves (⌥ kopie, ⌘ přesun, ⌃ odkaz)")
         // Tažení ven: změna klávesy vloží do fronty událostí umělé pohnutí myší se
         // stavem kláves; smyčka tažení si ho z fronty vyzvedne (jako AppKit: maska
         // tažení myší, režim sledování).
@@ -922,6 +930,28 @@ final class UIKeyCheck {
         }
     }
 
+    /// Panel sleduje svůj adresář na disku: soubor vytvořený a smazaný zvenku
+    /// (jiná aplikace, Finder po potvrzení přesunu) se v panelu objeví a zmizí
+    /// sám, bez příkazu Obnovit.
+    private func checkAutoReload(dir: String, then done: @escaping () -> Void) {
+        let panel = controller.rightPanel
+        let watched = (dir as NSString).deletingLastPathComponent + "/sledovany"
+        let file = watched + "/zvenku.txt"
+        try? FileManager.default.createDirectory(atPath: watched, withIntermediateDirectories: true)
+        panel.changePath(watched)
+        poll(until: { panel.location.path == watched && !panel.isLoading }) {
+            FileManager.default.createFile(atPath: file, contents: Data("obsah".utf8))
+            self.poll(until: { panel.rowIndex(named: "zvenku.txt") != nil }) {
+                self.check(panel.rowIndex(named: "zvenku.txt") != nil, "sledování adresáře: soubor vytvořený zvenku se v panelu objeví sám")
+                try? FileManager.default.removeItem(atPath: file)
+                self.poll(until: { panel.rowIndex(named: "zvenku.txt") == nil }) {
+                    self.check(panel.rowIndex(named: "zvenku.txt") == nil, "sledování adresáře: soubor smazaný zvenku z panelu zmizí sám")
+                    done()
+                }
+            }
+        }
+    }
+
     /// Tažení myší mezi panely podle zvyklostí macOS: panel odmítne tažení ze
     /// sebe sama, do druhého panelu na stejném svazku soubor přesune a s ⌥
     /// (systém pak z nabízených operací nechá jen kopii) zkopíruje, s ⌘ (zbude
@@ -948,6 +978,9 @@ final class UIKeyCheck {
             return FakeDraggingInfo(source: sourceView, pasteboard: pasteboard, operations: operations)
         }
         func dropFinished(_ name: String) -> Bool { transferFinished(name, in: target, directory: to) }
+        // Kontrola nesmí záviset na klávesách, které někdo zrovna drží.
+        sourceView.dragModifiers = { [] }
+        targetView.dragModifiers = { [] }
         source.changePath(from)
         target.changePath(to)
         poll(until: { source.location.path == from && target.location.path == to && !source.isLoading && !target.isLoading }) {
