@@ -253,9 +253,32 @@ final class Vfs {
     /// Podporuje zápis (archivy ne).
     var writable: Bool { sal_vfs_writable(ptr) != 0 }
 
-    /// Lze položky přesouvat do systémového koše? Jen lokální disk (stejná
-    /// podmínka jako u realPath) – archivy a FTP/SFTP koš nemají.
-    var supportsTrash: Bool { kind == SAL_VFS_LOCAL }
+    /// Má adresář `dir` koš? Jen lokální disk (archivy a FTP/SFTP koš nemají,
+    /// realPath je pro ně nil) a na něm rozhoduje svazek: některé koš nemají
+    /// (pCloud Drive a jiné síťové disky, svazek Time Machine) a systém pro ně
+    /// adresář koše odmítne určit – mazat tam jde jen trvale.
+    func hasTrash(for dir: String) -> Bool {
+        guard let path = realPath(dir) else { return false }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        // create: false – jen dotaz, adresář koše se nezakládá.
+        return (try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+                                             appropriateFor: directory, create: false)) != nil
+    }
+
+    /// Adresáře, které mají koš. Na koš se ptá jednou na svazek (podle čísla
+    /// zařízení) – okno Hledat může mazat položky z tisíců adresářů.
+    func trashDirectories(among dirs: Set<String>) -> Set<String> {
+        var byDevice: [dev_t: Bool] = [:]
+        return dirs.filter { dir in
+            var info = stat()
+            // Bez čísla zařízení (cesta mimo lokální disk, chyba) rozhodne přímý dotaz.
+            guard let path = realPath(dir), stat(path, &info) == 0 else { return hasTrash(for: dir) }
+            if let known = byDevice[info.st_dev] { return known }
+            let result = hasTrash(for: dir)
+            byDevice[info.st_dev] = result
+            return result
+        }
+    }
 
     /// Heslo zadané pro šifrované položky (nil = zatím nezadáno).
     private(set) var password: String?
@@ -505,22 +528,30 @@ func coreDelete(vfs: Vfs, dir: String, names: [String], state: ProgressState) th
 /// i okno hledání).
 /// - Parameters:
 ///   - items: mazané položky (pro popis „soubor „x““ / „N označených položek“)
-///   - vfs: VFS položek – koš je jen na lokálním disku (viz Vfs.supportsTrash)
+///   - vfs: VFS položek – koš je jen na lokálním disku
+///   - dirs: adresáře položek ve VFS (koš nemusí mít všechny – viz Vfs.hasTrash)
 ///   - toTrash: požadováno smazání do koše (F8 / Delete), jinak trvale
 ///   - verb: sloveso v textu („smazat“, „odstranit“)
-/// - Returns: text dialogu a zda se bude mazat do koše
-func deleteConfirmation(items: [Item], vfs: Vfs, toTrash: Bool, verb: String) -> (text: String, useTrash: Bool) {
-    let useTrash = toTrash && vfs.supportsTrash
+/// - Returns: text dialogu a adresáře, jejichž položky půjdou do koše (z ostatních
+///   se maže trvale)
+func deleteConfirmation(items: [Item], vfs: Vfs, dirs: Set<String>, toTrash: Bool,
+                        verb: String) -> (text: String, trashDirs: Set<String>) {
+    let trashDirs = toTrash ? vfs.trashDirectories(among: dirs) : []
     let what = items.count == 1
         ? "\(items[0].kindNoun) „\(items[0].name)“"
         : "\(items.count) označených položek"
-    // U trvalého mazání text uvede i proč, když byl požadován koš, ale VFS ho nemá.
-    if useTrash {
-        return ("Opravdu přesunout \(what) do koše?", true)
-    } else if toTrash {
-        return ("Opravdu \(verb) \(what)?\nZde koš není – mazání je trvalé.", false)
+    // U trvalého mazání text uvede i proč, když byl požadován koš, ale není kam.
+    let text: String
+    if !toTrash {
+        text = "Opravdu trvale \(verb) \(what)?\nPoložky se nepřesunou do koše."
+    } else if trashDirs.isEmpty {
+        text = "Opravdu \(verb) \(what)?\nZde koš není – mazání je trvalé."
+    } else if trashDirs.count < dirs.count {
+        text = "Opravdu \(verb) \(what)?\nPoložky na discích bez koše se smažou trvale, ostatní se přesunou do koše."
+    } else {
+        text = "Opravdu přesunout \(what) do koše?"
     }
-    return ("Opravdu trvale \(verb) \(what)?\nPoložky se nepřesunou do koše.", false)
+    return (text, trashDirs)
 }
 
 /// Smazání položek do koše, nebo trvale (jediný vstupní bod pro oba způsoby).
@@ -528,7 +559,7 @@ func deleteConfirmation(items: [Item], vfs: Vfs, toTrash: Bool, verb: String) ->
 ///   - vfs: VFS položek
 ///   - dir: adresář položek ve VFS
 ///   - names: jména položek v adresáři
-///   - useTrash: přesunout do koše (jen lokální VFS – viz deleteConfirmation)
+///   - useTrash: přesunout do koše (jen adresář, který koš má – viz deleteConfirmation)
 ///   - state: progres a zrušení
 func coreRemove(vfs: Vfs, dir: String, names: [String], useTrash: Bool, state: ProgressState) throws {
     if useTrash {
@@ -546,7 +577,7 @@ private func coreTrash(vfs: Vfs, dir: String, names: [String], state: ProgressSt
         guard state.update(done: UInt64(index), total: total) else {
             throw CoreError.code(SAL_ERR_CANCELLED, "")
         }
-        // realPath je nil jen mimo lokální disk (sem se díky supportsTrash nedostane).
+        // realPath je nil jen mimo lokální disk (sem se díky Vfs.hasTrash nedostane).
         guard let path = vfs.realPath(joinPath(dir, name)) else {
             throw CoreError.code(SAL_ERR_GENERIC, "Do koše lze přesouvat jen položky na lokálním disku.")
         }

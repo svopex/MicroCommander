@@ -825,10 +825,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let modes = NSMenuItem(title: "Zobrazení", action: nil, keyEquivalent: "")
         modes.submenu = viewModeMenu()
         menu.addItem(modes)
-        // Lokální soubory: Finder a cesta do schránky.
-        if let item = view.panel.currentItem, let path = view.panel.localPath(of: item.name) {
+        // Lokální soubory: Finder a cesta do schránky. Na „..“ (a v prázdném
+        // adresáři) platí obojí pro adresář panelu – Finder ho otevře v okně.
+        // Mimo lokální disk (archiv, server) nemá cestu položka ani adresář – pak se nenabízí nic.
+        let panel = view.panel
+        let item = panel.currentItem
+        if let path = item.flatMap({ panel.localPath(of: $0.name) }) ?? panel.localDirectory {
             menu.addItem(.separator())
-            let finder = NSMenuItem(title: "Zobrazit ve Finderu", action: #selector(revealInFinder(_:)), keyEquivalent: "")
+            let finder = NSMenuItem(title: "Zobrazit ve Finderu",
+                                    action: item != nil ? #selector(revealInFinder(_:)) : #selector(openDirectoryInFinder(_:)),
+                                    keyEquivalent: "")
             finder.representedObject = path
             finder.target = self
             menu.addItem(finder)
@@ -955,6 +961,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     @objc private func revealInFinder(_ sender: NSMenuItem) {
         guard let path = sender.representedObject as? String else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    /// Otevře adresář v okně Finderu (Zobrazit ve Finderu na položce „..“).
+    @objc private func openDirectoryInFinder(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        // selectFile bez souboru jen otevře okno adresáře (balíček .app nespustí).
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
     }
 
     @objc private func copyPathToPasteboard(_ sender: NSMenuItem) {
@@ -1499,8 +1512,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     /// F8 / Delete – smazání do koše, ⇧F8 / ⇧Delete – trvalé smazání
     /// (označené položky, jinak položka pod kurzorem).
-    /// - Parameter toTrash: přesunout do koše; mimo lokální disk (archiv,
-    ///   FTP/SFTP) koš není a maže se trvale – potvrzení to uvede
+    /// - Parameter toTrash: přesunout do koše; kde koš není (archiv, FTP/SFTP,
+    ///   disk bez koše jako pCloud Drive), maže se trvale – potvrzení to uvede
     private func commandDelete(toTrash: Bool) {
         let panel = activePanel
         let items = panel.operationItems
@@ -1510,11 +1523,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             return
         }
         let vfs = panel.location.vfs
-        let (text, useTrash) = deleteConfirmation(items: items, vfs: vfs, toTrash: toTrash, verb: "smazat")
+        let dir = panel.location.path
+        let (text, trashDirs) = deleteConfirmation(items: items, vfs: vfs, dirs: [dir], toTrash: toTrash, verb: "smazat")
         guard confirm(title: "Smazat", text: text, okTitle: "Smazat") else { return }
+        let useTrash = trashDirs.contains(dir)
 
         let names = items.map(\.name)
-        let dir = panel.location.path
         beginProgress(title: useTrash ? "Přesun do koše" : "Mazání", unit: .items) { state in
             try coreRemove(vfs: vfs, dir: dir, names: names, useTrash: useTrash, state: state)
         } completion: { [weak self] result in
@@ -1988,12 +2002,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌘A – označit vše (znovu = zrušit), ⌘D – nic, psaní písmen – rychlé hledání,
         ⌥← / ⌥→ – historie, ⌘\\ – kořen, ⌃H – skryté soubory.
         ⌘C / ⌘X / ⌘V – kopírovat / vyjmout / vložit soubory přes schránku (i z Finderu a do něj);
-        soubory lze myší přetahovat mezi panely, z jiné aplikace i do ní (kopie, s ⌘ přesun).
+        soubory lze myší přetahovat mezi panely, z jiné aplikace i do ní – jako ve Finderu:
+        na stejném disku přesun (s ⌥ kopie), na jiný disk kopie (s ⌘ přesun).
         ⌘. (⌃.) – poslat aktuální adresář do druhého panelu (přepne se druhý panel).
         ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní panel).
 
         F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout,
-        F7 nový adresář, F8 do koše (⇧F8 trvale), F9 Terminal.app, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
+        F7 nový adresář, F8 do koše (⇧F8 / ⌘F8 trvale), F9 Terminal.app, F10 ukončit, F11 FTP/SFTP, F12 odpojit.
         ⇧F4 nový soubor, ⇧F7 změnit adresář, ⌘F2 / ⌃F2 atributy, ⌥↩ / ⌘I vlastnosti, ⌃P oprávnění, ⌃F3–F6 řazení, ⌃F9 obnovit, ⌃F10 porovnat,
         ⌥F1/⌥F2 disk vlevo/vpravo (v nabídce ⌥↑/⌥↓ mění pořadí disků), ⌘F1 / ⌃F1 informace o jednotce,
         ⌥F5 zabalit, ⌥F6 rozbalit, ⌥F7 hledat, ⌥F10 velikost.
@@ -2397,6 +2412,13 @@ enum FileClipboard {
     /// Obsahuje schránka (nebo tažení) soubory?
     static func hasFiles(in pasteboard: NSPasteboard = .general) -> Bool {
         pasteboard.canReadObject(forClasses: [NSURL.self], options: fileURLOptions)
+    }
+
+    /// Cesta prvního souboru ve schránce (nebo v tažení) – bez čtení všech
+    /// ostatních (tažení může nést tisíce souborů); nil, když v ní soubory nejsou.
+    static func firstPath(from pasteboard: NSPasteboard) -> String? {
+        pasteboard.pasteboardItems?.lazy.compactMap { $0.string(forType: .fileURL) }.first
+            .flatMap { NSURL(string: $0)?.filePathURL?.path }
     }
 
     /// Cesty souborů ve schránce (nebo v tažení); prázdné, když v ní soubory nejsou.

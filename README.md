@@ -256,8 +256,11 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   předvybrané jméno bez přípony, Enter potvrdí, Escape zruší, klik jinam
   potvrdí; jméno jiné existující položky se odmítne), F3 prohlížeč, F4 editor, F5
   kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 / Delete
-  (i ⌘⌫) smazat do koše, ⇧F8 / ⇧Delete smazat trvale bez koše (v archivu a na
-  FTP/SFTP koš není, maže se vždy trvale a potvrzení to uvede; dotazy na cíl,
+  (i ⌘⌫) smazat do koše, ⇧F8 / ⌘F8 / ⇧Delete smazat trvale bez koše (v archivu,
+  na FTP/SFTP a na discích bez koše – např. pCloud Drive nebo svazek Time
+  Machine – koš není, maže se vždy trvale a potvrzení to uvede; v okně Hledat
+  se u výběru z více disků přesune do koše, co jde, a trvale se smaže jen to,
+  co leží na disku bez koše; dotazy na cíl,
   potvrzení mazání i konflikt existujících cílů jsou dialogy ve stylu
   Salamandera, stejné jako Informace o jednotce: text, vstupní pole, dole
   tlačítka; Enter potvrdí, Escape zruší),
@@ -443,32 +446,33 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **Přetažení myší ven z aplikace:** položku (nebo všechny označené, pokud se
   táhne za označenou) lze přetáhnout do Finderu, Zpráv (iMessage), Mailu
   a dalších aplikací ve všech režimech zobrazení; tažení začne po posunu myši
-  o pár bodů. Cíl soubory zkopíruje, se stisknutým ⌘ je přesune (stejně jako
-  při přetažení do panelu) – ⌘ lze stisknout před tažením i během něj (tažení
-  s ⌘ označení položek nemění); puštěním na Koš v Docku se přesunou do koše.
-  Finder sám by na stejném svazku přesouval i bez ⌘, proto mu panel nabízí vždy
-  jen jednu operaci a během tažení ji podle ⌘ přepíná (neveřejnou funkcí
-  systému CoreDragSetAllowableActions; kdyby v systému chyběla, platí po celé
-  tažení stav ⌘ z jeho začátku). Jen soubory z lokálního disku (ne z archivu
-  či FTP/SFTP).
+  o pár bodů. Platí zvyklosti macOS a rozhoduje cíl: Finder na stejném disku
+  soubory přesune a se stisknutým ⌥ (Option) zkopíruje, na jiný disk je
+  zkopíruje a s ⌘ přesune, s ⌃ vytvoří odkaz; puštěním na Koš v Docku se
+  přesunou do koše. Tažení se stisknutým ⌘ označení položek nemění. Jen soubory
+  z lokálního disku (ne z archivu či FTP/SFTP).
 - **Přetažení myší mezi panely:** položky lze přetáhnout do druhého panelu
-  (i do panelu jiného okna): zkopírují se do jeho adresáře, se stisknutým ⌘ se
-  přesunou; při konfliktu se zeptá přepsat / přeskočit. Cílem může být i
-  FTP/SFTP server, zdrojem jen lokální disk; do téhož adresáře se netáhne.
-- **Přetažení myší do panelu:** soubory a adresáře přetažené z jiné aplikace
-  (Finder a další) se zkopírují do adresáře panelu, nad
-  kterým se pustí (i na FTP/SFTP server); se stisknutým ⌘ se přesunou. Přijímají
-  se i přislíbené soubory (příloha z Mailu, fotka z Fotek, obrázek
-  z prohlížeče) – ty zapisuje zdrojová aplikace, proto jen do adresáře na
-  lokálním disku. Do archivu přetáhnout nelze (je jen pro čtení).
+  (i do panelu jiného okna) se stejnými pravidly jako ve Finderu: na stejném
+  disku se přesunou, s ⌥ zkopírují; na jiný disk nebo na FTP/SFTP server se
+  zkopírují, s ⌘ přesunou (kurzor se zeleným plus = kopie). Při konfliktu se
+  zeptá přepsat / přeskočit. Zdrojem může být jen lokální disk; do téhož
+  adresáře se netáhne.
+- **Přetažení myší do panelu:** pro soubory a adresáře přetažené z jiné
+  aplikace (Finder a další) do adresáře panelu, nad kterým se pustí, platí
+  totéž: ze stejného disku se přesunou, s ⌥ zkopírují; z jiného disku (a na
+  FTP/SFTP server) se zkopírují, s ⌘ přesunou. Přijímají se i přislíbené
+  soubory (příloha z Mailu, fotka z Fotek, obrázek z prohlížeče) – ty zapisuje
+  zdrojová aplikace, proto jen jako kopie do adresáře na lokálním disku. Do
+  archivu přetáhnout nelze (je jen pro čtení).
   U souboru přetaženého (nebo vloženého ze schránky) ze složky, kterou macOS
   nedovolí vypsat – typicky z Koše bez Plného přístupu k disku – se čte jen
   soubor sám, složka se nevypisuje; odepře-li systém i soubor, hlášení poradí
   povolit MicroCommander v Nastavení systému › Soukromí a zabezpečení › Plný
   přístup k disku.
 - **Další:** ⌘R obnovit, ⌘U prohodit panely, klik na záhlaví sloupce
-  řadí, pravé tlačítko – kontextové menu (schránka souborů, operace, Finder,
-  kopírovat cestu).
+  řadí, pravé tlačítko – kontextové menu (schránka souborů, operace, Zobrazit
+  ve Finderu, Kopírovat cestu; na položce „..“ platí poslední dvě pro adresář
+  panelu – Finder ho otevře v okně).
 - **Vestavěný terminál** (místo dřívější příkazové řádky): pod panely je jeden
   řádek skutečného terminálu s login shellem uživatele (`$SHELL`, prompt
   shellu, historie a doplňování shellu, barvy, interaktivní programy, dotazy
@@ -550,7 +554,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   adresáře (smaže se při ukončení aplikace, zbytky po pádu při dalším
   spuštění); F4 funguje jen na lokálním disku a terminál zůstává v posledním
   lokálním adresáři
-- koš funguje jen na lokálním disku; v archivu a na FTP/SFTP je mazání trvalé
+- koš funguje jen na lokálním disku, který koš má; v archivu, na FTP/SFTP a na
+  discích bez koše (pCloud Drive, svazek Time Machine…) je mazání trvalé
 - FTP bez TLS (FTPS není zapojeno)
 - SFTP neověřuje klíč serveru proti ~/.ssh/known_hosts (připojí se k jakémukoli
   serveru na dané adrese)
@@ -603,8 +608,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   (lišta jen při dvou a více záložkách), vrstvy lišty F-kláves a schránka
   souborů (zkratky ⌘C / ⌘X / ⌘V, kontextové menu, čtení souborů ze schránky,
   vložení z více adresářů, duplikát v témže adresáři, přesun, registrace
-  panelu pro přetažení – systémové schránky se nedotkne) a tažení mezi panely
-  (odmítnutí tažení do téhož panelu, kopie, přesun s ⌘);
+  panelu pro přetažení – systémové schránky se nedotkne), tažení mezi panely
+  (odmítnutí tažení do téhož panelu, přesun na stejném svazku, kopie s ⌥,
+  přesun s ⌘), zkratky trvalého mazání (⇧F8, ⌘F8) a koš podle svazku;
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`
   zapíše každý stisk (kód klávesy, znak, modifikátory, fokus) do

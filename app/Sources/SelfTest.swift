@@ -848,11 +848,15 @@ final class UIKeyCheck {
         check([Command.clipboardCopy, .clipboardCut, .clipboardPaste].allSatisfy { tags.contains(MainWindowController.menuCommandIndex($0)) },
               "schránka: kontextové menu panelu nabízí Kopírovat / Vyjmout / Vložit")
         check(view.registeredDraggedTypes.contains(.fileURL), "přetažení: panel přijímá soubory z jiné aplikace")
-        // Tažení ven: přepínání kopie / přesun klávesou ⌘ během tažení potřebuje
-        // funkce systému (po aktualizaci macOS mohou zmizet); bez probíhajícího
-        // tažení se nic nenastaví.
-        check(DragSessionActions.isAvailable, "přetažení: funkce systému pro přepínání operací během tažení jsou k dispozici")
-        check(!DragSessionActions.setOutsideOperations(.copy), "přetažení: mimo tažení se nabízené operace nemění")
+        // Trvalé mazání: ⇧F8 i ⌘F8; koš se nabízí jen tam, kde ho svazek má.
+        let cmdF8 = event(KeyCode.functionKeys[7], NSF8FunctionKey, [.command])
+        let shiftF8 = event(KeyCode.functionKeys[7], NSF8FunctionKey, [.shift])
+        check(KeyBindings.command(for: cmdF8) == .deletePermanent && KeyBindings.command(for: shiftF8) == .deletePermanent,
+              "mazání: ⌘F8 i ⇧F8 = smazat trvale")
+        check(Vfs.localDisk.hasTrash(for: dir) && !Vfs.localDisk.hasTrash(for: "/neexistujici-svazek/adresar")
+              && deleteConfirmation(items: [], vfs: .localDisk, dirs: [dir, "/neexistujici-svazek/adresar"],
+                                    toTrash: true, verb: "smazat").trashDirs == [dir],
+              "mazání: koš se použije jen v adresáři na svazku, který ho má")
 
         // Zdrojové soubory ve dvou adresářích a prázdný cílový adresář.
         let base = (dir as NSString).deletingLastPathComponent
@@ -895,7 +899,7 @@ final class UIKeyCheck {
                 self.controller.importFiles([alias + "/one.txt"], into: panel, move: false)
                 self.poll(until: { pasteFinished("one kopie.txt") }) {
                     self.check(pasteFinished("one kopie.txt"), "vložení: kopie do téhož adresáře vytvoří „one kopie.txt“")
-                    // Přesun (vložení po Vyjmout, přetažení s ⌘).
+                    // Přesun (vložení po Vyjmout, přetažení na stejném svazku nebo s ⌘).
                     self.controller.importFiles([first + "/three.txt"], into: panel, move: true)
                     self.poll(until: { pasteFinished("three.txt") }) {
                         self.check(pasteFinished("three.txt") && !fm.fileExists(atPath: first + "/three.txt"),
@@ -907,9 +911,10 @@ final class UIKeyCheck {
         }
     }
 
-    /// Tažení myší mezi panely: panel odmítne tažení ze sebe sama, do druhého
-    /// panelu soubor zkopíruje a s ⌘ (systém pak z nabízených operací nechá jen
-    /// „generic“) přesune. Tažení zastupuje FakeDraggingInfo s vlastní schránkou.
+    /// Tažení myší mezi panely podle zvyklostí macOS: panel odmítne tažení ze
+    /// sebe sama, do druhého panelu na stejném svazku soubor přesune a s ⌥
+    /// (systém pak z nabízených operací nechá jen kopii) zkopíruje, s ⌘ (zbude
+    /// jen „generic“) přesune. Tažení zastupuje FakeDraggingInfo s vlastní schránkou.
     private func checkPanelDrop(dir: String, then done: @escaping () -> Void) {
         let source = controller.leftPanel
         let target = controller.rightPanel
@@ -935,21 +940,27 @@ final class UIKeyCheck {
         source.changePath(from)
         target.changePath(to)
         poll(until: { source.location.path == from && target.location.path == to && !source.isLoading && !target.isLoading }) {
-            // Bez klávesy nabízí zdroj v aplikaci kopii i „generic“ → kopie.
-            let copy = drag("kopie.txt", operations: [.copy, .generic])
-            self.check(sourceView.draggingEntered(copy).isEmpty, "tažení mezi panely: panel nepřijme tažení ze sebe sama")
+            // Nabídka zdroje bez klávesy (viz PanelView – NSDraggingSource).
+            let offered = PanelView.offeredDragOperations
+            self.check(sourceView.draggingEntered(drag("kopie.txt", operations: offered)).isEmpty,
+                       "tažení mezi panely: panel nepřijme tažení ze sebe sama")
+            // S ⌥ zbude z nabídky jen kopie.
+            let copy = drag("kopie.txt", operations: .copy)
             self.check(targetView.draggingEntered(copy) == .copy && targetView.performDragOperation(copy),
-                       "tažení mezi panely: druhý panel nabídne kopii")
+                       "tažení mezi panely: s ⌥ druhý panel nabídne kopii")
             self.poll(until: { dropFinished("kopie.txt") }) {
                 self.check(dropFinished("kopie.txt") && fm.fileExists(atPath: from + "/kopie.txt"),
-                           "tažení mezi panely: soubor se zkopíruje, zdroj zůstává")
-                // S ⌘ zbude z nabízených operací jen „generic“ → přesun.
-                let move = drag("presun.txt", operations: .generic)
-                self.check(targetView.draggingEntered(move) == .generic && targetView.performDragOperation(move),
+                           "tažení mezi panely: s ⌥ se soubor zkopíruje, zdroj zůstává")
+                // S ⌘ zbude jen „generic“ → přesun (i na jiný svazek).
+                self.check(targetView.draggingEntered(drag("presun.txt", operations: .generic)) == .generic,
                            "tažení mezi panely: s ⌘ druhý panel nabídne přesun")
+                // Bez klávesy na stejném svazku přesun.
+                let move = drag("presun.txt", operations: offered)
+                self.check(targetView.draggingEntered(move) == .move && targetView.performDragOperation(move),
+                           "tažení mezi panely: bez klávesy druhý panel na stejném svazku nabídne přesun")
                 self.poll(until: { dropFinished("presun.txt") }) {
                     self.check(dropFinished("presun.txt") && !fm.fileExists(atPath: from + "/presun.txt"),
-                               "tažení mezi panely: s ⌘ se soubor přesune")
+                               "tažení mezi panely: bez klávesy se soubor přesune")
                     pasteboard.releaseGlobally()
                     done()
                 }

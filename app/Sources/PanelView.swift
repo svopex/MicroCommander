@@ -37,12 +37,9 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     let infoLine = InfoLineView()
     weak var inputHandler: PanelInputHandler?
     /// Co nese tažení probíhající nad panelem (soubory na disku / přislíbené
-    /// soubory); zjišťuje se jednou při vstupu tažení, ne při každém pohybu myši.
-    private var dragContent = (hasFiles: false, hasPromises: false)
-    /// Tažení z panelu: nabízí se cílům mimo aplikaci právě přesun (drží se ⌘)?
-    /// A časovač, který během tažení sleduje klávesu ⌘ (viz NSDraggingSource níže).
-    private var dragOffersMove = false
-    private var dragModifierTimer: Timer?
+    /// soubory) a zda tažené soubory leží na stejném svazku jako adresář panelu;
+    /// zjišťuje se jednou při vstupu tažení, ne při každém pohybu myši.
+    private var dragContent = (hasFiles: false, hasPromises: false, sameVolume: false)
 
     /// Režim zobrazení panelu (⌥1–⌥6); Podrobný a Typy = tabulka, jinak mřížka.
     var viewMode: ViewMode = .detailed {
@@ -328,8 +325,8 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     ///   - undoMarkToggle: stisk myši byl ⌘klik, který přepnul označení položky
     func beginFileDrag(index: Int, event: NSEvent, in view: NSView, undoMarkToggle: Bool) {
         guard index < panel.rows.count, !panel.rows[index].isParent else { return }
-        // Tažení se stisknutým ⌘ znamená přesun, ne ⌘klik: označení, které stisk
-        // myši na položce přepnul, se vrátí.
+        // Tažení se stisknutým ⌘ znamená vynucený přesun, ne ⌘klik: označení,
+        // které stisk myši na položce přepnul, se vrátí.
         if undoMarkToggle {
             panel.toggleMark(row: index)
         }
@@ -353,8 +350,6 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
                                              width: size, height: size), contents: image)
             return dragItem
         }
-        // Stav ⌘ pro nabízené operace (viz NSDraggingSource níže) – čte se jednou.
-        dragOffersMove = NSEvent.modifierFlags.contains(.command)
         view.beginDraggingSession(with: draggingItems, event: event, source: self)
     }
 
@@ -823,8 +818,9 @@ extension PanelView: NSTextFieldDelegate {
 
 /// Příjem souborů přetažených z jiné aplikace nebo z jiného panelu do adresáře panelu.
 extension PanelView {
-    /// Operace pro tažení nad panelem: kopie, s ⌘ přesun (jako Finder); prázdná,
-    /// když panel tažení nepřijme.
+    /// Operace pro tažení nad panelem podle zvyklostí macOS (stejně jako Finder):
+    /// na stejném svazku přesun, s ⌥ kopie; na jiný svazek a na server kopie,
+    /// s ⌘ přesun. Prázdná, když panel tažení nepřijme.
     private func dropOperation(for sender: NSDraggingInfo) -> NSDragOperation {
         // Do archivu zapisovat nelze. Tažení z panelu MicroCommanderu (i z jiného
         // okna) se přijímá jen do jiného adresáře, než ze kterého se táhne – tedy
@@ -833,21 +829,36 @@ extension PanelView {
         if let source = sender.draggingSource as? PanelView, source.panel.location.isSame(as: panel.location) {
             return []
         }
-        let hasFiles = dragContent.hasFiles
-        // Přislíbené soubory zapisuje zdrojová aplikace sama – jen na lokální disk.
-        guard hasFiles || (dragContent.hasPromises && panel.localDirectory != nil) else { return [] }
+        // Klávesy zúží nabídku zdroje už v systému: ⌥ nechá jen kopii, ⌘ jen
+        // „generic“ (= přesun), ⌃ jen odkaz (ten panel nepřijímá).
         let mask = sender.draggingSourceOperationMask
-        if mask.contains(.copy) { return .copy }
-        // Se stisknutým ⌘ nabízí zdroj jen „generic“ – soubory se přesunou.
-        if hasFiles && mask.contains(.generic) { return .generic }
-        if hasFiles && mask.contains(.move) { return .move }
-        return []
+        let copy: NSDragOperation? = mask.contains(.copy) ? .copy : nil
+        let move: NSDragOperation? = mask.contains(.move) ? .move : mask.contains(.generic) ? .generic : nil
+        // Přislíbené soubory zapisuje zdrojová aplikace sama – jen kopie a jen na lokální disk.
+        guard dragContent.hasFiles else {
+            return dragContent.hasPromises && panel.localDirectory != nil ? copy ?? [] : []
+        }
+        // Na stejném svazku má přednost přesun, jinak kopie; nedovolí-li ji zdroj, ta druhá.
+        return (dragContent.sameVolume ? move ?? copy : copy ?? move) ?? []
+    }
+
+    /// Leží cesta na stejném svazku jako adresář panelu? (Server ani archiv svazek nemají.)
+    private func isOnPanelVolume(_ path: String) -> Bool {
+        // Číslo zařízení (st_dev) položky; nil, když ho nelze zjistit.
+        func device(_ path: String) -> Int? {
+            (try? FileManager.default.attributesOfItem(atPath: path))?[.systemNumber] as? Int
+        }
+        guard let directory = panel.localDirectory, let source = device(path) else { return false }
+        // Adresář panelu může být symbolický odkaz na jiný svazek – rozhoduje jeho cíl.
+        return source == device(URL(fileURLWithPath: directory).resolvingSymlinksInPath().path)
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         let pasteboard = sender.draggingPasteboard
-        dragContent = (FileClipboard.hasFiles(in: pasteboard),
-                       pasteboard.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil))
+        let firstPath = FileClipboard.firstPath(from: pasteboard)
+        dragContent = (hasFiles: firstPath != nil,
+                       hasPromises: pasteboard.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil),
+                       sameVolume: firstPath.map(isOnPanelVolume) ?? false)
         return dropOperation(for: sender)
     }
 
@@ -911,94 +922,39 @@ extension PanelView {
 }
 
 /// Přetahování souborů z panelu: do druhého panelu (i v jiném okně) a ven
-/// z aplikace (Finder, Zprávy, Mail…). Cíl soubory zkopíruje, se stisknutým ⌘
-/// přesune – stejně jako při přetažení z Finderu do panelu.
+/// z aplikace (Finder, Zprávy, Mail…) podle zvyklostí macOS.
 extension PanelView: NSDraggingSource {
-    /// Operace nabízené cíli mimo aplikaci. Finder na stejném svazku přesouvá,
-    /// kdykoli mu to zdroj dovolí („generic“ nebo „move“), a ⌘ by pak nic
-    /// neměnil – proto se nabízí vždy jen jedno: kopie, nebo (s ⌘) „generic“,
-    /// tedy totéž, co Finder dostane při vlastním tažení s ⌘ a co znamená přesun.
-    /// „delete“ je pro Koš v Docku: smazání pak provede zdroj (viz endedAt).
-    private static func outsideOperations(move: Bool) -> NSDragOperation {
-        move ? [.generic, .delete] : [.copy, .delete]
-    }
+    /// Operace nabízené cíli tažení. Nabízí se vše a rozhoduje cíl: Finder
+    /// (i panel, viz dropOperation) na stejném svazku přesouvá a s ⌥ kopíruje,
+    /// na jiný svazek kopíruje a s ⌘ přesouvá, s ⌃ vytvoří odkaz. „delete“ je
+    /// pro Koš v Docku: smazání pak provede zdroj (viz endedAt).
+    static let offeredDragOperations: NSDragOperation = [.copy, .link, .generic, .move, .delete]
 
     func draggingSession(_ session: NSDraggingSession,
                          sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        // V aplikaci rozhoduje cílový panel: kopie, s ⌘ (systém pak z masky
-        // nechá jen „generic“) přesun.
-        guard context == .outsideApplication else { return [.copy, .generic] }
-        return Self.outsideOperations(move: dragOffersMove)
-    }
-
-    /// Začátek tažení: AppKit se na nabízené operace ptá jen teď, klávesu ⌘ je
-    /// ale zvykem stisknout až během tažení – časovač ji proto sleduje a při
-    /// změně nabídku pro cíle mimo aplikaci přepne (viz DragSessionActions).
-    func draggingSession(_ session: NSDraggingSession, willBeginAt screenPoint: NSPoint) {
-        dragModifierTimer?.invalidate()
-        dragModifierTimer = nil
-        // Bez funkcí systému pro změnu operací platí stav ⌘ ze začátku tažení.
-        guard DragSessionActions.isAvailable else { return }
-        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] timer in
-            guard let self else {
-                timer.invalidate()
-                return
-            }
-            // Stav se zapíše, až když se změna provedla – jinak se zkusí znovu.
-            let move = NSEvent.modifierFlags.contains(.command)
-            if move != self.dragOffersMove, DragSessionActions.setOutsideOperations(Self.outsideOperations(move: move)) {
-                self.dragOffersMove = move
-            }
-        }
-        // Režimy .common: časovač běží i ve smyčce sledování tažení.
-        RunLoop.main.add(timer, forMode: .common)
-        dragModifierTimer = timer
+        Self.offeredDragOperations
     }
 
     /// Konec tažení: po puštění na Koš (cíl hlásí „delete“ a smazání nechává na
     /// zdroji) se tažené soubory přesunou do koše; po přesunu se panel obnoví –
     /// až za chvíli, protože cíl přesun dokončuje po skončení tažení.
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        dragModifierTimer?.invalidate()
-        dragModifierTimer = nil
         guard !operation.isDisjoint(with: [.generic, .move, .delete]) else { return }
         if operation.contains(.delete) {
+            // Chyba (např. disk bez koše) se ohlásí jednou za celé tažení.
+            var failure: Error?
             for path in FileClipboard.paths(from: session.draggingPasteboard) {
-                try? FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+                do {
+                    try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+                } catch {
+                    failure = error
+                }
+            }
+            if let failure {
+                PromptDialog.show(title: "Přesun do koše", message: failure.localizedDescription, over: window)
             }
         }
         scheduleReload(after: 1)
-    }
-}
-
-/// Změna operací nabízených cílům mimo aplikaci během probíhajícího tažení.
-/// Veřejné rozhraní AppKitu se na ně ptá jen při zahájení tažení; AppKit je
-/// pak nastaví funkcí CoreDragSetAllowableActions (knihovna HIServices) a zdroj
-/// je cíli posílá s každou zprávou o pohybu myši. Stejnou funkcí je proto lze
-/// během tažení změnit. Funkce nejsou veřejné – hledají se až za běhu, a když
-/// v systému chybí, platí po celé tažení operace z jeho začátku.
-enum DragSessionActions {
-    private typealias CurrentDrag = @convention(c) () -> OpaquePointer?
-    private typealias SetAllowableActions = @convention(c) (OpaquePointer?, UInt32, Bool) -> Int32
-
-    /// Vyhledání funkce v načtených knihovnách (RTLD_DEFAULT).
-    private static func symbol<Function>(_ name: String, as type: Function.Type) -> Function? {
-        dlsym(UnsafeMutableRawPointer(bitPattern: -2), name).map { unsafeBitCast($0, to: type) }
-    }
-
-    private static let currentDrag = symbol("CoreDragGetCurrentDrag", as: CurrentDrag.self)
-    private static let setAllowableActions = symbol("CoreDragSetAllowableActions", as: SetAllowableActions.self)
-
-    /// Jsou funkce systému k dispozici? (Po aktualizaci macOS mohou zmizet.)
-    static var isAvailable: Bool { currentDrag != nil && setAllowableActions != nil }
-
-    /// Nastaví operace nabízené cílům mimo aplikaci pro právě probíhající tažení.
-    /// - Parameter operations: nabízené operace (hodnoty NSDragOperation odpovídají akcím CoreDrag)
-    /// - Returns: true, pokud tažení probíhá a změna se provedla
-    static func setOutsideOperations(_ operations: NSDragOperation) -> Bool {
-        guard let currentDrag, let setAllowableActions, let drag = currentDrag() else { return false }
-        // Poslední parametr: false = operace pro cíle v jiných aplikacích.
-        return setAllowableActions(drag, UInt32(truncatingIfNeeded: operations.rawValue), false) == 0
     }
 }
 
@@ -1009,7 +965,7 @@ struct PanelDragStart {
     private var index: Int?
     private var location = NSPoint.zero
     /// Stisk byl ⌘klik, který přepnul označení položky (viz PanelView.handleClick);
-    /// začne-li z něj tažení, označení se vrátí.
+    /// začne-li z něj tažení (⌘ = vynucený přesun), označení se vrátí.
     private(set) var toggledMark = false
 
     /// Stisk tlačítka myši nad položkou (nil = mimo položky).

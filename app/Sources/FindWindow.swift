@@ -1570,34 +1570,35 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     }
 
     /// Potvrzení odstranění označených položek.
-    /// - Parameter toTrash: přesunout do koše; mimo lokální disk koš není
-    ///   a maže se trvale – potvrzení to uvede
+    /// - Parameter toTrash: přesunout do koše; kde koš není (server, disk bez
+    ///   koše jako pCloud Drive), maže se trvale – potvrzení to uvede
     private func confirmDelete(toTrash: Bool) {
         let selected = selectedRows
         guard let window, runningState == nil, canDelete(selected) else { return }
-        let (text, useTrash) = deleteConfirmation(items: selected.map(\.item), vfs: vfs,
-                                                  toTrash: toTrash, verb: "odstranit")
+        let (text, trashDirs) = deleteConfirmation(items: selected.map(\.item), vfs: vfs, dirs: Set(selected.map(\.dir)),
+                                                   toTrash: toTrash, verb: "odstranit")
         // Bez nadpisu, stejně jako potvrzení mazání v hlavním okně (confirm).
         guard PromptDialog.show(title: "Odstranit", showsHeading: false, message: text, buttons: ["Odstranit"],
                                 showsCancel: true, over: window) == 0 else { return }
-        performDelete(selected, toTrash: useTrash)
+        performDelete(selected, trashDirs: trashDirs)
     }
 
     /// Smaže položky po adresářích na pozadí; smazané zmizí ze seznamu.
-    /// - Parameter toTrash: přesunout do koše místo trvalého smazání
-    private func performDelete(_ selected: [FoundRow], toTrash: Bool) {
+    /// - Parameter trashDirs: adresáře, jejichž položky se přesunou do koše
+    ///   (z ostatních se maže trvale)
+    private func performDelete(_ selected: [FoundRow], trashDirs: Set<String>) {
         let vfs = vfs
         let groups = Dictionary(grouping: selected, by: \.dir)
         let state = ProgressState()
         runningState = state
-        setStatus(toTrash ? "Přesouvám do koše…" : "Odstraňuji…")
+        setStatus(trashDirs.isEmpty ? "Odstraňuji…" : "Přesouvám do koše…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var deleted = Set<String>()
             var failure: Error?
             for (dir, items) in groups {
                 do {
                     try coreRemove(vfs: vfs, dir: dir, names: items.map(\.item.name),
-                                   useTrash: toTrash, state: state)
+                                   useTrash: trashDirs.contains(dir), state: state)
                     deleted.formUnion(items.map(\.path))
                 } catch {
                     failure = error

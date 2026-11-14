@@ -313,9 +313,9 @@ enum KeyBindings {
         (.copy, [.function(5)]),
         (.move, [.function(6)]),
         (.mkdir, [.function(7)]),
-        // F8 maže do koše, ⇧F8 trvale (Delete / ⇧Delete řeší přímo panel).
+        // F8 maže do koše, ⇧F8 i ⌘F8 trvale (Delete / ⇧Delete řeší přímo panel).
         (.delete, [.function(8)]),
-        (.deletePermanent, [.function(8, .shift)]),
+        (.deletePermanent, [.function(8, .shift), .function(8, .command)]),
         (.terminal, [.function(9)]),
         // ⌘F12 roztáhne vestavěný terminál na celé okno a zpět.
         (.terminalFull, [.function(12, .command)]),
