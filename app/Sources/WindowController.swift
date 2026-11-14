@@ -887,7 +887,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         perform(command)
     }
 
-    /// Soubory přetažené z jiné aplikace: okno do popředí (průběh a dotazy mají
+    /// Soubory přetažené z jiné aplikace nebo z jiného panelu: okno do popředí (průběh a dotazy mají
     /// být vidět), cílový panel se stane aktivním a soubory se do něj vloží.
     func panelView(_ view: PanelView, dropFiles paths: [String], move: Bool) {
         NSApp.activate(ignoringOtherApps: true)
@@ -1360,7 +1360,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     }
 
     /// Vloží soubory a adresáře z lokálního disku do adresáře panelu (⌘V ze
-    /// schránky, přetažení z jiné aplikace). Cíl může být i server; při konfliktu
+    /// schránky, přetažení z jiné aplikace nebo z jiného panelu). Cíl může být i server; při konfliktu
     /// se zeptá na přepsání. Kopie do adresáře, kde položka už leží, vytvoří
     /// duplikát („jméno kopie“), přesun do téhož adresáře nedělá nic.
     /// - Parameters:
@@ -1988,7 +1988,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌘A – označit vše (znovu = zrušit), ⌘D – nic, psaní písmen – rychlé hledání,
         ⌥← / ⌥→ – historie, ⌘\\ – kořen, ⌃H – skryté soubory.
         ⌘C / ⌘X / ⌘V – kopírovat / vyjmout / vložit soubory přes schránku (i z Finderu a do něj);
-        soubory lze do panelu také přetáhnout myší z jiné aplikace (s ⌘ se přesunou).
+        soubory lze myší přetahovat mezi panely, z jiné aplikace i do ní (kopie, s ⌘ přesun).
         ⌘. (⌃.) – poslat aktuální adresář do druhého panelu (přepne se druhý panel).
         ⌘⇧. (⌃⇧.) – převzít adresář z druhého panelu (přepne se aktivní panel).
 

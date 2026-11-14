@@ -709,7 +709,9 @@ final class UIKeyCheck {
             self.checkSettingsFile()
             self.checkDriveInfo()
             self.checkSameDir(dir: dir, then: {
-                self.checkTerminal(dir: dir, then: { self.checkFileClipboard(dir: dir, then: { self.finish(dir: dir) }) })
+                self.checkTerminal(dir: dir, then: {
+                    self.checkFileClipboard(dir: dir, then: { self.checkPanelDrop(dir: dir, then: { self.finish(dir: dir) }) })
+                })
             })
         }
     }
@@ -814,6 +816,13 @@ final class UIKeyCheck {
         check(terminal.tabCount == 1, "záložky terminálu: jedinou záložku zavřít nejde")
     }
 
+    /// Přenos do panelu (vložení, puštění taženého souboru) doběhl: soubor je
+    /// v cílovém adresáři, dialog průběhu je zavřený a panel ho má načtený.
+    private func transferFinished(_ name: String, in panel: PanelController, directory: String) -> Bool {
+        FileManager.default.fileExists(atPath: directory + "/" + name) && controller.window?.attachedSheet == nil
+            && !panel.isLoading && panel.rowIndex(named: name) != nil
+    }
+
     /// Schránka souborů a přetažení do panelu: zkratky ⌘C/⌘X/⌘V, položky
     /// kontextového menu, registrace panelu pro přetažení, čtení souborů ze
     /// schránky a vložení do adresáře panelu – kopie z více adresářů, duplikát
@@ -839,6 +848,11 @@ final class UIKeyCheck {
         check([Command.clipboardCopy, .clipboardCut, .clipboardPaste].allSatisfy { tags.contains(MainWindowController.menuCommandIndex($0)) },
               "schránka: kontextové menu panelu nabízí Kopírovat / Vyjmout / Vložit")
         check(view.registeredDraggedTypes.contains(.fileURL), "přetažení: panel přijímá soubory z jiné aplikace")
+        // Tažení ven: přepínání kopie / přesun klávesou ⌘ během tažení potřebuje
+        // funkce systému (po aktualizaci macOS mohou zmizet); bez probíhajícího
+        // tažení se nic nenastaví.
+        check(DragSessionActions.isAvailable, "přetažení: funkce systému pro přepínání operací během tažení jsou k dispozici")
+        check(!DragSessionActions.setOutsideOperations(.copy), "přetažení: mimo tažení se nabízené operace nemění")
 
         // Zdrojové soubory ve dvou adresářích a prázdný cílový adresář.
         let base = (dir as NSString).deletingLastPathComponent
@@ -864,11 +878,7 @@ final class UIKeyCheck {
               "schránka: soubory ze schránky se přečtou jako cesty (\(pasted.count))")
         pasteboard.releaseGlobally()
 
-        /// Vložení doběhlo: soubor existuje, dialog průběhu je zavřený a panel načtený.
-        func pasteFinished(_ name: String) -> Bool {
-            fm.fileExists(atPath: target + "/" + name) && self.controller.window?.attachedSheet == nil
-                && !panel.isLoading && panel.rowIndex(named: name) != nil
-        }
+        func pasteFinished(_ name: String) -> Bool { transferFinished(name, in: panel, directory: target) }
         controller.activate(panel)
         panel.changePath(target)
         poll(until: { panel.location.path == target && !panel.isLoading }) {
@@ -892,6 +902,56 @@ final class UIKeyCheck {
                                    "vložení: přesun soubor ze zdroje odebere")
                         done()
                     }
+                }
+            }
+        }
+    }
+
+    /// Tažení myší mezi panely: panel odmítne tažení ze sebe sama, do druhého
+    /// panelu soubor zkopíruje a s ⌘ (systém pak z nabízených operací nechá jen
+    /// „generic“) přesune. Tažení zastupuje FakeDraggingInfo s vlastní schránkou.
+    private func checkPanelDrop(dir: String, then done: @escaping () -> Void) {
+        let source = controller.leftPanel
+        let target = controller.rightPanel
+        guard let sourceView = source.view, let targetView = target.view else { done(); return }
+        let fm = FileManager.default
+        let base = (dir as NSString).deletingLastPathComponent
+        let (from, to) = (base + "/drag-src", base + "/drag-dst")
+        for directory in [from, to] {
+            try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        }
+        for name in ["kopie.txt", "presun.txt"] {
+            fm.createFile(atPath: from + "/" + name, contents: Data("obsah".utf8))
+        }
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("sal-keycheck-drag-\(getpid())"))
+
+        /// Tažení souboru ze zdrojového panelu s danými nabízenými operacemi.
+        func drag(_ name: String, operations: NSDragOperation) -> FakeDraggingInfo {
+            pasteboard.clearContents()
+            pasteboard.writeObjects([URL(fileURLWithPath: from + "/" + name) as NSURL])
+            return FakeDraggingInfo(source: sourceView, pasteboard: pasteboard, operations: operations)
+        }
+        func dropFinished(_ name: String) -> Bool { transferFinished(name, in: target, directory: to) }
+        source.changePath(from)
+        target.changePath(to)
+        poll(until: { source.location.path == from && target.location.path == to && !source.isLoading && !target.isLoading }) {
+            // Bez klávesy nabízí zdroj v aplikaci kopii i „generic“ → kopie.
+            let copy = drag("kopie.txt", operations: [.copy, .generic])
+            self.check(sourceView.draggingEntered(copy).isEmpty, "tažení mezi panely: panel nepřijme tažení ze sebe sama")
+            self.check(targetView.draggingEntered(copy) == .copy && targetView.performDragOperation(copy),
+                       "tažení mezi panely: druhý panel nabídne kopii")
+            self.poll(until: { dropFinished("kopie.txt") }) {
+                self.check(dropFinished("kopie.txt") && fm.fileExists(atPath: from + "/kopie.txt"),
+                           "tažení mezi panely: soubor se zkopíruje, zdroj zůstává")
+                // S ⌘ zbude z nabízených operací jen „generic“ → přesun.
+                let move = drag("presun.txt", operations: .generic)
+                self.check(targetView.draggingEntered(move) == .generic && targetView.performDragOperation(move),
+                           "tažení mezi panely: s ⌘ druhý panel nabídne přesun")
+                self.poll(until: { dropFinished("presun.txt") }) {
+                    self.check(dropFinished("presun.txt") && !fm.fileExists(atPath: from + "/presun.txt"),
+                               "tažení mezi panely: s ⌘ se soubor přesune")
+                    pasteboard.releaseGlobally()
+                    done()
                 }
             }
         }
@@ -1176,4 +1236,40 @@ final class UIKeyCheck {
         }
         RunLoop.main.add(timer, forMode: .common)
     }
+}
+
+/// Zástupné tažení pro kontrolu příjmu souborů v panelu (UIKeyCheck): nese jen
+/// zdroj, schránku a nabízené operace, zbytek rozhraní je prázdný.
+private final class FakeDraggingInfo: NSObject, NSDraggingInfo {
+    let draggingSource: Any?
+    let draggingPasteboard: NSPasteboard
+    let draggingSourceOperationMask: NSDragOperation
+
+    /// - Parameters:
+    ///   - source: pohled, ze kterého se táhne
+    ///   - pasteboard: schránka s taženými soubory
+    ///   - operations: operace nabízené zdrojem (po zúžení klávesami)
+    init(source: Any?, pasteboard: NSPasteboard, operations: NSDragOperation) {
+        draggingSource = source
+        draggingPasteboard = pasteboard
+        draggingSourceOperationMask = operations
+    }
+
+    var draggingDestinationWindow: NSWindow? { nil }
+    var draggingLocation: NSPoint { .zero }
+    var draggedImageLocation: NSPoint { .zero }
+    var draggedImage: NSImage? { nil }
+    var draggingSequenceNumber: Int { 0 }
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 1
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    // NSObject má tuto (zastaralou) metodu neformálně deklarovanou – proto override.
+    override func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
+    func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions = [], for view: NSView?,
+                                classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:],
+                                using block: @escaping (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+    func resetSpringLoading() {}
 }

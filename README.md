@@ -444,15 +444,23 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   táhne za označenou) lze přetáhnout do Finderu, Zpráv (iMessage), Mailu
   a dalších aplikací ve všech režimech zobrazení; tažení začne po posunu myši
   o pár bodů. Cíl soubory zkopíruje, se stisknutým ⌘ je přesune (stejně jako
-  při přetažení do panelu), s ⌃ vytvoří odkaz; puštěním na Koš v Docku se
-  přesunou do koše. Jen soubory z lokálního disku (ne z archivu či FTP/SFTP).
+  při přetažení do panelu) – ⌘ lze stisknout před tažením i během něj (tažení
+  s ⌘ označení položek nemění); puštěním na Koš v Docku se přesunou do koše.
+  Finder sám by na stejném svazku přesouval i bez ⌘, proto mu panel nabízí vždy
+  jen jednu operaci a během tažení ji podle ⌘ přepíná (neveřejnou funkcí
+  systému CoreDragSetAllowableActions; kdyby v systému chyběla, platí po celé
+  tažení stav ⌘ z jeho začátku). Jen soubory z lokálního disku (ne z archivu
+  či FTP/SFTP).
+- **Přetažení myší mezi panely:** položky lze přetáhnout do druhého panelu
+  (i do panelu jiného okna): zkopírují se do jeho adresáře, se stisknutým ⌘ se
+  přesunou; při konfliktu se zeptá přepsat / přeskočit. Cílem může být i
+  FTP/SFTP server, zdrojem jen lokální disk; do téhož adresáře se netáhne.
 - **Přetažení myší do panelu:** soubory a adresáře přetažené z jiné aplikace
   (Finder a další) se zkopírují do adresáře panelu, nad
   kterým se pustí (i na FTP/SFTP server); se stisknutým ⌘ se přesunou. Přijímají
   se i přislíbené soubory (příloha z Mailu, fotka z Fotek, obrázek
   z prohlížeče) – ty zapisuje zdrojová aplikace, proto jen do adresáře na
-  lokálním disku. Do archivu přetáhnout nelze (je jen pro čtení); přetahování
-  mezi panely MicroCommanderu není – k tomu slouží F5 / F6 nebo schránka.
+  lokálním disku. Do archivu přetáhnout nelze (je jen pro čtení).
   U souboru přetaženého (nebo vloženého ze schránky) ze složky, kterou macOS
   nedovolí vypsat – typicky z Koše bez Plného přístupu k disku – se čte jen
   soubor sám, složka se nevypisuje; odepře-li systém i soubor, hlášení poradí
@@ -595,7 +603,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   (lišta jen při dvou a více záložkách), vrstvy lišty F-kláves a schránka
   souborů (zkratky ⌘C / ⌘X / ⌘V, kontextové menu, čtení souborů ze schránky,
   vložení z více adresářů, duplikát v témže adresáři, přesun, registrace
-  panelu pro přetažení – systémové schránky se nedotkne);
+  panelu pro přetažení – systémové schránky se nedotkne) a tažení mezi panely
+  (odmítnutí tažení do téhož panelu, kopie, přesun s ⌘);
   běží bez zobrazení okna, nepřebírá fokus
 - diagnostika kláves: `defaults write com.github.svopex.microcommander keyLog -bool YES`
   zapíše každý stisk (kód klávesy, znak, modifikátory, fokus) do
