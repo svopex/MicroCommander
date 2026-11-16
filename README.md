@@ -502,7 +502,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   plochu okna pod nástrojovou lištou – panely a lišta disků se skryjí – a druhý
   stisk vrátí jeden řádek. Terminál má pořád velikost celé plochy, v řádku je
   z něj jen vidět řádek s kurzorem: výstup příkazu spuštěného z řádku je po
-  ⌘F12 vidět celý a programy mají správné rozměry.
+  ⌘F12 vidět celý a programy mají správné rozměry. Na celé okno se terminál
+  přepne i sám: Enterem odeslaný příkaz z řádku (rozepsaný řádek nebo vstup
+  běžícímu programu; prázdný Enter u promptu ne), vložení víceřádkového textu
+  (spustí se) a klik na záložku v liště záložek; zpět na řádek vrací ⌘F12.
   - **Fokus:** ⌃Tab (⌘Tab) nebo klik přepne mezi panelem a řádkem terminálu.
     V řádku patří aplikaci F-klávesy a zkratky s ⌘ (F5 kopíruje i z terminálu),
     PgUp/PgDn listují panelem; vše ostatní dostane shell (Tab doplňuje, šipky
@@ -539,6 +542,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     pořadí a ⌘9 poslední (jako v Safari), ⇧⌘W zavře vybranou (i `exit` v jejím shellu); poslední
     záložka zůstává. Za panelem jde a panel vede jen vybraná záložka, shelly
     ostatních běží dál na pozadí.
+  - **Výběr myší** (tažení, dvojklik na slovo, trojklik na řádek, ⇧klik
+    rozšíří) se po puštění tlačítka rovnou zkopíruje do schránky jako
+    v xtermu; prostý klik výběr zruší a schránku nechá být.
   - Kurzor terminálu trvale svítí (neblikající blok).
   - F9 dál otevírá aplikaci Terminal v adresáři panelu.
 - **Více oken:** ⌘N (Soubory › Nové okno, Okno › Nové okno, ikona na nástrojové

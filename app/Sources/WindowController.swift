@@ -341,6 +341,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         terminalPane.onDirectoryChanged = { [weak self] directory in self?.followTerminal(to: directory) }
         terminalPane.onCommandFinished = { [weak self] in self?.reloadPanels() }
         terminalPane.onShellExited = { [weak self] in self?.setTerminalExpanded(false) }
+        terminalPane.onRequestFullWindow = { [weak self] in self?.setTerminalExpanded(true) }
     }
 
     /// Monitory: F-klávesy a Tab nad celým oknem, modifikátory pro lištu F-kláves.

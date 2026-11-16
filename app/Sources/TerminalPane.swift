@@ -36,6 +36,20 @@ final class ShellTerminalView: LocalProcessTerminalView {
         onPaste?(NSPasteboard.general.string(forType: .string) ?? "")
         super.paste(sender)
     }
+
+    /// Text vybraný myší (tažení, dvojklik na slovo, trojklik na řádek, ⇧klik)
+    /// se po puštění tlačítka rovnou zkopíruje do schránky jako v xtermu.
+    /// Prostý klik výběr zruší a schránky se nedotkne; program, který myš
+    /// sleduje sám (mc, htop), výběr nevytváří.
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        // Text výběru se skládá jen jednou (copy() by ho skládalo znovu).
+        if let text = getSelection(), !text.isEmpty {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+        }
+    }
 }
 
 /// Integrace zsh ve vestavěném terminálu: soubor `.zshenv` v adresáři, na který
@@ -116,6 +130,9 @@ final class TerminalSession: NSView, LocalProcessTerminalViewDelegate {
     var onDirectoryChanged: ((String) -> Void)?
     /// Doběhl příkaz spuštěný uživatelem – okno znovu načte panely.
     var onCommandFinished: (() -> Void)?
+    /// Uživatel odeslal příkaz (Enter na rozepsaném řádku či běžícímu programu,
+    /// víceřádkové vložení) – má být vidět jeho výstup.
+    var onCommandSubmitted: (() -> Void)?
     /// Shell skončil (exit, ⌃D). Co dál – nový shell (restartShell), nebo
     /// zavření záložky – rozhodne ten, kdo relaci drží.
     var onShellExited: (() -> Void)?
@@ -319,7 +336,10 @@ final class TerminalSession: NSView, LocalProcessTerminalViewDelegate {
         if modifiers.contains(.command) { return }
         let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
         if event.keyCode == KeyCode.returnKey || event.keyCode == KeyCode.enter {
+            // Prázdný Enter u promptu jen přidá nový prompt – výstup nemá.
+            let submitsCommand = hasPendingInput || !isShellIdle
             noteLineSubmitted()
+            if submitsCommand { onCommandSubmitted?() }
         } else if modifiers == .control, ["c", "d", "u"].contains(chars) {
             // ⌃C a ⌃U řádek zahodí, ⌃D na prázdném řádku ukončí shell.
             hasPendingInput = false
@@ -332,6 +352,7 @@ final class TerminalSession: NSView, LocalProcessTerminalViewDelegate {
     private func notePaste(_ text: String) {
         if text.contains("\n") || text.contains("\r") {
             noteLineSubmitted()
+            onCommandSubmitted?()
         } else if !text.isEmpty {
             hasPendingInput = true
         }
@@ -829,6 +850,9 @@ final class TerminalPane: NSView {
     var onCommandFinished: (() -> Void)?
     /// Skončil shell jediné záložky a spouští se nový – okno opustí režim celého okna.
     var onShellExited: (() -> Void)?
+    /// Terminál chce být vidět celý (odeslaný příkaz ve vybrané záložce, klik
+    /// na záložku v liště) – okno ho roztáhne na celé okno.
+    var onRequestFullWindow: (() -> Void)?
     /// Adresář pro nově spouštěný shell (adresář aktivního panelu).
     var startDirectory: (() -> String?)?
 
@@ -855,7 +879,12 @@ final class TerminalPane: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         addLayoutGuide(sessionArea)
         tabBar.isHidden = true
-        tabBar.onSelect = { [weak self] index in self?.selectTab(index, focus: true) }
+        // Klik na záložku ji vybere a ohlásí to oknu (přepne na celé okno).
+        tabBar.onSelect = { [weak self] index in
+            guard let self else { return }
+            self.selectTab(index, focus: true)
+            self.onRequestFullWindow?()
+        }
         tabBar.onClose = { [weak self] index in self?.closeTab(at: index) }
         tabBar.onAdd = { [weak self] in self?.addTab() }
         addSubview(tabBar)
@@ -891,6 +920,7 @@ final class TerminalPane: NSView {
             self.onDirectoryChanged?(directory)
         }
         session.onCommandFinished = { [weak self] in self?.onCommandFinished?() }
+        session.onCommandSubmitted = { [weak self] in self?.onRequestFullWindow?() }
         session.onTitleChanged = { [weak self] in self?.updateTabBar() }
         session.onShellExited = { [weak self, weak session] in
             guard let self, let session else { return }
