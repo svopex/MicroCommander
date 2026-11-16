@@ -7,47 +7,65 @@
 
 import AppKit
 
-/// Progress dialog: ukazatel průběhu + tlačítko Zrušit.
+/// Progress dialog: nadpis operace (sheet titulek okna neukazuje), řádky
+/// s podrobnostmi (odkud, kam), ukazatel průběhu, stav a tlačítko Zrušit.
 final class ProgressDialog: NSWindowController {
     /// Stav pro C callback (cancel + čísla).
     let state = ProgressState()
     private let bar = NSProgressIndicator()
-    private let label = NSTextField(labelWithString: "")
+    private let label = NSTextField(labelWithString: "Zahajuji…")
     private let parent: NSWindow?
     /// Jednotka hlášeného průběhu (bajty / položky) pro text pod ukazatelem.
     private let unit: ProgressUnit
 
     /// - Parameters:
-    ///   - title: titulek a výchozí text dialogu
+    ///   - title: nadpis dialogu – co se děje a s čím („Kopírování 3 položek“)
+    ///   - details: řádky s podrobnostmi pod nadpisem (Z: …, Do: …, V: …)
     ///   - unit: v čem operace hlásí průběh
     ///   - parentWindow: okno, nad kterým se dialog zobrazí jako sheet
-    init(title: String, unit: ProgressUnit = .bytes, parentWindow: NSWindow?) {
+    init(title: String, details: [String] = [], unit: ProgressUnit = .bytes, parentWindow: NSWindow?) {
         parent = parentWindow
         self.unit = unit
+        let width: CGFloat = 460
+        // Výška podle počtu řádků s podrobnostmi.
+        let height = 126 + CGFloat(details.count) * 18
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 110),
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
             styleMask: [.titled],
             backing: .buffered,
             defer: false
         )
         window.title = title
         super.init(window: window)
-        label.stringValue = title
+
+        // Rozvržení shora dolů: nadpis, podrobnosti, ukazatel, stav, Zrušit.
+        let content = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        let heading = NSTextField(labelWithString: title)
+        heading.font = .boldSystemFont(ofSize: 13)
+        heading.lineBreakMode = .byTruncatingMiddle
+        content.place(heading, NSRect(x: 20, y: 16, width: width - 40, height: 18))
+        var y: CGFloat = 38
+        // Dlouhé cesty se zkracují uprostřed (začátek i jméno zůstanou vidět).
+        for detail in details {
+            let line = NSTextField(labelWithString: detail)
+            line.font = .systemFont(ofSize: 11)
+            line.textColor = .secondaryLabelColor
+            line.lineBreakMode = .byTruncatingMiddle
+            line.toolTip = detail
+            content.place(line, NSRect(x: 20, y: y, width: width - 40, height: 15))
+            y += 18
+        }
 
         bar.isIndeterminate = true
         bar.startAnimation(nil)
         bar.minValue = 0
         bar.maxValue = 100
-        bar.frame = NSRect(x: 20, y: 60, width: 380, height: 18)
-        label.frame = NSRect(x: 20, y: 30, width: 380, height: 20)
+        content.place(bar, NSRect(x: 20, y: y + 6, width: width - 40, height: 18))
+        label.lineBreakMode = .byTruncatingTail
+        content.place(label, NSRect(x: 20, y: y + 32, width: width - 40, height: 17))
         let cancel = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
-        cancel.frame = NSRect(x: 320, y: 5, width: 80, height: 24)
         cancel.keyEquivalent = "\u{1b}"
-
-        let content = NSView(frame: window.contentRect(forFrameRect: window.frame))
-        content.addSubview(bar)
-        content.addSubview(label)
-        content.addSubview(cancel)
+        content.place(cancel, NSRect(x: width - 120, y: height - 42, width: 100, height: 28))
         window.contentView = content
 
         // Periodická aktualizace ukazatele (progress callback jen nastavuje stav).

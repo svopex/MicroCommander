@@ -186,6 +186,7 @@ extension Command {
         case .newFile: return "Nový soubor"
         case .copy: return "Kopírovat"
         case .move: return "Přesunout"
+        case .duplicate: return "Duplikovat"
         case .mkdir: return "Nový adresář"
         case .changeDir: return "Změnit adresář"
         case .delete: return "Smazat (do koše)"
@@ -333,6 +334,8 @@ enum KeyBindings {
         (.newFile, [.function(4, .shift)]),
         (.copy, [.function(5)]),
         (.move, [.function(6)]),
+        // ⌘D – Duplikovat jako ve Finderu (kopie vedle originálu „jméno kopie“).
+        (.duplicate, [char("d", .command)]),
         (.mkdir, [.function(7)]),
         // F8 maže do koše, ⇧F8 i ⌘F8 trvale (Delete / ⇧Delete řeší přímo panel).
         // Delete / ⌘⌫ do koše, ⇧Delete trvale (jako Finder a Salamander).
@@ -371,7 +374,8 @@ enum KeyBindings {
         (.calcSize, [.function(10, .option), char("q", .control)]),
         (.selectAll, [char("a", .command), .code(KeyCode.keypadPlus, key: "+", .command),
                       .code(KeyCode.keypadPlus, key: "+", .control)]),
-        (.unselectAll, cmdCtrl("d") + [.code(KeyCode.keypadMinus, key: "-", .command),
+        // ⌃D (⌘D patří Duplikovat jako ve Finderu).
+        (.unselectAll, [char("d", .control), .code(KeyCode.keypadMinus, key: "-", .command),
                                       .code(KeyCode.keypadMinus, key: "-", .control)]),
         (.selectMask, [.code(KeyCode.keypadPlus, key: "+", [])] + cmdCtrl("=")),
         (.unselectMask, [.code(KeyCode.keypadMinus, key: "-", [])] + cmdCtrl("-")),

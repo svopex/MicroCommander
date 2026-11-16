@@ -769,8 +769,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         menu.addItem(.separator())
         let entries: [Command?] = [
             .view, .edit, nil, .clipboardCopy, .clipboardCut, .clipboardPaste, nil,
-            .copy, .move, .rename, .delete, .deletePermanent, nil,
-            .pack, .unpack, .calcSize, nil, .changeAttributes, .properties,
+            .copy, .move, .duplicate, .rename, .delete, .deletePermanent, nil,
+            .pack, .unpack, .calcSize, nil, .changeAttributes, .permissions, .properties,
         ]
         for entry in entries {
             guard let entry else {
@@ -1109,7 +1109,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         // Šifrovaná položka: heslo se zeptá předem (jen poprvé pro daný archiv).
         if item.isEncrypted, !ensurePassword(src) { return }
         func extract() {
-            beginProgress(title: "Rozbaluji \(item.name)") { state in
+            beginProgress(title: "Rozbaluji „\(item.name)“", details: ["Z: " + displayVfsPath(dir, in: src)]) { state in
                 try coreCopy(src: src, srcDir: dir, names: [item.name], dst: disk, dstDir: tempDir,
                              overwrite: .overwrite, state: state)
             } completion: { [weak self] result in
@@ -1199,6 +1199,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .newFile: commandNewFile()
         case .copy: runTransfer(move: false)
         case .move: runTransfer(move: true)
+        case .duplicate: commandDuplicate()
         case .mkdir: commandMkdir()
         case .changeDir: view(of: panel).directoryLine.beginEditing()
         case .delete: commandDelete(toTrash: true)
@@ -1237,7 +1238,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .sameDirOther: commandSameDirOther()
         case .toggleHidden: toggleHiddenFiles()
         case .changeAttributes: commandChangeAttributes()
-        case .properties, .permissions: commandShowInfo()
+        case .properties: commandShowInfo()
+        case .permissions: commandPermissions()
         // Cesta tak, jak ji ukazuje řádek adresáře (u archivu/FTP i s popiskem VFS).
         case .copyDirPath: copyTextToPasteboard(activePanel.displayPath)
         case .revealInFinder: commandRevealInFinder()
@@ -1296,7 +1298,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
 
         // Dialog s cílem jako v Salamanderu („Kopírovat 3 soubory do:“).
-        let what = items.count == 1 ? "„\(items[0].name)“" : "\(items.count) položek"
+        let what = describeItems(items)
         guard let typed = promptText(title: move ? "Přesunout" : "Kopírovat",
                                      message: "\(move ? "Přesunout" : "Kopírovat") \(what) do:",
                                      value: target.location.path, okTitle: move ? "Přesunout" : "Kopírovat") else { return }
@@ -1321,7 +1323,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
         // Při konfliktu (Ask) se zeptá a operaci spustí znovu s režimem přepsání/přeskočení.
         func transfer(_ mode: OverwriteMode) {
-            beginProgress(title: "\(verb) \(what)") { state in
+            beginProgress(title: "\(verb) \(what)",
+                          details: ["Z: " + source.displayPath, "Do: " + target.displayPath(for: dstDir)]) { state in
                 if move {
                     try coreMove(src: src, srcDir: srcDir, names: names, dst: dst, dstDir: dstDir, overwrite: mode, state: state)
                 } else {
@@ -1440,10 +1443,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let focusName = groups.first?.names.first
         let what = count == 1 ? "„\(focusName ?? lastComponent(duplicates[0]))“" : "\(count) položek"
         let transferItems = move ? coreMove : coreCopy
+        // Jen duplikáty (⌘D, ⌘V do téhož adresáře) se v nadpisu jmenují Duplikování.
+        let progressVerb = groups.isEmpty ? "Duplikování" : verb
+        // Zdroj jen u jediného zdrojového adresáře (výběr z Hledat jich může mít víc).
+        let sourceDirs = Set(groups.map(\.dir) + duplicates.map(parentPath))
+        let details = (sourceDirs.count == 1 ? ["Z: " + sourceDirs.first!] : []) + ["Do: " + target.displayPath]
+        // Jméno první kopie (duplikát dostane nové jméno); zapisuje ho pracovní
+        // vlákno, čte se až v completion po jeho doběhnutí.
+        var firstDuplicate: String?
 
         // Při konfliktu (Ask) se zeptá a operaci spustí znovu s režimem přepsání/přeskočení.
         func transfer(_ mode: OverwriteMode) {
-            beginProgress(title: "\(verb) \(what)") { state in
+            beginProgress(title: "\(progressVerb) \(what)", details: details) { state in
                 for group in groups {
                     // Opakovaný přesun: položky přesunuté před konfliktem už ve zdroji nejsou.
                     let names = move && mode != .ask
@@ -1456,7 +1467,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 // Zrušení se kontroluje mezi položkami.
                 for path in duplicates {
                     guard !state.isCancelled else { throw CoreError.code(SAL_ERR_CANCELLED, "") }
-                    try duplicateLocalItem(atPath: path)
+                    let name = try duplicateLocalItem(atPath: path)
+                    if firstDuplicate == nil { firstDuplicate = name }
                 }
             } completion: { [weak self] result in
                 guard let self else { return }
@@ -1478,7 +1490,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                     self.showErrorUnlessCancelled(title: verb, error)
                 case .success:
                     // Kurzor na první vloženou položku (uplatní se při obnovení panelu).
-                    if let focusName { target.focus(name: focusName) }
+                    if let name = focusName ?? firstDuplicate { target.focus(name: name) }
                     onSuccess?()
                 }
                 self.reloadPanels()
@@ -1546,7 +1558,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let useTrash = trashDirs.contains(dir)
 
         let names = items.map(\.name)
-        beginProgress(title: useTrash ? "Přesun do koše" : "Mazání", unit: .items) { state in
+        beginProgress(title: (useTrash ? "Přesun do koše: " : "Mazání: ") + describeItems(items),
+                      details: ["V: " + panel.displayPath], unit: .items) { state in
             try coreRemove(vfs: vfs, dir: dir, names: names, useTrash: useTrash, state: state)
         } completion: { [weak self] result in
             self?.endProgress()
@@ -1559,9 +1572,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
     }
 
-    /// ⌥↩ / ⌘I Vlastnosti a ⌃P Oprávnění: jako v Salamanderu systémový dialog
-    /// vlastností – na macOS okno Informace z Finderu (Otevřít v aplikaci,
-    /// Sdílení a oprávnění, …) pro označené položky, jinak položku pod kurzorem.
+    /// ⌥↩ / ⌘I Vlastnosti: jako v Salamanderu systémový dialog vlastností –
+    /// na macOS okno Informace z Finderu (Otevřít v aplikaci, Sdílení
+    /// a oprávnění, …) pro označené položky, jinak položku pod kurzorem.
     /// Otevírá se systémovou službou Finderu „Show Info“ (bez AppleScriptu a bez
     /// oprávnění k Automatizaci); je-li služba vypnutá, položky se aspoň ukážou
     /// ve Finderu.
@@ -1589,6 +1602,77 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
     }
 
+    /// Lokální cesty položek operace aktivního panelu (označené, jinak položka
+    /// pod kurzorem); mimo lokální disk ohlásí, že příkaz tam nejde.
+    /// - Parameters:
+    ///   - title: titulek hlášení
+    ///   - what: co nejde („Oprávnění lze měnit“)
+    /// - Returns: položky a jejich cesty, nil = není co dělat
+    private func localOperationItems(title: String, what: String) -> (items: [Item], paths: [String])? {
+        let panel = activePanel
+        let items = panel.operationItems
+        guard !items.isEmpty else { return nil }
+        let paths = items.compactMap { panel.localPath(of: $0.name) }
+        guard paths.count == items.count else {
+            showAlert(title: title, text: "\(what) jen na lokálním disku.")
+            return nil
+        }
+        return (items, paths)
+    }
+
+    /// Spustí změnu lokálních položek s progress dialogem (Oprávnění, Změnit
+    /// atributy); chyby nahlásí a nakonec obnoví panely.
+    /// - Parameters:
+    ///   - title: titulek hlášení chyb
+    ///   - progressTitle: nadpis progress dialogu
+    ///   - operation: změna na pozadí
+    private func runLocalChange(title: String, progressTitle: String,
+                                operation: @escaping (ProgressState) throws -> Void) {
+        beginProgress(title: progressTitle, details: ["V: " + activePanel.displayPath], unit: .items,
+                      operation: operation) { [weak self] result in
+            guard let self else { return }
+            self.endProgress()
+            if case .failure(let error) = result {
+                self.showErrorUnlessCancelled(title: title, error)
+            }
+            self.reloadPanels()
+        }
+    }
+
+    /// ⌃P – vlastní dialog Oprávnění (čtení / zápis / spouštění, zvláštní bity,
+    /// skupina, i rekurzivně) pro označené položky, jinak položku pod kurzorem.
+    /// Okno Informace z Finderu spouštění nastavit neumí. Jen lokální disk;
+    /// symbolické odkazy se přeskakují.
+    private func commandPermissions() {
+        guard let window, case let (items, paths)? = localOperationItems(title: "Oprávnění", what: "Oprávnění lze měnit")
+        else { return }
+        // Výchozí stav dialogu jen z položek, které vlastní práva mají (ne odkazy).
+        let infos = paths.compactMap(PermissionInfo.init(path:))
+        guard !infos.isEmpty else {
+            showAlert(title: "Oprávnění", text: "Symbolické odkazy nemají vlastní oprávnění – změňte je u cíle odkazu.")
+            return
+        }
+        let what = describeItems(items)
+        PermissionsDialog.run(on: window, itemsDescription: what, infos: infos) { [weak self] changes in
+            guard let changes else { return }
+            self?.runLocalChange(title: "Oprávnění", progressTitle: "Změna oprávnění: " + what) { state in
+                try applyPermissionChanges(changes, to: paths, state: state)
+            }
+        }
+    }
+
+    /// ⌘D – Duplikovat jako ve Finderu: označené položky (jinak položka pod
+    /// kurzorem) se zkopírují do téhož adresáře jako „jméno kopie“, „jméno
+    /// kopie 2“… (stejně jako ⌘V do téhož adresáře); kurzor se postaví na
+    /// první kopii, označení se zruší. Jen lokální disk.
+    private func commandDuplicate() {
+        guard let paths = localOperationItems(title: "Duplikovat", what: "Duplikovat lze")?.paths else { return }
+        let panel = activePanel
+        importFiles(paths, into: panel, move: false) {
+            panel.markAll(false)
+        }
+    }
+
     /// ⌘F1 / ⌃F1 – informace o jednotce (svazku), na které leží adresář
     /// aktivního panelu; u archivu jde o svazek se souborem archivu.
     private func commandDriveInfo() {
@@ -1606,25 +1690,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// ⌘F2 / ⌃F2 – změna atributů označených položek (jinak položky pod kurzorem):
     /// jen pro čtení, skrytý, časy změny/vytvoření/otevření, i rekurzivně.
     private func commandChangeAttributes() {
-        let panel = activePanel
-        let items = panel.operationItems
-        guard !items.isEmpty, let window else { return }
-        let paths = items.compactMap { panel.localPath(of: $0.name) }
-        guard paths.count == items.count else {
-            showAlert(title: "Změnit atributy", text: "Atributy lze měnit jen na lokálním disku.")
-            return
-        }
+        guard let window,
+              case let (items, paths)? = localOperationItems(title: "Změnit atributy", what: "Atributy lze měnit") else { return }
         AttributesDialog.run(on: window, items: items, firstPath: paths[0]) { [weak self] changes in
             guard let self, let changes else { return }
-            self.beginProgress(title: "Změna atributů", unit: .items) { state in
+            self.runLocalChange(title: "Změnit atributy", progressTitle: "Změna atributů: " + self.describeItems(items)) { state in
                 try applyAttributeChanges(changes, to: paths, state: state)
-            } completion: { [weak self] result in
-                guard let self else { return }
-                self.endProgress()
-                if case .failure(let error) = result {
-                    self.showErrorUnlessCancelled(title: "Změnit atributy", error)
-                }
-                self.reloadPanels()
             }
         }
     }
@@ -1749,7 +1820,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             let encryption = options.encryption
             // Sheet uložení se musí zavřít dřív, než se otevře progress sheet.
             func pack() {
-                self.beginProgress(title: "Zabalování do \(url.lastPathComponent)") { state in
+                self.beginProgress(title: "Zabalování \(self.describeItems(items)) do „\(url.lastPathComponent)“",
+                                   details: ["Z: " + panel.displayPath, "Do: " + url.path]) { state in
                     try corePackZip(src: src, srcDir: dir, names: names, dest: url.path,
                                     encryption: encryption, state: state)
                 } completion: { result in
@@ -1803,7 +1875,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         // Zaheslovaný archiv: heslo předem.
         guard ensurePassword(archive) else { return }
         func unpack(_ mode: OverwriteMode) {
-            beginProgress(title: "Rozbaluji \(item.name)") { state in
+            beginProgress(title: "Rozbaluji „\(item.name)“", details: ["Do: " + target.displayPath(for: dstDir)]) { state in
                 try coreCopy(src: archive, srcDir: "/", names: names, dst: dst, dstDir: dstDir, overwrite: mode, state: state)
             } completion: { [weak self] result in
                 guard let self else { return }
@@ -1832,7 +1904,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         guard !items.isEmpty else { return }
         let location = panel.location
         let totals = SizeTotals()
-        beginProgress(title: "Počítám velikost", unit: .items) { state in
+        beginProgress(title: "Počítám velikost: " + describeItems(items), details: ["V: " + panel.displayPath],
+                      unit: .items) { state in
             for item in items {
                 // Odkaz na adresář se neprochází – jeho cíl do velikosti nepatří.
                 if item.isRealDir {
@@ -2016,7 +2089,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         ⌘T – nová záložka terminálu (⇧⌘W zavřít, ⌥⌘← / ⌥⌘→ přepnout, v terminálu ⌘1–⌘9 podle pořadí),
         ⌃Enter – jméno položky do terminálu, ⌘N – nové okno,
         Space / Insert / ⇧↑↓ / ⌘klik – označit, Num + / − / * – maska / invertovat,
-        ⌘A – označit vše (znovu = zrušit), ⌘D – nic, psaní písmen – rychlé hledání,
+        ⌘A – označit vše (znovu = zrušit), ⌃D – nic, ⌘D – duplikovat, psaní písmen – rychlé hledání,
         ⌥← / ⌥→ – historie, ⌘\\ – kořen, ⌃H – skryté soubory.
         ⌘C / ⌘X / ⌘V – kopírovat / vyjmout / vložit soubory přes schránku (i z Finderu a do něj);
         soubory lze myší přetahovat mezi panely, z jiné aplikace i do ní – jako ve Finderu:
@@ -2110,18 +2183,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
 
     // MARK: - Dialogy operací
 
+    /// Popis položek operace pro nadpisy: „jméno“ u jedné, jinak „N položek“.
+    /// - Parameter items: položky operace
+    private func describeItems(_ items: [Item]) -> String {
+        items.count == 1 ? "„\(items[0].name)“" : "\(items.count) položek"
+    }
+
     /// Otevře progress dialog a spustí operaci na pozadí.
     /// - Parameters:
-    ///   - title: titulek dialogu
+    ///   - title: nadpis dialogu (co se děje a s čím)
+    ///   - details: řádky s podrobnostmi pod nadpisem (Z: …, Do: …, V: …)
     ///   - unit: v čem operace hlásí průběh (bajty přenosu / zpracované položky)
     ///   - dismissOnCancel: Zrušit dialog hned zavře a výsledek operace
     ///     (doběhne na pozadí) se zahodí – pro operace, které zrušit nejdou (připojení)
     ///   - operation: operace na pozadí (dostane stav pro průběh a zrušení)
     ///   - completion: výsledek operace na hlavním vlákně
-    func beginProgress(title: String, unit: ProgressUnit = .bytes, dismissOnCancel: Bool = false,
+    func beginProgress(title: String, details: [String] = [], unit: ProgressUnit = .bytes, dismissOnCancel: Bool = false,
                        operation: @escaping (ProgressState) throws -> Void,
                        completion: @escaping (Result<Void, Error>) -> Void) {
-        let dialog = ProgressDialog(title: title, unit: unit, parentWindow: window)
+        let dialog = ProgressDialog(title: title, details: details, unit: unit, parentWindow: window)
         progressDialog = dialog
         dialog.begin()
         let state = dialog.state
@@ -2456,20 +2536,25 @@ enum FileClipboard {
 /// Zkopíruje soubor nebo adresář do téhož adresáře pod volným jménem
 /// („jméno kopie.txt“, „jméno kopie 2.txt“ … jako Duplikovat ve Finderu).
 /// - Parameter path: cesta položky na lokálním disku
-func duplicateLocalItem(atPath path: String) throws {
+/// - Returns: jméno vytvořené kopie
+@discardableResult
+func duplicateLocalItem(atPath path: String) throws -> String {
     let manager = FileManager.default
     var isDirectory: ObjCBool = false
     _ = manager.fileExists(atPath: path, isDirectory: &isDirectory)
     // Přípona zůstává na konci jména; adresář se bere celým jménem.
     let name = lastComponent(path)
     let parts = isDirectory.boolValue ? (base: name, ext: "") : splitExtension(name)
-    for index in 1... {
+    var index = 1
+    while true {
         let suffix = index == 1 ? " kopie" : " kopie \(index)"
-        let target = joinPath(parentPath(path), parts.base + suffix + (parts.ext.isEmpty ? "" : "." + parts.ext))
+        let copyName = parts.base + suffix + (parts.ext.isEmpty ? "" : "." + parts.ext)
+        let target = joinPath(parentPath(path), copyName)
         if !manager.fileExists(atPath: target) {
             try manager.copyItem(atPath: path, toPath: target)
-            return
+            return copyName
         }
+        index += 1
     }
 }
 

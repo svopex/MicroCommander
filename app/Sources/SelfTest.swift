@@ -280,6 +280,49 @@ final class UISelfTest {
             try? applyAttributeChanges(AttributeChanges(readonly: false), to: [path], state: ProgressState())
             self.check(FileManager.default.isWritableFile(atPath: path), "změna atributů: vrácení zápisu")
         }))
+        // 11b) Oprávnění (jádro dialogu ⌃P): přidání spouštění, číselně 640,
+        // rekurze jen pro adresáře (soubory uvnitř se nezmění).
+        steps.append((ready: { self.windowFree }, action: {
+            let fm = FileManager.default
+            let dir = self.root + "/perm"
+            let file = dir + "/f.txt"
+            try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            fm.createFile(atPath: file, contents: Data("x".utf8), attributes: [.posixPermissions: 0o644])
+            // Mode položky jako osmičkové číslo (bez typu souboru).
+            func mode(_ path: String) -> Int {
+                ((try? fm.attributesOfItem(atPath: path))?[.posixPermissions] as? Int) ?? -1
+            }
+            var addExecute = PermissionChanges()
+            addExecute.setBits = 0o111
+            try? applyPermissionChanges(addExecute, to: [file], state: ProgressState())
+            self.check(mode(file) == 0o755, "oprávnění: přidání spouštění (644 → 755)")
+            var exact = PermissionChanges()
+            exact.setBits = 0o640
+            exact.clearBits = 0o7777 & ~0o640
+            try? applyPermissionChanges(exact, to: [file], state: ProgressState())
+            self.check(mode(file) == 0o640 && symbolicMode(0o640) == "rw-r-----", "oprávnění: číselně 640")
+            var dirsOnly = PermissionChanges()
+            dirsOnly.setBits = 0o700
+            dirsOnly.clearBits = 0o077
+            dirsOnly.recursive = true
+            dirsOnly.scope = .directories
+            try? applyPermissionChanges(dirsOnly, to: [dir], state: ProgressState())
+            self.check(mode(dir) == 0o700 && mode(file) == 0o640, "oprávnění: rekurze jen pro adresáře")
+            try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir)
+            try? fm.removeItem(atPath: dir)
+        }))
+        // 11c) Duplikovat (⌘D): „jméno kopie.přípona“, pak „jméno kopie 2.přípona“.
+        steps.append((ready: { self.windowFree }, action: {
+            let path = self.root + "/src/a.txt"
+            let first = try? duplicateLocalItem(atPath: path)
+            let second = try? duplicateLocalItem(atPath: path)
+            self.check(first == "a kopie.txt" && second == "a kopie 2.txt"
+                       && FileManager.default.fileExists(atPath: self.root + "/src/a kopie 2.txt"),
+                       "duplikovat: a kopie.txt, a kopie 2.txt")
+            for name in [first, second].compactMap({ $0 }) {
+                try? FileManager.default.removeItem(atPath: self.root + "/src/" + name)
+            }
+        }))
         // 11d) Rozpoznání shell skriptů pro Enter (spustit v Terminalu): spustitelný
         // soubor se shebangem shellu ano, bez +x, bez shebangu nebo Python ne.
         steps.append((ready: { self.windowFree }, action: {

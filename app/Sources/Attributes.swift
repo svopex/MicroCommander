@@ -24,7 +24,7 @@ struct AttributeChanges {
 }
 
 /// Chyba posledního systémového volání (errno) jako NSError s popisem.
-private func posixError() -> Error {
+func posixError() -> Error {
     NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
 }
 
@@ -87,17 +87,35 @@ private func applyAttributeChanges(_ changes: AttributeChanges, at path: String)
 ///   - paths: lokální cesty položek
 ///   - state: progress (zrušení, počet zpracovaných položek)
 func applyAttributeChanges(_ changes: AttributeChanges, to paths: [String], state: ProgressState) throws {
+    try applyToLocalItems(paths, recursive: changes.recursive, state: state,
+                          failureMessage: "Některé atributy se nepodařilo změnit") { path in
+        try applyAttributeChanges(changes, at: path)
+    }
+}
+
+/// Projde položky (a s `recursive` i obsah adresářů – enumerátor do odkazů na
+/// adresáře nevstupuje) a na každou zavolá `apply`. Chyby jednotlivých položek
+/// se sbírají a nahlásí najednou, zbytek se dokončí. Sdílí ho Změnit atributy
+/// i Oprávnění.
+/// - Parameters:
+///   - paths: lokální cesty položek
+///   - recursive: projít i obsah adresářů
+///   - state: progress (zrušení, počet zpracovaných položek)
+///   - failureMessage: úvod hlášení chyb
+///   - apply: změna jedné položky; vrací, zda je položka adresář (pro rekurzi)
+func applyToLocalItems(_ paths: [String], recursive: Bool, state: ProgressState, failureMessage: String,
+                       apply: (String) throws -> Bool) throws {
     var failures: [String] = []
     var done: UInt64 = 0
 
     // Jedna položka s evidencí chyb a průběhu; vrací, zda je adresář.
-    func apply(_ path: String) -> Bool {
+    func applyOne(_ path: String) -> Bool {
         defer {
             done += 1
             state.update(done: done, total: 0)
         }
         do {
-            return try applyAttributeChanges(changes, at: path)
+            return try apply(path)
         } catch {
             failures.append("\(path): \(error.localizedDescription)")
             return false
@@ -107,17 +125,17 @@ func applyAttributeChanges(_ changes: AttributeChanges, to paths: [String], stat
     for path in paths {
         if state.isCancelled { throw CoreError.code(SAL_ERR_CANCELLED, "") }
         // Obsah adresáře jen s volbou Včetně podadresářů.
-        guard apply(path), changes.recursive,
+        guard applyOne(path), recursive,
               let enumerator = FileManager.default.enumerator(atPath: path) else { continue }
         while let relative = enumerator.nextObject() as? String {
             if state.isCancelled { throw CoreError.code(SAL_ERR_CANCELLED, "") }
-            _ = apply((path as NSString).appendingPathComponent(relative))
+            _ = applyOne((path as NSString).appendingPathComponent(relative))
         }
     }
     if !failures.isEmpty {
         let shown = failures.prefix(10).joined(separator: "\n")
         let more = failures.count > 10 ? "\n… a dalších \(failures.count - 10)" : ""
-        throw CoreError.code(SAL_ERR_GENERIC, "Některé atributy se nepodařilo změnit:\n\(shown)\(more)")
+        throw CoreError.code(SAL_ERR_GENERIC, "\(failureMessage):\n\(shown)\(more)")
     }
 }
 

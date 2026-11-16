@@ -85,7 +85,9 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   Panel má řádek adresáře (aktivní panel zvýrazněný barvou, tlačítko disku,
   volné místo), sloupce Jméno/Přípona/Velikost/Datum/Čas/Atr, řádek „..“
   (UP-DIR), kurzor oddělený od označení (označené položky červeně) a informační
-  řádek. Dialogy: progress se zrušením, správa FTP/SFTP serverů, okno hledání, interní
+  řádek. Dialogy: progress se zrušením (tučný nadpis operace s položkami,
+  např. „Mazání: 3 položek“, pod ním odkud a kam – Z: / Do: / V:, pak
+  ukazatel a stav), správa FTP/SFTP serverů, okno hledání, interní
   prohlížeč (text/hex/obrázek).
 
 ### Struktura projektu
@@ -136,6 +138,8 @@ app/                        # tenké UI pro macOS
                             #   interní prohlížeč, nabídka disků, dialog
                             #   operací (cíl kopie/přesunu, potvrzení mazání)
   Sources/Attributes.swift  # dialog Změnit atributy (⌘F2 / ⌃F2)
+  Sources/Permissions.swift # dialog Oprávnění (⌃P): rwx, zvláštní bity,
+                            #   skupina, rekurzivně jen soubory / adresáře
   Sources/DriveInfo.swift   # dialog Informace o jednotce (⌘F1 / ⌃F1)
   Sources/OccupiedSpace.swift  # dialog Obsazené místo (⌥F10 / ⌃Q)
   Sources/FindWindow.swift  # okno Vyhledat soubory a adresáře (⌃F/⌥F7)
@@ -237,7 +241,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   aktivního panelu do schránky (u archivu/FTP tak, jak ji ukazuje řádek adresáře)
 - **Označování:** Space / Insert – označit a posunout; ⇧↑↓, ⇧PgUp/PgDn,
   ⇧Home/End, ⌘klik, ⇧klik; ⌘A – označit vše (opakovaný stisk označení zruší;
-  adresáře podle Nastavení, výchozí i adresáře), ⌘D – nic; Num + / Num − (⌘= / ⌘−) –
+  adresáře podle Nastavení, výchozí i adresáře), ⌃D – nic; Num + / Num − (⌘= / ⌘−) –
   podle masky (stejné masky jako při hledání: `*`, `?`, `#`, skupiny `;`,
   vyloučení za `|`); Num * – invertovat (adresáře podle Nastavení). Operace pracují s označenými položkami,
   bez označení s položkou pod kurzorem.
@@ -283,8 +287,25 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   nepřístupné adresáře se přeskočí a výpočet pokračuje). Sloupec Velikost
   se rozšíří, aby se vešlo celé nejdelší číslo (velké soubory i spočítané
   adresáře), v jiném adresáři se vrátí na výchozí šířku.
-- **Vlastnosti a oprávnění** (jako Alt+Enter a Ctrl+P v Salamanderu): ⌥↩ / ⌘I
-  (Soubory › Vlastnosti…, kontextové menu) a ⌃P (Soubory › Oprávnění…) otevřou
+- **Duplikovat** (⌘D jako ve Finderu; Soubory › Duplikovat, kontextové menu):
+  označené položky (jinak položka pod kurzorem) se zkopírují do téhož adresáře
+  jako „jméno kopie.přípona“, další jako „jméno kopie 2.přípona“ (adresáře
+  i s obsahem); kurzor se postaví na první kopii. Jen lokální disk.
+- **Oprávnění** (jako Ctrl+P v Salamanderu): ⌃P (Soubory › Oprávnění…,
+  kontextové menu) otevře vlastní dialog – okno Informace z Finderu neumí
+  nastavit spouštění. Zaškrtávací mřížka Čtení / Zápis / Spouštění pro
+  vlastníka, skupinu a ostatní, zvláštní bity Set UID / Set GID / Sticky,
+  pole **Číselně** (např. `755`; psaní platného čísla hned přepíše zaškrtnutí,
+  3 číslice = bez zvláštních bitů) se symbolickým náhledem `rwxr-xr-x`.
+  Vlastník je jen ke čtení (změna vyžaduje root), **skupinu** lze změnit na
+  jinou skupinu uživatele. U více položek je bit, který se liší, ve smíšeném
+  stavu (pomlčka) a nemění se – každá položka si ho ponechá. **Včetně
+  podadresářů** změní i obsah adresářů; **Použít na** pak omezí změnu na
+  soubory i adresáře / jen soubory / jen adresáře (platí i pro vybrané
+  položky – např. 644 jen souborům a 755 jen adresářům). Symbolické odkazy se
+  přeskakují; chyby jednotlivých položek se nahlásí najednou. Jen lokální disk.
+- **Vlastnosti** (jako Alt+Enter v Salamanderu): ⌥↩ / ⌘I
+  (Soubory › Vlastnosti…, kontextové menu) otevře
   okno Informace z Finderu pro označené položky (jinak pro položku pod
   kurzorem) – Otevřít v aplikaci, Sdílení a oprávnění atd. Otevírá se systémovou
   službou Finderu „Zobrazit informace“ (bez AppleScriptu a dotazu na povolení);

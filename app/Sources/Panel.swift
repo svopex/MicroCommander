@@ -782,20 +782,34 @@ final class PanelController: NSObject {
     }
 
     /// Text řádku adresáře (VFS + cesta).
-    var displayPath: String {
+    var displayPath: String { displayPath(for: location.path) }
+
+    /// Cesta uvnitř VFS panelu tak, jak ji ukazuje řádek adresáře (i pro jiný
+    /// adresář téhož VFS, např. cíl kopie v progress dialogu).
+    /// - Parameter path: cesta uvnitř VFS panelu
+    func displayPath(for path: String) -> String {
         let vfs = location.vfs
-        if vfs.kind == SAL_VFS_LOCAL {
-            return vfs.realPath(location.path) ?? location.path
-        }
-        // Archiv / FTP: „popisek:cesta“, zanořený archiv s cestou nadřazené lokace.
+        // Zanořený archiv na lokálním disku: cesta souboru archivu + cesta uvnitř.
         if let parent = parentLocations.last, parent.location.vfs.kind == SAL_VFS_LOCAL,
            vfs.kind == SAL_VFS_ZIP || vfs.kind == SAL_VFS_TAR {
             let archive = joinPath(parent.location.vfs.realPath(parent.location.path) ?? parent.location.path,
                                    parent.focus)
-            return archive + (location.path == "/" ? "" : location.path)
+            return archive + (path == "/" ? "" : path)
         }
-        return vfs.label + "  " + location.path
+        return displayVfsPath(path, in: vfs)
     }
+}
+
+/// Cesta uvnitř VFS pro zobrazení: na lokálním disku skutečná cesta, jinak
+/// „popisek  cesta“ (archiv, FTP/SFTP).
+/// - Parameters:
+///   - path: cesta uvnitř VFS
+///   - vfs: souborový systém cesty
+func displayVfsPath(_ path: String, in vfs: Vfs) -> String {
+    if vfs.kind == SAL_VFS_LOCAL {
+        return vfs.realPath(path) ?? path
+    }
+    return vfs.label + "  " + path
 }
 
 /// Cesta zadaná uživatelem (změna adresáře, cíl kopírování…) jako normalizovaná

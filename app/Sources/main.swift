@@ -177,6 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             nil,
             ("Kopírovat…", .copy),
             ("Přesunout…", .move),
+            ("Duplikovat", .duplicate),
             ("Přejmenovat…", .rename),
             ("Změnit atributy…", .changeAttributes),
             ("Vlastnosti…", .properties),
