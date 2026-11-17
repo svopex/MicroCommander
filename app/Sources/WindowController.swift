@@ -31,8 +31,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// Vazby rozložení pro řádek terminálu pod panely a pro terminál přes celé okno.
     private var lineLayout: [NSLayoutConstraint] = []
     private var fullLayout: [NSLayoutConstraint] = []
-    /// Fokus byl v terminálu už před jeho roztažením (po návratu tam zůstane).
-    private var terminalHadFocusBeforeFull = false
 
     /// Progress dialog (pokud běží operace).
     private var progressDialog: ProgressDialog?
@@ -1255,8 +1253,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         case .toggleMark:
             panel.toggleMark(row: panel.cursor)
             panel.setCursor(panel.cursor + 1)
-        case .insertLeftPath: terminalPane.insert(shellQuote(leftPanel.displayPath) + " ")
-        case .insertRightPath: terminalPane.insert(shellQuote(rightPanel.displayPath) + " ")
+        // ⌃[ / ⌃] – cesta levého/pravého panelu na řádek terminálu a fokus do něj.
+        case .insertLeftPath: insertIntoTerminal(leftPanel.displayPath)
+        case .insertRightPath: insertIntoTerminal(rightPanel.displayPath)
         // Přepínání fokusu mezi panelem a řádkem terminálu.
         case .toggleTerminalFocus:
             if terminalPane.hasFocus { focusActivePanel() } else { terminalPane.focus() }
@@ -2013,25 +2012,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     // MARK: - Vestavěný terminál
 
     /// ⌘F12 – roztáhne terminál na celé okno (panely a lišta disků se skryjí),
-    /// nebo ho vrátí na jeden řádek pod panely.
+    /// nebo ho vrátí na jeden řádek pod panely; po návratu má fokus vždy
+    /// aktivní panel (i když byl předtím fokus v řádku terminálu).
     private func setTerminalExpanded(_ expanded: Bool) {
         guard expanded != terminalPane.isExpanded else { return }
-        if expanded {
-            terminalHadFocusBeforeFull = terminalPane.hasFocus
-            // Úprava cesty či jména v panelu se ukončí dřív, než panely zmizí.
-            window?.makeFirstResponder(nil)
-        }
+        // Úprava cesty či jména v panelu se ukončí dřív, než panely zmizí.
+        if expanded { window?.makeFirstResponder(nil) }
         NSLayoutConstraint.deactivate(expanded ? lineLayout : fullLayout)
         NSLayoutConstraint.activate(expanded ? fullLayout : lineLayout)
         panelArea.isHidden = expanded
         terminalPane.setExpanded(expanded)
         // Ikona na liště ukazuje, kam tlačítko přepne (roztáhnout / zpět na řádek).
         topBar.setSymbol(Self.terminalFullSymbol(expanded: expanded), for: .terminalFull)
-        if expanded || terminalHadFocusBeforeFull {
-            terminalPane.focus()
-        } else {
-            focusActivePanel()
-        }
+        // Roztažený terminál dostane fokus sám (focusActivePanel to ví).
+        focusActivePanel()
     }
 
     /// Ikona tlačítka ⌘F12 na nástrojové liště podle stavu terminálu.
@@ -2057,21 +2051,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         openDrive(directory, in: panel)
     }
 
-    /// ⌃↩ – jméno položky pod kurzorem na řádek terminálu a fokus do terminálu.
-    /// Soubor na prázdném řádku se vloží jako spuštění „./jméno“; je-li shell
-    /// v jiném adresáři než panel (rozepsaný řádek, běžící program), vloží se
-    /// celá cesta.
+    /// ⌃↩ – celá cesta položky pod kurzorem na řádek terminálu a fokus do
+    /// terminálu (soubor se tak dá rovnou spustit i jako argument použít
+    /// odkudkoli). V archivu a na FTP/SFTP, kde lokální cesta není, se vloží
+    /// jen jméno.
     private func insertCurrentItemIntoTerminal() {
         guard let item = activePanel.currentItem else { return }
-        let directory = activePanel.localDirectory
-        let text: String
-        if let directory, !terminalPane.isShellDirectory(directory), let path = activePanel.localPath(of: item.name) {
-            text = shellQuote(path)
-        } else {
-            let asCommand = !item.isDir && !terminalPane.hasPendingInput
-            text = (asCommand ? "./" : "") + shellQuote(item.name)
-        }
-        terminalPane.insert(text + " ")
+        insertIntoTerminal(activePanel.localPath(of: item.name) ?? item.name)
+    }
+
+    /// Vloží argument (cestu či jméno) ošetřený pro shell (shellQuote) a s mezerou za
+    /// ním na řádek terminálu a předá terminálu fokus.
+    /// - Parameter argument: text vkládaný jako jeden argument příkazu
+    private func insertIntoTerminal(_ argument: String) {
+        terminalPane.insert(shellQuote(argument) + " ")
         terminalPane.focus()
     }
 

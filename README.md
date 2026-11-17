@@ -381,7 +381,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     ⌘↓ / ⌘PgDn, Spustit systémově ⌘↩, První / Poslední položka ⌥↑ / ⌥↓ a ⌘← / ⌘→,
     Označit položku Insert, historie ⌥← / ⌥→, nadřazený adresář ⌘PgUp, kořen ⌃⌫,
     mazání Delete / ⌘⌫ / ⇧Delete) a ovládání terminálu (⌘Tab / ⌃Tab panel ↔
-    terminál, ⌃↩ jméno položky, ⌃[ / ⌃] cesty panelů, ⌘1–⌘9 záložky). Pevné
+    terminál, ⌃↩ cesta položky, ⌃[ / ⌃] cesty panelů, ⌘1–⌘9 záložky). Pevné
     zůstávají jen šipky, PgUp/PgDn, Home/End, Enter, Tab, Esc, ⌫ a mezerník
     (bez modifikátoru nebo s ⇧) a psaní pro rychlé hledání. ⌘0–⌘9 lze přiřadit
     také; v panelu má přednost místo z nabídky disků se stejnou zkratkou,
@@ -522,7 +522,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   na heslo). **⌘F12** (Příkazy › Terminál na celé okno, ikona šipek na
   nástrojové liště – po roztažení se otočí dovnitř) ho roztáhne na celou
   plochu okna pod nástrojovou lištou – panely a lišta disků se skryjí – a druhý
-  stisk vrátí jeden řádek. Terminál má pořád velikost celé plochy, v řádku je
+  stisk vrátí jeden řádek a fokus aktivnímu panelu (i když byl předtím
+  v řádku terminálu). Terminál má pořád velikost celé plochy, v řádku je
   z něj jen vidět řádek s kurzorem: výstup příkazu spuštěného z řádku je po
   ⌘F12 vidět celý a programy mají správné rozměry. Na celé okno se terminál
   přepne i sám: Enterem odeslaný příkaz z řádku (rozepsaný řádek nebo vstup
@@ -543,11 +544,11 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
     Naopak `cd` v terminálu přesune aktivní panel a po doběhnutí každého
     příkazu se oba panely obnoví. V archivu a na FTP/SFTP zůstává shell
     v posledním lokálním adresáři.
-  - **⌃↩** vloží na řádek terminálu jméno položky pod kurzorem a předá mu
-    fokus – soubor na prázdném řádku jako `./jméno` (Enter ho rovnou spustí),
-    jinak jako argument; je-li shell v jiném adresáři než panel, vloží se celá
-    cesta. ⌃[ / ⌃] vloží cestu levého/pravého panelu, Escape v panelu smaže
-    rozepsaný řádek terminálu.
+  - **⌃↩** vloží na řádek terminálu vždy celou cestu položky pod kurzorem
+    (soubor na prázdném řádku Enter rovnou spustí; v archivu a na FTP/SFTP jen
+    jméno) a předá mu fokus. ⌃[ / ⌃] vloží cestu levého/pravého panelu a také
+    předají fokus řádku terminálu, Escape v panelu smaže rozepsaný řádek
+    terminálu.
   - Shell, který skončí (`exit`, ⌃D), se spustí znovu v adresáři aktivního
     panelu. Barvy terminálu se řídí barevným schématem panelů. **zsh** dostane
     přes `ZDOTDIR` integrační `.zshenv` (uložený v

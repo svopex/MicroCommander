@@ -252,7 +252,7 @@ extension Command {
         case .insertLeftPath: return "Cesta levého panelu do terminálu"
         case .insertRightPath: return "Cesta pravého panelu do terminálu"
         case .toggleTerminalFocus: return "Přepnout panel ↔ řádek terminálu"
-        case .insertNameToTerminal: return "Jméno položky do terminálu"
+        case .insertNameToTerminal: return "Cesta položky do terminálu"
         case .terminalTab9: return "Poslední záložka terminálu"
         case .terminalTab1, .terminalTab2, .terminalTab3, .terminalTab4, .terminalTab5,
              .terminalTab6, .terminalTab7, .terminalTab8:
@@ -414,7 +414,7 @@ enum KeyBindings {
         (.firstItem, [special(KeyCode.up, NSUpArrowFunctionKey, .option), special(KeyCode.left, NSLeftArrowFunctionKey, .command)]),
         (.lastItem, [special(KeyCode.down, NSDownArrowFunctionKey, .option), special(KeyCode.right, NSRightArrowFunctionKey, .command)]),
         (.toggleMark, [special(KeyCode.insert, NSHelpFunctionKey, [])]),
-        // Terminál: ⌘Tab / ⌃Tab fokus, ⌃↩ jméno položky, ⌃[ / ⌃] cesty panelů.
+        // Terminál: ⌘Tab / ⌃Tab fokus, ⌃↩ cesta položky, ⌃[ / ⌃] cesty panelů.
         (.toggleTerminalFocus, [special(KeyCode.tab, 0x09, .command), special(KeyCode.tab, 0x09, .control)]),
         (.insertNameToTerminal, [special(KeyCode.returnKey, 0x0d, .control), special(KeyCode.enter, 0x03, .control)]),
         (.insertLeftPath, [char("[", .control)]),

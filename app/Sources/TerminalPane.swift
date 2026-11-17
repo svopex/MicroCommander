@@ -161,7 +161,7 @@ final class TerminalSession: NSView, LocalProcessTerminalViewDelegate {
     /// Adresář, který shell sám ohlásil (OSC 7) – logická cesta bez rozvinutí odkazů.
     private var reportedDirectory: String?
     /// Na řádku shellu je rozepsaný text (nelze do něj psát vlastní příkaz).
-    private(set) var hasPendingInput = false
+    private var hasPendingInput = false
     /// Uživatel odeslal řádek Enterem a čeká se na návrat promptu.
     private var userCommandPending = false
     /// Aplikace napsala do shellu vlastní „cd“ a čeká se na návrat promptu.
@@ -626,8 +626,8 @@ final class TerminalSession: NSView, LocalProcessTerminalViewDelegate {
 
     // MARK: - Adresář panelu → shell
 
-    /// Adresář shellu, jak ho aplikace zná (pro rozhodnutí, zda vkládat jména
-    /// položek relativně, nebo celou cestou).
+    /// Adresář shellu, jak ho aplikace zná (aby panel nešel za shellem do
+    /// adresáře, ve kterém už je).
     func isShellDirectory(_ directory: String) -> Bool {
         isSamePath(directory, shellDirectory)
     }
@@ -1069,8 +1069,6 @@ final class TerminalPane: NSView {
 
     /// Má vybraný terminál fokus klávesnice?
     var hasFocus: Bool { current.hasFocus }
-    /// Je na řádku vybraného shellu rozepsaný text?
-    var hasPendingInput: Bool { current.hasPendingInput }
     /// Je vybraný shell nečinný (čeká na příkaz)?
     var isShellIdle: Bool { current.isShellIdle }
     /// Text obrazovky vybraného terminálu (pro kontrolu v testech).

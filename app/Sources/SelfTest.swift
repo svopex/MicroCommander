@@ -806,6 +806,8 @@ final class UIKeyCheck {
         }
         let cmdF12 = event(KeyCode.functionKeys[11], NSF12FunctionKey, [.command])
         check(controller.command(forKey: cmdF12) == .terminalFull, "terminál: ⌘F12 = terminál na celé okno")
+        // Roztažení z řádku terminálu – po návratu má mít fokus panel.
+        terminal.focus()
         controller.perform(.terminalFull)
         content?.layoutSubtreeIfNeeded()
         check(terminal.isExpanded && terminal.frame.height > 300 && controller.leftPanel.view?.isHiddenOrHasHiddenAncestor == true,
@@ -822,6 +824,7 @@ final class UIKeyCheck {
         content?.layoutSubtreeIfNeeded()
         check(!terminal.isExpanded && terminal.frame.height == lineHeight && controller.leftPanel.view?.isHiddenOrHasHiddenAncestor == false,
               "terminál: druhé ⌘F12 vrátí jeden řádek a panely")
+        check(!terminal.hasFocus, "terminál: po druhém ⌘F12 má fokus panel, ne řádek terminálu")
         check(controller.command(forKey: f5) == .copy, "terminál: po návratu je F5 zase Kopírovat")
         // Lišta F-kláves: ⌘F12 je vidět jen ve vrstvě ⌘ – s ⌃ F12 terminál nepřepíná.
         check(FunctionKeyBar.entries(for: .command)[11] == .terminalFull && FunctionKeyBar.entries(for: .control)[11] == nil,
