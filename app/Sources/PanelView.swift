@@ -21,9 +21,13 @@ protocol PanelInputHandler: AnyObject {
     /// Příkaz vyvolaný z pohledu panelu (např. ⌘A přes Označit › Označit vše).
     func panelView(_ view: PanelView, perform command: Command)
     /// Soubory přetažené do panelu z jiné aplikace nebo z jiného panelu (cesty
-    /// na lokálním disku);
-    /// move = přesunout místo kopírování.
-    func panelView(_ view: PanelView, dropFiles paths: [String], move: Bool)
+    /// na lokálním disku).
+    /// - Parameters:
+    ///   - paths: tažené soubory a adresáře
+    ///   - directory: cílový adresář uvnitř VFS panelu (adresář panelu, nebo
+    ///     podadresář, na který se pustilo)
+    ///   - move: přesunout místo kopírování
+    func panelView(_ view: PanelView, dropFiles paths: [String], into directory: String, move: Bool)
 }
 
 /// Celý panel: řádek adresáře + tabulka + informační řádek.
@@ -36,10 +40,11 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     let directoryLine = DirectoryLineView()
     let infoLine = InfoLineView()
     weak var inputHandler: PanelInputHandler?
-    /// Co nese tažení probíhající nad panelem (soubory na disku / přislíbené
-    /// soubory) a zda tažené soubory leží na stejném svazku jako adresář panelu;
-    /// zjišťuje se jednou při vstupu tažení, ne při každém pohybu myši.
-    private var dragContent = (hasFiles: false, hasPromises: false, sameVolume: false)
+    /// Tažení probíhající nad panelem; zjišťuje se při vstupu tažení, ne při
+    /// každém pohybu myši (viz DragContent).
+    private var dragContent = DragContent()
+    /// Rámeček řádku adresáře, do kterého se tažené položky pustí.
+    private let dropHighlight = DropHighlightView()
     /// Hlídání kláves ⌥ / ⌘ / ⌃ během tažení z panelu (viz DragModifierWatcher).
     private var dragModifierWatcher: DragModifierWatcher?
     /// Právě držené klávesy pro tažení nad panelem (self-test dosazuje vlastní stav).
@@ -825,16 +830,31 @@ extension PanelView: NSTextFieldDelegate {
 
 /// Příjem souborů přetažených z jiné aplikace nebo z jiného panelu do adresáře panelu.
 extension PanelView {
-    /// Operace pro tažení nad panelem podle zvyklostí macOS (stejně jako Finder):
-    /// na stejném svazku přesun, s ⌥ kopie; na jiný svazek a na server kopie,
-    /// s ⌘ přesun. Prázdná, když panel tažení nepřijme.
-    private func dropOperation(for sender: NSDraggingInfo) -> NSDragOperation {
-        // Do archivu zapisovat nelze. Tažení z panelu MicroCommanderu (i z jiného
-        // okna) se přijímá jen do jiného adresáře, než ze kterého se táhne – tedy
-        // ani zpět do téhož panelu.
-        guard panel.location.vfs.writable else { return [] }
-        if let source = sender.draggingSource as? PanelView, source.panel.location.isSame(as: panel.location) {
-            return []
+    /// Cíl puštění nad panelem: adresář panelu, nebo podadresář pod myší.
+    private struct DropTarget {
+        /// Cílový adresář uvnitř VFS panelu.
+        let directory: String
+        /// Cílový adresář na lokálním disku (nil v archivu a na FTP/SFTP).
+        let localDirectory: String?
+        /// Řádek podadresáře pod myší; nil = adresář panelu.
+        let row: Int?
+    }
+
+    /// Operace a cíl pro tažení nad panelem podle zvyklostí macOS (stejně jako
+    /// Finder): na stejném svazku přesun, s ⌥ kopie; na jiný svazek a na server
+    /// kopie, s ⌘ přesun. Pustit lze do adresáře panelu, nebo na řádek
+    /// podadresáře (i „..“) – pak se položky vloží do něj. Prázdná operace,
+    /// když panel tažení nepřijme.
+    private func dropOperation(for sender: NSDraggingInfo) -> (operation: NSDragOperation, target: DropTarget) {
+        let target = dropRowTarget(for: sender)
+            ?? DropTarget(directory: panel.location.path, localDirectory: panel.localDirectory, row: nil)
+        // Do archivu zapisovat nelze. Do adresáře, ze kterého se táhne (tažení
+        // z panelu MicroCommanderu, i z jiného okna), se tažení nepřijímá – do
+        // jeho podadresáře ano.
+        guard panel.location.vfs.writable else { return ([], target) }
+        if target.row == nil, let source = sender.draggingSource as? PanelView,
+           source.panel.location.isSame(as: panel.location) {
+            return ([], target)
         }
         // Klávesy zúží nabídku zdroje už v systému: ⌥ nechá jen kopii, ⌘ jen
         // „generic“ (= přesun), ⌃ jen odkaz (ten panel nepřijímá). Systém se ale
@@ -845,11 +865,54 @@ extension PanelView {
         let copy: NSDragOperation? = mask.contains(.copy) ? .copy : nil
         let move: NSDragOperation? = mask.contains(.move) ? .move : mask.contains(.generic) ? .generic : nil
         // Přislíbené soubory zapisuje zdrojová aplikace sama – jen kopie a jen na lokální disk.
-        guard dragContent.hasFiles else {
-            return dragContent.hasPromises && panel.localDirectory != nil ? copy ?? [] : []
+        guard !dragContent.paths.isEmpty else {
+            return (dragContent.hasPromises && target.localDirectory != nil ? copy ?? [] : [], target)
         }
         // Na stejném svazku má přednost přesun, jinak kopie; nedovolí-li ji zdroj, ta druhá.
-        return (dragContent.sameVolume ? move ?? copy : copy ?? move) ?? []
+        let sameVolume = target.localDirectory.map { dragContent.isOnSourceVolume($0) } ?? false
+        return ((sameVolume ? move ?? copy : copy ?? move) ?? [], target)
+    }
+
+    /// Cíl na řádku podadresáře pod myší; nil = pustí se do adresáře panelu
+    /// (prázdné místo, soubor, tažený adresář sám).
+    /// - Parameter sender: probíhající tažení
+    private func dropRowTarget(for sender: NSDraggingInfo) -> DropTarget? {
+        let view = focusView
+        let point = view.convert(sender.draggingLocation, from: nil)
+        // Jen viditelná část výpisu (pod řádkem adresáře či informačním řádkem
+        // může ležet zarolovaný řádek, na který se pustit nemá).
+        guard view.visibleRect.contains(point) else { return nil }
+        let index: Int?
+        if viewMode.usesTable {
+            let row = tableView.row(at: point)
+            index = row >= 0 ? row : nil
+        } else {
+            index = gridView.index(at: point)
+        }
+        guard let index, index < panel.rows.count else { return nil }
+        let row = panel.rows[index]
+        // „..“ v kořeni vede ven z VFS (archiv, server) – tam se nepouští.
+        guard row.isParent ? panel.location.path != "/" : row.item.isDir else { return nil }
+        let directory = row.isParent ? parentPath(panel.location.path) : joinPath(panel.location.path, row.item.name)
+        let localDirectory = panel.location.vfs.realPath(directory)
+        // Adresář nelze vložit sám do sebe ani do svého podadresáře.
+        if let localDirectory, dragContent.isInsideDragged(localDirectory) { return nil }
+        return DropTarget(directory: directory, localDirectory: localDirectory, row: index)
+    }
+
+    /// Ukáže rámeček kolem řádku podadresáře, do kterého se pustí, nebo ho skryje.
+    /// - Parameter row: řádek cíle; nil = rámeček skrýt
+    private func showDropHighlight(row: Int?) {
+        guard let row else {
+            dropHighlight.removeFromSuperview()
+            return
+        }
+        let view = focusView
+        let frame = (viewMode.usesTable ? tableView.rect(ofRow: row) : gridView.rect(for: row)).insetBy(dx: 1, dy: 0.5)
+        // Při stojící myši (periodické draggingUpdated) se nic nemění.
+        guard dropHighlight.superview !== view || dropHighlight.frame != frame else { return }
+        view.addSubview(dropHighlight)
+        dropHighlight.frame = frame
     }
 
     /// Zúží operace nabízené zdrojem tažení podle držených kláves se stejným
@@ -876,49 +939,48 @@ extension PanelView {
         return narrowed.isEmpty ? offered : narrowed
     }
 
-    /// Leží cesta na stejném svazku jako adresář panelu? (Server ani archiv svazek nemají.)
-    private func isOnPanelVolume(_ path: String) -> Bool {
-        // Číslo zařízení (st_dev) položky; nil, když ho nelze zjistit.
-        func device(_ path: String) -> Int? {
-            (try? FileManager.default.attributesOfItem(atPath: path))?[.systemNumber] as? Int
-        }
-        guard let directory = panel.localDirectory, let source = device(path) else { return false }
-        // Adresář panelu může být symbolický odkaz na jiný svazek – rozhoduje jeho cíl.
-        return source == device(URL(fileURLWithPath: directory).resolvingSymlinksInPath().path)
-    }
-
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        let pasteboard = sender.draggingPasteboard
-        let firstPath = FileClipboard.firstPath(from: pasteboard)
-        dragContent = (hasFiles: firstPath != nil,
-                       hasPromises: pasteboard.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil),
-                       sameVolume: firstPath.map(isOnPanelVolume) ?? false)
-        return dropOperation(for: sender)
+        dragContent = DragContent(pasteboard: sender.draggingPasteboard)
+        return draggingUpdated(sender)
     }
 
+    /// Pohyb tažení nad panelem: operace podle cíle pod myší a rámeček kolem
+    /// řádku podadresáře, do kterého se pustí.
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        dropOperation(for: sender)
+        let (operation, target) = dropOperation(for: sender)
+        showDropHighlight(row: operation.isEmpty ? nil : target.row)
+        return operation
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        showDropHighlight(row: nil)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        showDropHighlight(row: nil)
     }
 
     /// Puštění souborů nad panelem: soubory z disku převezme hlavní okno
     /// (kopírování / přesun s průběhem a dotazem na přepsání), přislíbené
-    /// soubory zapíše zdrojová aplikace přímo do adresáře panelu.
+    /// soubory zapíše zdrojová aplikace přímo do cílového adresáře. Cílem je
+    /// adresář panelu, nebo podadresář, nad jehož řádkem se pustilo.
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        let operation = dropOperation(for: sender)
+        let (operation, target) = dropOperation(for: sender)
+        showDropHighlight(row: nil)
         guard !operation.isEmpty else { return false }
         let pasteboard = sender.draggingPasteboard
-        let paths = FileClipboard.paths(from: pasteboard)
+        let paths = dragContent.paths
         if !paths.isEmpty {
             let move = operation != .copy
             // Operaci spustit až po skončení tažení – dialog nebo průběh by
             // jinak držel zdrojovou aplikaci uprostřed přetahování.
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.inputHandler?.panelView(self, dropFiles: paths, move: move)
+                self.inputHandler?.panelView(self, dropFiles: paths, into: target.directory, move: move)
             }
             return true
         }
-        guard let directory = panel.localDirectory,
+        guard let directory = target.localDirectory,
               let receivers = pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil)
                 as? [NSFilePromiseReceiver], !receivers.isEmpty else { return false }
         let destination = URL(fileURLWithPath: directory, isDirectory: true)
@@ -932,7 +994,8 @@ extension PanelView {
                     PromptDialog.show(title: "Přetažení souboru", message: error.localizedDescription, over: self.window)
                     return
                 }
-                self.panel.focus(name: url.lastPathComponent)
+                // Kurzor na nový soubor jen při puštění do adresáře panelu.
+                if target.row == nil { self.panel.focus(name: url.lastPathComponent) }
                 self.scheduleReload(after: 0.3)
             }
         }
@@ -1298,5 +1361,82 @@ final class InfoLineView: NSView {
         bounds.fill()
         NSColor.separatorColor.setFill()
         NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
+    }
+}
+
+/// Co nese tažení nad panelem: tažené soubory na disku, nebo přislíbené soubory
+/// (Mail, Fotky, prohlížeč). Zjišťuje se jednou při vstupu tažení; dotazy při
+/// každém pohybu myši (svazek, tažený adresář) pak nečtou disk opakovaně.
+struct DragContent {
+    /// Tažené soubory a adresáře na lokálním disku.
+    let paths: [String]
+    /// Nese tažení přislíbené soubory?
+    let hasPromises: Bool
+    /// Tažené cesty pro rychlé hledání předků cíle.
+    private let pathSet: Set<String>
+    /// Číslo zařízení (st_dev) prvního taženého souboru.
+    private let sourceDevice: Int?
+    /// Čísla zařízení již zjištěných cílových adresářů.
+    private var targetDevices: [String: Int?] = [:]
+
+    init(pasteboard: NSPasteboard? = nil) {
+        paths = pasteboard.map { FileClipboard.paths(from: $0) } ?? []
+        hasPromises = pasteboard?.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil) ?? false
+        pathSet = Set(paths)
+        sourceDevice = paths.first.flatMap(Self.device)
+    }
+
+    /// Číslo zařízení (st_dev) položky; nil, když ho nelze zjistit.
+    private static func device(_ path: String) -> Int? {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.systemNumber] as? Int
+    }
+
+    /// Leží tažené soubory na stejném svazku jako cílový adresář? Adresář může
+    /// být symbolický odkaz na jiný svazek – rozhoduje jeho cíl.
+    /// - Parameter directory: cílový adresář na lokálním disku
+    mutating func isOnSourceVolume(_ directory: String) -> Bool {
+        guard let sourceDevice else { return false }
+        if targetDevices[directory] == nil {
+            targetDevices[directory] = Self.device(URL(fileURLWithPath: directory).resolvingSymlinksInPath().path)
+        }
+        return targetDevices[directory] == sourceDevice
+    }
+
+    /// Je adresář některou z tažených položek nebo leží v ní? Prochází předky
+    /// adresáře (ne všechny tažené cesty).
+    /// - Parameter directory: cílový adresář na lokálním disku
+    func isInsideDragged(_ directory: String) -> Bool {
+        var current = directory
+        while true {
+            if pathSet.contains(current) { return true }
+            let parent = parentPath(current)
+            if parent == current { return false }
+            current = parent
+        }
+    }
+}
+
+/// Rámeček kolem řádku podadresáře, do kterého se tažené položky pustí.
+/// Leží nad tabulkou či mřížkou a myš nezachytává.
+final class DropHighlightView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Není podporováno")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    // Barva zvýraznění systému (i po přepnutí světlého/tmavého vzhledu).
+    override func updateLayer() {
+        layer?.borderColor = NSColor.controlAccentColor.cgColor
+        layer?.borderWidth = 2
+        layer?.cornerRadius = 4
+        layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.15).cgColor
     }
 }

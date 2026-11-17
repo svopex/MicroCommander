@@ -488,6 +488,13 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   zkopírují, s ⌘ přesunou (kurzor se zeleným plus = kopie). Při konfliktu se
   zeptá přepsat / přeskočit. Zdrojem může být jen lokální disk; do téhož
   adresáře se netáhne.
+- **Přetažení myší do podadresáře:** pustí-li se položky nad řádkem adresáře
+  (i „..“) v libovolném panelu – také v tom, ze kterého se táhne – vloží se
+  do tohoto adresáře; cílový řádek během tažení orámuje barva zvýraznění
+  systému. Platí stejná pravidla a klávesy jako jinde: na stejném disku
+  přesun, s ⌥ kopie; na jiný disk kopie, s ⌘ přesun. Totéž funguje pro
+  soubory přetažené z jiné aplikace. Adresář nelze pustit sám do sebe ani do
+  svého podadresáře; nad souborem či prázdným místem platí adresář panelu.
 - **Přetažení myší do panelu:** pro soubory a adresáře přetažené z jiné
   aplikace (Finder a další) do adresáře panelu, nad kterým se pustí, platí
   totéž: ze stejného disku se přesunou, s ⌥ zkopírují; z jiného disku (a na
@@ -667,7 +674,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   souborů (zkratky ⌘C / ⌘X / ⌘V, kontextové menu, čtení souborů ze schránky,
   vložení z více adresářů, duplikát v témže adresáři, přesun, registrace
   panelu pro přetažení – systémové schránky se nedotkne), tažení mezi panely
-  (odmítnutí tažení do téhož panelu, přesun na stejném svazku, kopie s ⌥,
+  (odmítnutí tažení do téhož panelu, puštění na podadresář v témže panelu,
+  přesun na stejném svazku, kopie s ⌥,
   přesun s ⌘, zúžení nabídky podle držených kláves, umělé pohnutí myší při
   změně klávesy během tažení ven), zkratky trvalého mazání (⇧F8, ⌘F8), koš
   podle svazku a automatické obnovení panelu po změně adresáře zvenku;

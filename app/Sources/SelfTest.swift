@@ -1001,7 +1001,8 @@ final class UIKeyCheck {
     /// Tažení myší mezi panely podle zvyklostí macOS: panel odmítne tažení ze
     /// sebe sama, do druhého panelu na stejném svazku soubor přesune a s ⌥
     /// (systém pak z nabízených operací nechá jen kopii) zkopíruje, s ⌘ (zbude
-    /// jen „generic“) přesune. Tažení zastupuje FakeDraggingInfo s vlastní schránkou.
+    /// jen „generic“) přesune. Puštěním na řádek podadresáře se soubor přesune
+    /// do něj i v témže panelu. Tažení zastupuje FakeDraggingInfo s vlastní schránkou.
     private func checkPanelDrop(dir: String, then done: @escaping () -> Void) {
         let source = controller.leftPanel
         let target = controller.rightPanel
@@ -1012,16 +1013,19 @@ final class UIKeyCheck {
         for directory in [from, to] {
             try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true)
         }
-        for name in ["kopie.txt", "presun.txt"] {
+        for name in ["kopie.txt", "presun.txt", "dovnitr.txt"] {
             fm.createFile(atPath: from + "/" + name, contents: Data("obsah".utf8))
         }
+        let subdirectory = "podadresar"
+        try? fm.createDirectory(atPath: from + "/" + subdirectory, withIntermediateDirectories: true)
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("sal-keycheck-drag-\(getpid())"))
 
-        /// Tažení souboru ze zdrojového panelu s danými nabízenými operacemi.
-        func drag(_ name: String, operations: NSDragOperation) -> FakeDraggingInfo {
+        /// Tažení souboru ze zdrojového panelu s danými nabízenými operacemi
+        /// (volitelně s myší nad daným bodem okna).
+        func drag(_ name: String, operations: NSDragOperation, location: NSPoint = .zero) -> FakeDraggingInfo {
             pasteboard.clearContents()
             pasteboard.writeObjects([URL(fileURLWithPath: from + "/" + name) as NSURL])
-            return FakeDraggingInfo(source: sourceView, pasteboard: pasteboard, operations: operations)
+            return FakeDraggingInfo(source: sourceView, pasteboard: pasteboard, operations: operations, location: location)
         }
         func dropFinished(_ name: String) -> Bool { transferFinished(name, in: target, directory: to) }
         // Kontrola nesmí záviset na klávesách, které někdo zrovna drží.
@@ -1051,10 +1055,53 @@ final class UIKeyCheck {
                 self.poll(until: { dropFinished("presun.txt") }) {
                     self.check(dropFinished("presun.txt") && !fm.fileExists(atPath: from + "/presun.txt"),
                                "tažení mezi panely: bez klávesy se soubor přesune")
-                    pasteboard.releaseGlobally()
-                    done()
+                    self.checkDropIntoSubdirectory(sourceView: sourceView, drag: drag, from: from, subdirectory: subdirectory) {
+                        pasteboard.releaseGlobally()
+                        done()
+                    }
                 }
             }
+        }
+    }
+
+    /// Puštění na řádek podadresáře v témže panelu: tažení se přijme (do adresáře
+    /// panelu samotného ne), soubor se přesune do podadresáře; na řádek souboru
+    /// se v témže panelu pustit nedá.
+    /// - Parameters:
+    ///   - sourceView: zdrojový (i cílový) panel v tabulkovém režimu
+    ///   - drag: tažení souboru ze zdrojového panelu s myší nad bodem okna
+    ///   - from: adresář zdrojového panelu
+    ///   - name: jméno cílového podadresáře
+    private func checkDropIntoSubdirectory(sourceView: PanelView,
+                                           drag: (String, NSDragOperation, NSPoint) -> FakeDraggingInfo,
+                                           from: String, subdirectory name: String, then done: @escaping () -> Void) {
+        let panel = sourceView.panel
+        sourceView.viewMode = .detailed
+        let subdirectory = from + "/" + name
+        /// Střed řádku položky v souřadnicích okna.
+        func center(of item: String) -> NSPoint? {
+            guard let index = panel.rowIndex(named: item) else { return nil }
+            let table = sourceView.tableView
+            table.scrollRowToVisible(index)
+            let rect = table.rect(ofRow: index)
+            return table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+        }
+        guard let onDirectory = center(of: name), let onFile = center(of: "kopie.txt") else {
+            check(false, "tažení na podadresář: řádky „\(name)“ a „kopie.txt“ v panelu")
+            done()
+            return
+        }
+        let offered = PanelView.offeredDragOperations
+        check(sourceView.draggingEntered(drag("dovnitr.txt", offered, onFile)).isEmpty,
+              "tažení na podadresář: na řádek souboru v témže panelu pustit nelze")
+        let into = drag("dovnitr.txt", offered, onDirectory)
+        check(sourceView.draggingEntered(into) == .move && sourceView.performDragOperation(into),
+              "tažení na podadresář: v témže panelu se nabídne přesun do podadresáře")
+        let moved = { FileManager.default.fileExists(atPath: subdirectory + "/dovnitr.txt")
+            && self.controller.window?.attachedSheet == nil && !panel.isLoading && panel.rowIndex(named: "dovnitr.txt") == nil }
+        poll(until: moved) {
+            self.check(moved(), "tažení na podadresář: soubor se přesune do podadresáře")
+            done()
         }
     }
 
@@ -1345,19 +1392,21 @@ private final class FakeDraggingInfo: NSObject, NSDraggingInfo {
     let draggingSource: Any?
     let draggingPasteboard: NSPasteboard
     let draggingSourceOperationMask: NSDragOperation
+    let draggingLocation: NSPoint
 
     /// - Parameters:
     ///   - source: pohled, ze kterého se táhne
     ///   - pasteboard: schránka s taženými soubory
     ///   - operations: operace nabízené zdrojem (po zúžení klávesami)
-    init(source: Any?, pasteboard: NSPasteboard, operations: NSDragOperation) {
+    ///   - location: poloha myši v souřadnicích okna
+    init(source: Any?, pasteboard: NSPasteboard, operations: NSDragOperation, location: NSPoint) {
         draggingSource = source
         draggingPasteboard = pasteboard
         draggingSourceOperationMask = operations
+        draggingLocation = location
     }
 
     var draggingDestinationWindow: NSWindow? { nil }
-    var draggingLocation: NSPoint { .zero }
     var draggedImageLocation: NSPoint { .zero }
     var draggedImage: NSImage? { nil }
     var draggingSequenceNumber: Int { 0 }

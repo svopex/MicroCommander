@@ -860,12 +860,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     }
 
     /// Soubory přetažené z jiné aplikace nebo z jiného panelu: okno do popředí (průběh a dotazy mají
-    /// být vidět), cílový panel se stane aktivním a soubory se do něj vloží.
-    func panelView(_ view: PanelView, dropFiles paths: [String], move: Bool) {
+    /// být vidět), cílový panel se stane aktivním a soubory se vloží do jeho adresáře,
+    /// nebo do podadresáře, na který se pustily.
+    func panelView(_ view: PanelView, dropFiles paths: [String], into directory: String, move: Bool) {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         activate(view.panel)
-        importFiles(paths, into: view.panel, move: move)
+        importFiles(paths, into: view.panel, directory: directory, move: move)
     }
 
     /// Nabídka disků pro panel (⌥F1/⌥F2, tlačítko disku). Výchozí řádek = místo,
@@ -1399,9 +1400,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     /// - Parameters:
     ///   - paths: cesty zdrojových položek na lokálním disku
     ///   - target: panel, do jehož adresáře se vkládá
+    ///   - directory: cílový adresář uvnitř VFS panelu (přetažení na podadresář);
+    ///     nil = adresář panelu. Kurzor se na vloženou položku postaví, jen když
+    ///     je cílem adresář panelu
     ///   - move: přesunout místo kopírování
     ///   - onSuccess: voláno po úspěšném dokončení
-    func importFiles(_ paths: [String], into target: PanelController, move: Bool, onSuccess: (() -> Void)? = nil) {
+    func importFiles(_ paths: [String], into target: PanelController, directory: String? = nil, move: Bool,
+                     onSuccess: (() -> Void)? = nil) {
         // Během otevřeného sheetu (progress, dialog) se nevkládá.
         guard window?.attachedSheet == nil else {
             NSSound.beep()
@@ -1409,7 +1414,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         }
         let verb = move ? "Přesun" : "Kopírování"
         let dst = target.location.vfs
-        let dstDir = target.location.path
+        let dstDir = directory ?? target.location.path
         guard dst.writable else {
             showAlert(title: verb, text: "Cílový souborový systém (\(dst.label)) je jen pro čtení.")
             return
@@ -1422,7 +1427,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         func resolved(_ path: String) -> String {
             URL(fileURLWithPath: path).resolvingSymlinksInPath().path
         }
-        let localTarget = target.localDirectory.map(resolved)
+        let localTarget = dst.realPath(dstDir).map(resolved)
         var groups: [(dir: String, names: [String])] = []
         var groupIndex: [String: Int] = [:]
         var duplicates: [String] = []
@@ -1447,7 +1452,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         let progressVerb = groups.isEmpty ? "Duplikování" : verb
         // Zdroj jen u jediného zdrojového adresáře (výběr z Hledat jich může mít víc).
         let sourceDirs = Set(groups.map(\.dir) + duplicates.map(parentPath))
-        let details = (sourceDirs.count == 1 ? ["Z: " + sourceDirs.first!] : []) + ["Do: " + target.displayPath]
+        let details = (sourceDirs.count == 1 ? ["Z: " + sourceDirs.first!] : []) + ["Do: " + target.displayPath(for: dstDir)]
         // Jméno první kopie (duplikát dostane nové jméno); zapisuje ho pracovní
         // vlákno, čte se až v completion po jeho doběhnutí.
         var firstDuplicate: String?
@@ -1489,8 +1494,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                 case .failure(let error):
                     self.showErrorUnlessCancelled(title: verb, error)
                 case .success:
-                    // Kurzor na první vloženou položku (uplatní se při obnovení panelu).
-                    if let name = focusName ?? firstDuplicate { target.focus(name: name) }
+                    // Kurzor na první vloženou položku (uplatní se při obnovení panelu);
+                    // při vložení do jiného adresáře zůstává kurzor, kde byl.
+                    if dstDir == target.location.path, let name = focusName ?? firstDuplicate { target.focus(name: name) }
                     onSuccess?()
                 }
                 self.reloadPanels()
@@ -2519,13 +2525,6 @@ enum FileClipboard {
     /// Obsahuje schránka (nebo tažení) soubory?
     static func hasFiles(in pasteboard: NSPasteboard = .general) -> Bool {
         pasteboard.canReadObject(forClasses: [NSURL.self], options: fileURLOptions)
-    }
-
-    /// Cesta prvního souboru ve schránce (nebo v tažení) – bez čtení všech
-    /// ostatních (tažení může nést tisíce souborů); nil, když v ní soubory nejsou.
-    static func firstPath(from pasteboard: NSPasteboard) -> String? {
-        pasteboard.pasteboardItems?.lazy.compactMap { $0.string(forType: .fileURL) }.first
-            .flatMap { NSURL(string: $0)?.filePathURL?.path }
     }
 
     /// Cesty souborů ve schránce (nebo v tažení); prázdné, když v ní soubory nejsou.
