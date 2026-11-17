@@ -96,6 +96,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             (.disconnect, "eject", "Odpojit / zavřít archiv (F12)"),
             (.terminal, "terminal", "Terminal.app v adresáři (F9)"),
             nil,
+            (.terminalFull, MainWindowController.terminalFullSymbol(expanded: false), "Terminál na celé okno a zpět (⌘F12)"),
             (.terminalNewTab, "plus.rectangle.on.rectangle", "Nová záložka terminálu (⌘T)"),
             (.newWindow, "macwindow.badge.plus", "Nové okno (⌘N)"),
         ], vertical: false)
@@ -2024,11 +2025,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         NSLayoutConstraint.activate(expanded ? fullLayout : lineLayout)
         panelArea.isHidden = expanded
         terminalPane.setExpanded(expanded)
+        // Ikona na liště ukazuje, kam tlačítko přepne (roztáhnout / zpět na řádek).
+        topBar.setSymbol(Self.terminalFullSymbol(expanded: expanded), for: .terminalFull)
         if expanded || terminalHadFocusBeforeFull {
             terminalPane.focus()
         } else {
             focusActivePanel()
         }
+    }
+
+    /// Ikona tlačítka ⌘F12 na nástrojové liště podle stavu terminálu.
+    /// - Parameter expanded: terminál je roztažený na celé okno
+    /// - Returns: jméno SF Symbolu – šipky ven (roztáhnout), nebo dovnitř (zpět na řádek)
+    private static func terminalFullSymbol(expanded: Bool) -> String {
+        expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
     }
 
     /// Požádá terminál o přechod do lokálního adresáře aktivního panelu

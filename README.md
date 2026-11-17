@@ -519,7 +519,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **Vestavěný terminál** (místo dřívější příkazové řádky): pod panely je jeden
   řádek skutečného terminálu s login shellem uživatele (`$SHELL`, prompt
   shellu, historie a doplňování shellu, barvy, interaktivní programy, dotazy
-  na heslo). **⌘F12** (Příkazy › Terminál na celé okno) ho roztáhne na celou
+  na heslo). **⌘F12** (Příkazy › Terminál na celé okno, ikona šipek na
+  nástrojové liště – po roztažení se otočí dovnitř) ho roztáhne na celou
   plochu okna pod nástrojovou lištou – panely a lišta disků se skryjí – a druhý
   stisk vrátí jeden řádek. Terminál má pořád velikost celé plochy, v řádku je
   z něj jen vidět řádek s kurzorem: výstup příkazu spuštěného z řádku je po
