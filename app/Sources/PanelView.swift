@@ -1179,6 +1179,11 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
         didSet { freeLabel.stringValue = freeSpace }
     }
 
+    /// Bublinová nápověda k volnému místu (nil = žádná).
+    var freeSpaceToolTip: String? {
+        didSet { freeLabel.toolTip = freeSpaceToolTip }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false

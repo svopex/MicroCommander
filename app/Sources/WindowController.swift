@@ -493,13 +493,34 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     }
 
     /// Volné místo na řádku adresáře (jen lokální disk).
+    /// Zobrazí místo k dispozici jako macOS (včetně uvolnitelného – lokální
+    /// snapshoty Time Machine, cache…) a v závorce místo volné hned (statfs).
     private func updateFreeSpace(_ panel: PanelController) {
         let location = panel.location
         var text = ""
+        var toolTip: String?
         if location.vfs.kind == SAL_VFS_LOCAL, let free = location.vfs.freeSpace(location.path) {
-            text = formatSize(UInt64(free)) + " volných"
+            let immediate = UInt64(free)
+            // Hodnota „pro důležité použití“ započítá i místo, které systém
+            // umí uvolnit; nelze-li ji zjistit (0 / chyba) nebo není větší
+            // než volné místo, ukáže se jen volné místo jako dřív.
+            let available = (try? URL(fileURLWithPath: location.path)
+                .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                .volumeAvailableCapacityForImportantUsage)
+                .map { UInt64(max($0, 0)) } ?? 0
+            let immediateText = formatSize(immediate)
+            if available > immediate {
+                let availableText = formatSize(available)
+                text = "\(availableText) (\(immediateText))"
+                toolTip = "K dispozici \(availableText) včetně místa, které macOS umí uvolnit "
+                    + "(lokální snapshoty Time Machine, cache…); volných hned \(immediateText)."
+            } else {
+                text = immediateText + " volných"
+            }
         }
-        view(of: panel).directoryLine.freeSpace = text
+        let directoryLine = view(of: panel).directoryLine
+        directoryLine.freeSpace = text
+        directoryLine.freeSpaceToolTip = toolTip
     }
 
     /// Text informačního řádku: rychlé hledání, souhrn označení, nebo položka pod kurzorem.

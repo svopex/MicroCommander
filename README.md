@@ -83,7 +83,9 @@ nezměněné a slouží jako reference chování (masky, VFS koncept).
   ukazují jen to, co držený modifikátor s F-klávesou opravdu spustí).
   Oken může být víc (⌘N), každé má vlastní panely i terminál.
   Panel má řádek adresáře (aktivní panel zvýrazněný barvou, tlačítko disku,
-  volné místo), sloupce Jméno/Přípona/Velikost/Datum/Čas/Atr, řádek „..“
+  volné místo – u lokálního disku jako „195.6 GB (23.4 GB)“: místo k dispozici
+  včetně uvolnitelného jako v macOS, tj. lokální snapshoty Time Machine a cache,
+  a v závorce místo volné hned), sloupce Jméno/Přípona/Velikost/Datum/Čas/Atr, řádek „..“
   (UP-DIR), kurzor oddělený od označení (označené položky červeně) a informační
   řádek. Dialogy: progress se zrušením (tučný nadpis operace s položkami,
   např. „Mazání: 3 položek“, pod ním odkud a kam – Z: / Do: / V:, pak
