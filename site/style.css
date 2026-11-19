@@ -15,6 +15,9 @@
   --marked: #d01010;
   --cursor: #d9d9de;
   --code-bg: #efede8;
+  --free-bg: #e7f6ea;
+  --free-line: #bfe5c7;
+  --free-text: #18753a;
 }
 
 /* Tmavý režim podle systému (pokud není vynucen světlý) */
@@ -32,6 +35,9 @@
     --marked: #ff5a5a;
     --cursor: #34343a;
     --code-bg: #232327;
+    --free-bg: #16281b;
+    --free-line: #24492d;
+    --free-text: #6fdc8c;
   }
 }
 
@@ -49,6 +55,9 @@
   --marked: #ff5a5a;
   --cursor: #34343a;
   --code-bg: #232327;
+  --free-bg: #16281b;
+  --free-line: #24492d;
+  --free-text: #6fdc8c;
 }
 
 * { box-sizing: border-box; }
@@ -85,14 +94,18 @@ pre code { background: none; padding: 0; }
 /* Obsahový sloupec s okraji 16 px na mobilu */
 .wrap {
   max-width: 1040px;
-  margin: 0 auto;
+  margin-inline: auto;
   padding: 0 16px;
 }
 
-section { margin: 56px auto; }
+/* Svislé rozestupy sekcí (vodorovné okraje řeší .wrap) */
+section { margin-block: 80px; }
 
-h2 { font-size: 1.6rem; margin: 0 0 20px; }
-h3 { font-size: 1.05rem; margin: 0 0 6px; }
+h2 { font-size: 1.6rem; margin: 0 0 24px; }
+h3 { font-size: 1.05rem; margin: 0 0 8px; }
+
+/* Podnadpisy kroků uvnitř sekce mají odstup od předchozího bloku */
+section > h3 { margin-top: 32px; }
 
 /* Hlavička */
 .hero {
@@ -114,6 +127,29 @@ h3 { font-size: 1.05rem; margin: 0 0 6px; }
 .tagline { font-size: 1.2rem; color: var(--muted); margin: 10px 0 20px; max-width: 640px; }
 
 .meta { color: var(--muted); font-size: 0.9rem; margin: 16px 0 0; }
+
+/* Štítek „zdarma“ nad názvem aplikace */
+.badge {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--free-bg);
+  color: var(--free-text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Zvýrazněný blok „Úplně zdarma“ – karta (.card) v zelených barvách */
+.card.free {
+  background: var(--free-bg);
+  border-color: var(--free-line);
+  padding: 28px;
+}
+
+.free h2 { color: var(--free-text); margin-bottom: 12px; }
+.card.free p { color: var(--text); font-size: 1.05rem; max-width: 760px; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
 

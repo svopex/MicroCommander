@@ -14,14 +14,15 @@
     <div class="wrap hero-inner">
       <img class="hero-icon" src="site/icon.png" width="128" height="128" alt="Ikona MicroCommanderu">
       <div>
+        <p class="badge">Zcela zdarma · open source</p>
         <h1>MicroCommander</h1>
         <p class="tagline">Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu
           s jádrem v Rustu a tenkým nativním UI ve Swift/AppKit.</p>
         <div class="actions">
           <a class="button primary" href="https://github.com/svopex/MicroCommander">Zdrojový kód na GitHubu</a>
-          <a class="button" href="#build">Sestavení a spuštění</a>
+          <a class="button" href="#build">Stáhnout a spustit</a>
         </div>
-        <p class="meta">macOS 13 a novější · Apple Silicon · licence GPL-2.0-or-later</p>
+        <p class="meta">Bez poplatků, bez reklam, bez registrace · macOS 13 a novější · Apple Silicon</p>
       </div>
     </div>
   </header>
@@ -55,6 +56,17 @@
           <span><b>F3</b> Zobrazit</span><span><b>F4</b> Upravit</span><span><b>F5</b> Kopírovat</span>
           <span><b>F6</b> Přesunout</span><span><b>F7</b> Adresář</span><span><b>F8</b> Smazat</span>
         </div>
+      </div>
+    </section>
+
+    <!-- Zdůraznění, že aplikace je zcela zdarma -->
+    <section class="wrap">
+      <div class="card free">
+        <h2>Úplně zdarma</h2>
+        <p>MicroCommander nic nestojí a nikdy stát nebude: žádná zkušební doba, předplatné,
+          reklamy ani registrace. Je to svobodný software pod licencí GPL – můžete ho používat
+          doma i v práci, sdílet s ostatními a upravovat podle sebe. Celý zdrojový kód je
+          veřejně na <a href="https://github.com/svopex/MicroCommander">GitHubu</a>.</p>
       </div>
     </section>
 
@@ -126,15 +138,25 @@
       </div>
     </section>
 
-    <!-- Sestavení ze zdrojových kódů -->
+    <!-- Stažení a sestavení ze zdrojových kódů přes curl (bez gitu) -->
     <section class="wrap" id="build">
-      <h2>Sestavení a spuštění</h2>
-      <p>Vyžaduje Rust (<code>cargo</code>) a Xcode Command Line Tools (<code>swiftc</code>).</p>
-      <pre><code>git clone https://github.com/svopex/MicroCommander.git
-cd MicroCommander
-make run        # sestaví jádro i aplikaci a spustí build/MicroCommander.app</code></pre>
-      <p>Další cíle: <code>make test</code> (unit testy jádra), <code>make smoke</code> (test FFI),
-        <code>make selftest</code> (self-test UI). Podrobnosti v
+      <h2>Stáhnout a spustit</h2>
+      <p>Aplikace se sestaví přímo na vašem Macu. Stačí Terminál a tři kroky.</p>
+
+      <h3>1. Nástroje pro sestavení (jen poprvé)</h3>
+      <p>Xcode Command Line Tools (překladač Swiftu) a Rust:</p>
+      <pre><code>xcode-select --install
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y</code></pre>
+
+      <h3>2. Stažení zdrojového kódu</h3>
+      <pre><code>curl -L https://github.com/svopex/MicroCommander/archive/refs/heads/main.tar.gz | tar xz
+cd MicroCommander-main</code></pre>
+
+      <h3>3. Sestavení a spuštění</h3>
+      <pre><code>make run</code></pre>
+      <p>Hotová aplikace je v <code>build/MicroCommander.app</code> – můžete ji přetáhnout do
+        složky Aplikace. Novou verzi získáte zopakováním kroků 2 a 3. Další cíle
+        (<code>make test</code>, <code>make smoke</code>, <code>make selftest</code>) popisuje
         <a href="https://github.com/svopex/MicroCommander#readme">README</a>.</p>
     </section>
   </main>
@@ -142,7 +164,7 @@ make run        # sestaví jádro i aplikaci a spustí build/MicroCommander.app<
   <!-- Patička: licence a původ projektu -->
   <footer>
     <div class="wrap">
-      <p>MicroCommander je svobodný software pod licencí
+      <p>MicroCommander je zcela zdarma – svobodný software pod licencí
         <a href="https://github.com/svopex/MicroCommander/blob/main/LICENSE">GPL-2.0-or-later</a>,
         vychází z <a href="https://github.com/KRtkovo-eu-AI/salamander">Open Salamanderu</a>.
         · <a href="https://github.com/svopex/MicroCommander">github.com/svopex/MicroCommander</a></p>
