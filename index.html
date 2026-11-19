@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MicroCommander</title>
+  <meta name="description" content="MicroCommander – dvoupanelový správce souborů pro macOS, přepis Open Salamanderu s jádrem v Rustu a UI ve Swift/AppKit.">
+  <link rel="icon" type="image/png" href="site/icon.png">
+  <link rel="stylesheet" href="site/style.css">
+</head>
+<body>
+  <!-- Hlavička: ikona, název, krátký popis a hlavní odkazy -->
+  <header class="hero">
+    <div class="wrap hero-inner">
+      <img class="hero-icon" src="site/icon.png" width="128" height="128" alt="Ikona MicroCommanderu">
+      <div>
+        <h1>MicroCommander</h1>
+        <p class="tagline">Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu
+          s jádrem v Rustu a tenkým nativním UI ve Swift/AppKit.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/svopex/MicroCommander">Zdrojový kód na GitHubu</a>
+          <a class="button" href="#build">Sestavení a spuštění</a>
+        </div>
+        <p class="meta">macOS 13 a novější · Apple Silicon · licence GPL-2.0-or-later</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Ukázka rozložení okna: dva panely jako v Salamanderu -->
+    <section class="wrap">
+      <div class="mock" aria-hidden="true">
+        <div class="mock-bar"><span></span><span></span><span></span></div>
+        <div class="mock-panels">
+          <div class="mock-panel active">
+            <div class="mock-path">~/Projekty <em>195.6 GB (23.4 GB)</em></div>
+            <div class="row"><b>..</b><i>UP-DIR</i></div>
+            <div class="row"><b>core</b><i>DIR</i></div>
+            <div class="row cursor"><b>app</b><i>DIR</i></div>
+            <div class="row marked"><b>README.md</b><i>52 853</i></div>
+            <div class="row marked"><b>Makefile</b><i>8 538</i></div>
+            <div class="row"><b>LICENSE</b><i>18 092</i></div>
+          </div>
+          <div class="mock-panel">
+            <div class="mock-path">sftp://server/~/www</div>
+            <div class="row"><b>..</b><i>UP-DIR</i></div>
+            <div class="row"><b>public</b><i>DIR</i></div>
+            <div class="row"><b>logs</b><i>DIR</i></div>
+            <div class="row"><b>index.php</b><i>4 210</i></div>
+            <div class="row"><b>backup.tar.gz</b><i>81 004 112</i></div>
+          </div>
+        </div>
+        <div class="mock-terminal">$ make run</div>
+        <div class="mock-keys">
+          <span><b>F3</b> Zobrazit</span><span><b>F4</b> Upravit</span><span><b>F5</b> Kopírovat</span>
+          <span><b>F6</b> Přesunout</span><span><b>F7</b> Adresář</span><span><b>F8</b> Smazat</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Přehled hlavních funkcí -->
+    <section class="wrap">
+      <h2>Co umí</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>Dva panely jako v Salamanderu</h3>
+          <p>Kurzor oddělený od označení, řádek „..“, rychlé hledání psaním, historie,
+            režimy Stručný / Podrobný / Ikony / Miniatury / Dlaždice / Typy a lišta F-kláves,
+            jejíž popisky se mění podle držených modifikátorů.</p>
+        </article>
+        <article class="card">
+          <h3>Souborové operace</h3>
+          <p>Kopírování, přesun a mazání mezi libovolnými zdroji se zrušením a průběhem,
+            koš i trvalé mazání, duplikace, porovnání adresářů, obsazené místo, atributy
+            a vlastní dialog oprávnění včetně rekurze.</p>
+        </article>
+        <article class="card">
+          <h3>Archivy</h3>
+          <p>ZIP, TAR a TAR.GZ se otevírají jako adresář v panelu. Vytváření ZIP včetně
+            šifrování AES-256 nebo ZipCrypto, čtení zaheslovaných archivů.</p>
+        </article>
+        <article class="card">
+          <h3>FTP a SFTP</h3>
+          <p>Uložené servery s hesly v Klíčence, SFTP přihlášení heslem, klíčem
+            (ed25519, ECDSA, RSA) i přes ssh-agent. Panel lze procházet i během přenosu.</p>
+        </article>
+        <article class="card">
+          <h3>Hledání</h3>
+          <p>Masky ve stylu Salamandera (<code>*</code>, <code>?</code>, <code>#</code>, skupiny
+            <code>;</code>, vyloučení <code>|</code>), hledání v obsahu – text, HEX, celá slova,
+            regulární výrazy – a volitelně i uvnitř archivů.</p>
+        </article>
+        <article class="card">
+          <h3>Vestavěný terminál</h3>
+          <p>Shell uživatele pod panely (SwiftTerm), který sleduje adresář aktivního panelu;
+            ⌘F12 ho roztáhne na celé okno. Spouštění skriptů přímo z panelu.</p>
+        </article>
+        <article class="card">
+          <h3>Nastavení po svém</h3>
+          <p>Editor klávesových zkratek všech příkazů, barevná schémata (macOS, Open Salamander,
+            Norton Commander, DOS Navigator…), vlastní místa v nabídce disků se zkratkami
+            ⌘0–⌘9, export nastavení do JSON.</p>
+        </article>
+        <article class="card">
+          <h3>Nativní Mac aplikace</h3>
+          <p>Přetahování souborů z a do Finderu, Quick Look náhledy, okno Informace z Finderu,
+            víc oken, světlý i tmavý režim.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Architektura: jádro v Rustu a tenké UI -->
+    <section class="wrap">
+      <h2>Architektura</h2>
+      <div class="arch">
+        <div class="layer ui">
+          <h3>app/ – Swift/AppKit</h3>
+          <p>Tenké UI: panely, příkazy, dialogy, terminál. Volá jádro přes C ABI.</p>
+        </div>
+        <div class="arrow" aria-hidden="true">C ABI · microcommander.h</div>
+        <div class="layer core">
+          <h3>core/ – salcore (Rust)</h3>
+          <p>Veškerá logika: virtuální souborové systémy (lokální disk, ZIP, TAR, FTP, SFTP)
+            za společným traitem <code>Vfs</code>, operace, hledání, balení archivů.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sestavení ze zdrojových kódů -->
+    <section class="wrap" id="build">
+      <h2>Sestavení a spuštění</h2>
+      <p>Vyžaduje Rust (<code>cargo</code>) a Xcode Command Line Tools (<code>swiftc</code>).</p>
+      <pre><code>git clone https://github.com/svopex/MicroCommander.git
+cd MicroCommander
+make run        # sestaví jádro i aplikaci a spustí build/MicroCommander.app</code></pre>
+      <p>Další cíle: <code>make test</code> (unit testy jádra), <code>make smoke</code> (test FFI),
+        <code>make selftest</code> (self-test UI). Podrobnosti v
+        <a href="https://github.com/svopex/MicroCommander#readme">README</a>.</p>
+    </section>
+  </main>
+
+  <!-- Patička: licence a původ projektu -->
+  <footer>
+    <div class="wrap">
+      <p>MicroCommander je svobodný software pod licencí
+        <a href="https://github.com/svopex/MicroCommander/blob/main/LICENSE">GPL-2.0-or-later</a>,
+        vychází z <a href="https://github.com/KRtkovo-eu-AI/salamander">Open Salamanderu</a>.
+        · <a href="https://github.com/svopex/MicroCommander">github.com/svopex/MicroCommander</a></p>
+    </div>
+  </footer>
+</body>
+</html>

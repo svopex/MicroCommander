@@ -11,6 +11,11 @@ import SwiftTerm
 
 /// Údaje pro okno O aplikaci.
 enum AboutInfo {
+    /// Webová stránka projektu (GitHub Pages z index.html v kořeni repozitáře).
+    static let websiteURL = URL(string: "https://svopex.github.io/MicroCommander/")!
+    /// Zdrojové kódy na GitHubu.
+    static let sourceURL = URL(string: "https://github.com/svopex/MicroCommander")!
+
     /// Hodnota z Info.plist aplikace (prázdné hodnoty = nil).
     /// - Parameter key: klíč v Info.plist
     private static func bundleValue(_ key: String) -> String? {
@@ -83,7 +88,9 @@ enum AboutInfo {
         system.append("Jazyk: \(Locale.current.identifier)")
         system.append("Spuštěno: \(Bundle.main.bundlePath)")
 
+        // Odkazy na web a zdrojáky udělá klikací show() (parametr links dialogu).
         return "Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů).\n\n"
+            + "Web: \(websiteURL.absoluteString)\nZdrojový kód: \(sourceURL.absoluteString)\n\n"
             + "Aplikace\n" + application.map { "  " + $0 }.joined(separator: "\n")
             + "\n\nSystém\n" + system.map { "  " + $0 }.joined(separator: "\n")
     }
@@ -94,7 +101,7 @@ enum AboutInfo {
         let text = self.text
         let copyButton = 1
         if PromptDialog.show(title: "MicroCommander", message: text, icon: NSApp.applicationIconImage,
-                             buttons: ["OK", "Kopírovat informace"], over: nil) == copyButton {
+                             buttons: ["OK", "Kopírovat informace"], links: [websiteURL, sourceURL], over: nil) == copyButton {
             copyTextToPasteboard("MicroCommander\n" + text)
         }
     }

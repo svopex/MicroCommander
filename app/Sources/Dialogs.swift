@@ -1250,8 +1250,10 @@ final class PromptDialog: NSWindowController {
     ///   - selectsBaseName: po otevření označit jen jméno bez přípony
     ///   - buttons: titulky tlačítek zleva; první je výchozí (Enter)
     ///   - showsCancel: přidat na konec tlačítko Zrušit (Escape zavře dialog vždy)
+    ///   - links: adresy, které se v textu dotazu zobrazí jako klikací odkazy
     init(title: String, showsHeading: Bool = false, message: String, icon: NSImage? = nil, value: String? = nil,
-         secure: Bool = false, selectsBaseName: Bool = false, buttons: [String], showsCancel: Bool = true) {
+         secure: Bool = false, selectsBaseName: Bool = false, buttons: [String], showsCancel: Bool = true,
+         links: [URL] = []) {
         self.selectsBaseName = selectsBaseName
         // Výška je jen výchozí – buildContent ji dopočítá podle obsahu.
         let window = DialogWindow(contentRect: NSRect(x: 0, y: 0, width: PromptDialog.width, height: 0),
@@ -1260,7 +1262,7 @@ final class PromptDialog: NSWindowController {
         super.init(window: window)
         window.onCancel = { [weak self] in self?.finish(nil) }
         buildContent(heading: showsHeading ? title : nil, message: message, icon: icon, value: value, secure: secure,
-                     buttons: buttons, showsCancel: showsCancel)
+                     buttons: buttons, showsCancel: showsCancel, links: links)
     }
 
     /// Ikona výstrahy (chyby, upozornění, dotazy na nevratné akce).
@@ -1275,23 +1277,48 @@ final class PromptDialog: NSWindowController {
     ///   - icon: ikona vlevo (výchozí výstraha)
     ///   - buttons: titulky tlačítek; první je výchozí (Enter)
     ///   - showsCancel: přidat tlačítko Zrušit
+    ///   - links: adresy, které se v textu zobrazí jako klikací odkazy
     ///   - parent: okno, nad kterým se dialog zobrazí (nil = samostatné okno)
     /// - Returns: index stisknutého tlačítka, nil při zrušení (Escape)
     @discardableResult
     static func show(title: String, showsHeading: Bool = true, message: String, icon: NSImage? = cautionIcon,
-                     buttons: [String] = ["OK"], showsCancel: Bool = false, over parent: NSWindow?) -> Int? {
+                     buttons: [String] = ["OK"], showsCancel: Bool = false, links: [URL] = [],
+                     over parent: NSWindow?) -> Int? {
         PromptDialog(title: title, showsHeading: showsHeading, message: message, icon: icon, buttons: buttons,
-                     showsCancel: showsCancel).run(over: parent)
+                     showsCancel: showsCancel, links: links).run(over: parent)
     }
 
     required init?(coder: NSCoder) {
         fatalError("Není podporováno")
     }
 
+    /// Udělá ze zadaných adres v textu popisku klikací odkazy, které se otevřou
+    /// ve výchozím prohlížeči. Adresa se v textu hledá v podobě
+    /// `absoluteString`; adresy, které v textu nejsou, se přeskočí.
+    /// - Parameters:
+    ///   - label: popisek s textem hlášení
+    ///   - links: adresy, ze kterých se mají stát odkazy
+    private static func addLinks(_ links: [URL], to label: NSTextField) {
+        guard !links.isEmpty else { return }
+        let text = label.stringValue as NSString
+        // Atributovaný text musí nést písmo a barvu popisku, jinak by se změnil vzhled.
+        let attributed = NSMutableAttributedString(string: label.stringValue, attributes: [
+            .font: label.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize),
+            .foregroundColor: label.textColor ?? NSColor.labelColor,
+        ])
+        for url in links {
+            let range = text.range(of: url.absoluteString)
+            if range.location != NSNotFound { attributed.addAttribute(.link, value: url, range: range) }
+        }
+        // Odkazy v NSTextField reagují na klik jen s povolenými atributy textu.
+        label.allowsEditingTextAttributes = true
+        label.attributedStringValue = attributed
+    }
+
     /// Rozvržení: ikona a text dotazu, pod ním vstupní pole, čára a tlačítka
     /// uprostřed. Výška dialogu se dopočítá podle textu dotazu.
     private func buildContent(heading: String?, message: String, icon: NSImage?, value: String?, secure: Bool,
-                              buttons: [String], showsCancel: Bool) {
+                              buttons: [String], showsCancel: Bool, links: [URL]) {
         let width = PromptDialog.width
         let margin: CGFloat = 16
         let content = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 0))
@@ -1318,6 +1345,7 @@ final class PromptDialog: NSWindowController {
         // Text dotazu: zalomený, výška podle obsahu.
         let label = NSTextField(wrappingLabelWithString: message)
         label.isSelectable = true
+        PromptDialog.addLinks(links, to: label)
         let labelHeight = ceil(label.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth, height: 10000)).height ?? 17)
         content.place(label, NSRect(x: textX, y: y, width: textWidth, height: labelHeight))
         y += labelHeight + 8
