@@ -4,170 +4,226 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MicroCommander</title>
-  <meta name="description" content="MicroCommander – dvoupanelový správce souborů pro macOS, přepis Open Salamanderu s jádrem v Rustu a UI ve Swift/AppKit.">
+  <meta name="description" content="MicroCommander – zdarma dostupný dvoupanelový správce souborů pro macOS, přepis Open Salamanderu s jádrem v Rustu a nativním UI ve Swift/AppKit.">
   <link rel="icon" type="image/png" href="site/icon.png">
   <link rel="stylesheet" href="site/style.css">
+  <script src="site/site.js" defer></script>
 </head>
 <body>
-  <!-- Hlavička: ikona, název, krátký popis a hlavní odkazy -->
-  <header class="hero">
-    <div class="wrap hero-inner">
-      <img class="hero-icon" src="site/icon.png" width="128" height="128" alt="Ikona MicroCommanderu">
-      <div>
+  <!-- Horní navigace: logo a odkazy na sekce, GitHub v nové záložce -->
+  <nav class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top"><img src="site/icon.png" width="28" height="28" alt="">MicroCommander</a>
+      <div class="nav-links">
+        <a class="wide-only" href="#funkce">Funkce</a>
+        <a class="wide-only" href="#stahnout">Stáhnout</a>
+        <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Úvod: štítek zdarma, název, popis, tlačítka a ukázka okna -->
+  <header class="hero" id="top">
+    <div class="wrap">
+      <div class="hero-text">
+        <img class="hero-icon" src="site/icon.png" width="96" height="96" alt="Ikona MicroCommanderu">
         <p class="badge">Zcela zdarma · open source</p>
-        <h1>MicroCommander</h1>
-        <p class="tagline">Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu
-          s jádrem v Rustu a tenkým nativním UI ve Swift/AppKit.</p>
+        <h1>Dvoupanelový správce souborů <span class="accent">pro Mac</span></h1>
+        <p class="lead">MicroCommander přenáší ovládání Open Salamanderu na macOS – rychlé
+          jádro v Rustu a nativní aplikace ve Swift/AppKit. Klávesnicí, bez kompromisů.</p>
         <div class="actions">
-          <a class="button primary" href="https://github.com/svopex/MicroCommander">Zdrojový kód na GitHubu</a>
-          <a class="button" href="#build">Stáhnout a spustit</a>
+          <a class="button primary" href="#stahnout">Stáhnout a spustit</a>
+          <a class="button" href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">Zdrojový kód na GitHubu ↗</a>
         </div>
-        <p class="meta">Bez poplatků, bez reklam, bez registrace · macOS 13 a novější · Apple Silicon</p>
+        <ul class="facts">
+          <li>Bez poplatků a reklam</li>
+          <li>macOS 13 a novější</li>
+          <li>Apple Silicon</li>
+        </ul>
+      </div>
+
+      <!-- Ukázka celého okna aplikace (jen ilustrace, ne skutečný screenshot) -->
+      <div class="app" aria-hidden="true">
+        <div class="app-title"><span class="lights"><i></i><i></i><i></i></span>MicroCommander</div>
+        <div class="app-toolbar">
+          <i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i>
+        </div>
+        <div class="app-drives">
+          <span>⌂ Domů</span><span>/</span><span>Macintosh HD</span><span>Stahování</span><span>Projekty</span>
+        </div>
+        <div class="app-panels">
+          <div class="panel active">
+            <div class="panel-path"><span>~/Projekty/MicroCommander</span><em>195.6 GB (23.4 GB)</em></div>
+            <div class="panel-head"><span>Jméno</span><span>Velikost</span><span class="date">Datum</span></div>
+            <div class="panel-row"><span>..</span><span>UP-DIR</span><span class="date"></span></div>
+            <div class="panel-row"><span>app</span><span>DIR</span><span class="date">18.11.2026</span></div>
+            <div class="panel-row cursor"><span>core</span><span>DIR</span><span class="date">18.11.2026</span></div>
+            <div class="panel-row"><span>site</span><span>DIR</span><span class="date">19.11.2026</span></div>
+            <div class="panel-row"><span>tests</span><span>DIR</span><span class="date">13.11.2026</span></div>
+            <div class="panel-row marked"><span>index.html</span><span>9 812</span><span class="date">19.11.2026</span></div>
+            <div class="panel-row marked"><span>Makefile</span><span>8 538</span><span class="date">14.11.2026</span></div>
+            <div class="panel-row"><span>README.md</span><span>52 853</span><span class="date">18.11.2026</span></div>
+            <div class="panel-row"><span>LICENSE</span><span>18 092</span><span class="date">13.11.2026</span></div>
+            <div class="panel-info">Označeno: 2 soubory, 18 350 B</div>
+          </div>
+          <div class="panel">
+            <div class="panel-path"><span>sftp://server/~/www</span><em>SFTP</em></div>
+            <div class="panel-head"><span>Jméno</span><span>Velikost</span><span class="date">Datum</span></div>
+            <div class="panel-row"><span>..</span><span>UP-DIR</span><span class="date"></span></div>
+            <div class="panel-row"><span>assets</span><span>DIR</span><span class="date">02.11.2026</span></div>
+            <div class="panel-row"><span>logs</span><span>DIR</span><span class="date">19.11.2026</span></div>
+            <div class="panel-row"><span>public</span><span>DIR</span><span class="date">17.11.2026</span></div>
+            <div class="panel-row"><span>.htaccess</span><span>412</span><span class="date">03.10.2026</span></div>
+            <div class="panel-row"><span>backup.tar.gz</span><span>81 004 112</span><span class="date">15.11.2026</span></div>
+            <div class="panel-row"><span>config.php</span><span>2 905</span><span class="date">11.11.2026</span></div>
+            <div class="panel-row"><span>index.php</span><span>4 210</span><span class="date">17.11.2026</span></div>
+            <div class="panel-row"><span>robots.txt</span><span>68</span><span class="date">01.09.2026</span></div>
+            <div class="panel-info">9 položek</div>
+          </div>
+        </div>
+        <div class="app-terminal">petr@mac MicroCommander % make run</div>
+        <div class="app-keys">
+          <span><b>F3</b>Zobrazit</span><span><b>F4</b>Upravit</span><span><b>F5</b>Kopírovat</span>
+          <span><b>F6</b>Přesunout</span><span class="wide-only"><b>F7</b>Adresář</span><span class="wide-only"><b>F8</b>Smazat</span>
+          <span class="wide-only"><b>F9</b>Terminál</span><span class="wide-only"><b>F10</b>Konec</span>
+        </div>
       </div>
     </div>
   </header>
 
   <main>
-    <!-- Ukázka rozložení okna: dva panely jako v Salamanderu -->
+    <!-- Zdarma: tři hlavní sliby projektu -->
     <section class="wrap">
-      <div class="mock" aria-hidden="true">
-        <div class="mock-bar"><span></span><span></span><span></span></div>
-        <div class="mock-panels">
-          <div class="mock-panel active">
-            <div class="mock-path">~/Projekty <em>195.6 GB (23.4 GB)</em></div>
-            <div class="row"><b>..</b><i>UP-DIR</i></div>
-            <div class="row"><b>core</b><i>DIR</i></div>
-            <div class="row cursor"><b>app</b><i>DIR</i></div>
-            <div class="row marked"><b>README.md</b><i>52 853</i></div>
-            <div class="row marked"><b>Makefile</b><i>8 538</i></div>
-            <div class="row"><b>LICENSE</b><i>18 092</i></div>
-          </div>
-          <div class="mock-panel">
-            <div class="mock-path">sftp://server/~/www</div>
-            <div class="row"><b>..</b><i>UP-DIR</i></div>
-            <div class="row"><b>public</b><i>DIR</i></div>
-            <div class="row"><b>logs</b><i>DIR</i></div>
-            <div class="row"><b>index.php</b><i>4 210</i></div>
-            <div class="row"><b>backup.tar.gz</b><i>81 004 112</i></div>
-          </div>
+      <div class="free">
+        <div class="free-intro">
+          <p class="eyebrow">Úplně zdarma</p>
+          <h2>Nic nestojí a nikdy stát nebude</h2>
+          <p>Žádná zkušební doba, předplatné, reklamy ani registrace. Používejte ho doma
+            i v práci, sdílejte ho a upravujte podle sebe.</p>
         </div>
-        <div class="mock-terminal">$ make run</div>
-        <div class="mock-keys">
-          <span><b>F3</b> Zobrazit</span><span><b>F4</b> Upravit</span><span><b>F5</b> Kopírovat</span>
-          <span><b>F6</b> Přesunout</span><span><b>F7</b> Adresář</span><span><b>F8</b> Smazat</span>
-        </div>
+        <ul class="free-points">
+          <li><b>0 Kč</b><span>navždy, bez placených verzí</span></li>
+          <li><b>GPL</b><span>svobodná licence, otevřený kód</span></li>
+          <li><b>Bez sledování</b><span>žádné účty ani telemetrie</span></li>
+        </ul>
       </div>
     </section>
 
-    <!-- Zdůraznění, že aplikace je zcela zdarma -->
-    <section class="wrap">
-      <div class="card free">
-        <h2>Úplně zdarma</h2>
-        <p>MicroCommander nic nestojí a nikdy stát nebude: žádná zkušební doba, předplatné,
-          reklamy ani registrace. Je to svobodný software pod licencí GPL – můžete ho používat
-          doma i v práci, sdílet s ostatními a upravovat podle sebe. Celý zdrojový kód je
-          veřejně na <a href="https://github.com/svopex/MicroCommander">GitHubu</a>.</p>
-      </div>
-    </section>
-
-    <!-- Přehled hlavních funkcí -->
-    <section class="wrap">
-      <h2>Co umí</h2>
+    <!-- Přehled hlavních funkcí s ikonami -->
+    <section class="wrap" id="funkce">
+      <p class="eyebrow">Funkce</p>
+      <h2>Všechno, co od dvoupanelového správce čekáte</h2>
       <div class="grid">
         <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></svg>
           <h3>Dva panely jako v Salamanderu</h3>
-          <p>Kurzor oddělený od označení, řádek „..“, rychlé hledání psaním, historie,
-            režimy Stručný / Podrobný / Ikony / Miniatury / Dlaždice / Typy a lišta F-kláves,
-            jejíž popisky se mění podle držených modifikátorů.</p>
+          <p>Kurzor oddělený od označení, rychlé hledání psaním, historie, šest režimů
+            zobrazení a lišta F-kláves, která se mění podle modifikátorů.</p>
         </article>
         <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
           <h3>Souborové operace</h3>
-          <p>Kopírování, přesun a mazání mezi libovolnými zdroji se zrušením a průběhem,
-            koš i trvalé mazání, duplikace, porovnání adresářů, obsazené místo, atributy
-            a vlastní dialog oprávnění včetně rekurze.</p>
+          <p>Kopírování, přesun a mazání mezi libovolnými zdroji s průběhem a zrušením,
+            koš, duplikace, porovnání adresářů, atributy a oprávnění.</p>
         </article>
         <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
           <h3>Archivy</h3>
-          <p>ZIP, TAR a TAR.GZ se otevírají jako adresář v panelu. Vytváření ZIP včetně
-            šifrování AES-256 nebo ZipCrypto, čtení zaheslovaných archivů.</p>
+          <p>ZIP, TAR a TAR.GZ se otevírají jako adresář. Vytváření ZIP se šifrováním
+            AES-256 nebo ZipCrypto a čtení zaheslovaných archivů.</p>
         </article>
         <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg>
           <h3>FTP a SFTP</h3>
-          <p>Uložené servery s hesly v Klíčence, SFTP přihlášení heslem, klíčem
-            (ed25519, ECDSA, RSA) i přes ssh-agent. Panel lze procházet i během přenosu.</p>
+          <p>Uložené servery s hesly v Klíčence, přihlášení heslem, klíčem
+            (ed25519, ECDSA, RSA) i přes ssh-agent; procházení i během přenosu.</p>
         </article>
         <article class="card">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <h3>Hledání</h3>
-          <p>Masky ve stylu Salamandera (<code>*</code>, <code>?</code>, <code>#</code>, skupiny
-            <code>;</code>, vyloučení <code>|</code>), hledání v obsahu – text, HEX, celá slova,
+          <p>Masky ve stylu Salamandera, hledání v obsahu – text, HEX, celá slova,
             regulární výrazy – a volitelně i uvnitř archivů.</p>
         </article>
         <article class="card">
+          <svg viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>
           <h3>Vestavěný terminál</h3>
-          <p>Shell uživatele pod panely (SwiftTerm), který sleduje adresář aktivního panelu;
-            ⌘F12 ho roztáhne na celé okno. Spouštění skriptů přímo z panelu.</p>
+          <p>Shell pod panely, který sleduje adresář aktivního panelu. ⌘F12 ho roztáhne
+            na celé okno, skripty se spouštějí přímo z panelu.</p>
         </article>
         <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
           <h3>Nastavení po svém</h3>
-          <p>Editor klávesových zkratek všech příkazů, barevná schémata (macOS, Open Salamander,
-            Norton Commander, DOS Navigator…), vlastní místa v nabídce disků se zkratkami
-            ⌘0–⌘9, export nastavení do JSON.</p>
+          <p>Vlastní klávesové zkratky všech příkazů, barevná schémata (Open Salamander,
+            Norton Commander, DOS Navigator…) a export nastavení.</p>
         </article>
         <article class="card">
+          <svg viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></svg>
           <h3>Nativní Mac aplikace</h3>
-          <p>Přetahování souborů z a do Finderu, Quick Look náhledy, okno Informace z Finderu,
-            víc oken, světlý i tmavý režim.</p>
+          <p>Přetahování z a do Finderu, náhledy Quick Look, okno Informace, více oken,
+            světlý i tmavý režim.</p>
         </article>
       </div>
     </section>
 
     <!-- Architektura: jádro v Rustu a tenké UI -->
     <section class="wrap">
-      <h2>Architektura</h2>
+      <p class="eyebrow">Uvnitř</p>
+      <h2>Rychlé jádro, nativní vzhled</h2>
       <div class="arch">
-        <div class="layer ui">
-          <h3>app/ – Swift/AppKit</h3>
-          <p>Tenké UI: panely, příkazy, dialogy, terminál. Volá jádro přes C ABI.</p>
+        <div class="layer">
+          <span class="tag">Swift / AppKit</span>
+          <h3>Tenké UI</h3>
+          <p>Panely, příkazy, dialogy a terminál. Vypadá a chová se jako Mac aplikace.</p>
         </div>
-        <div class="arrow" aria-hidden="true">C ABI · microcommander.h</div>
+        <div class="link" aria-hidden="true"><span>C ABI</span></div>
         <div class="layer core">
-          <h3>core/ – salcore (Rust)</h3>
-          <p>Veškerá logika: virtuální souborové systémy (lokální disk, ZIP, TAR, FTP, SFTP)
-            za společným traitem <code>Vfs</code>, operace, hledání, balení archivů.</p>
+          <span class="tag">Rust</span>
+          <h3>Jádro salcore</h3>
+          <p>Lokální disk, ZIP, TAR, FTP a SFTP za společným rozhraním, operace,
+            hledání a balení archivů.</p>
         </div>
       </div>
     </section>
 
-    <!-- Stažení a sestavení ze zdrojových kódů přes curl (bez gitu) -->
-    <section class="wrap" id="build">
-      <h2>Stáhnout a spustit</h2>
-      <p>Aplikace se sestaví přímo na vašem Macu. Stačí Terminál a tři kroky.</p>
-
-      <h3>1. Nástroje pro sestavení (jen poprvé)</h3>
-      <p>Xcode Command Line Tools (překladač Swiftu) a Rust:</p>
-      <pre><code>xcode-select --install
+    <!-- Stažení a sestavení přes curl (bez gitu) v očíslovaných krocích -->
+    <section class="wrap" id="stahnout">
+      <p class="eyebrow">Stáhnout</p>
+      <h2>Spuštění ve třech krocích</h2>
+      <p class="section-lead">Aplikace se sestaví přímo na vašem Macu – stačí otevřít Terminál
+        a postupně vložit tyto příkazy.</p>
+      <ol class="steps">
+        <li class="step">
+          <h3>Nástroje pro sestavení <small>jen poprvé</small></h3>
+          <p>Xcode Command Line Tools (překladač Swiftu) a Rust.</p>
+          <pre><code>xcode-select --install
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y</code></pre>
-
-      <h3>2. Stažení zdrojového kódu</h3>
-      <pre><code>curl -L https://github.com/svopex/MicroCommander/archive/refs/heads/main.tar.gz | tar xz
+        </li>
+        <li class="step">
+          <h3>Stažení zdrojového kódu</h3>
+          <p>Aktuální verze jako archiv, bez gitu.</p>
+          <pre><code>curl -L https://github.com/svopex/MicroCommander/archive/refs/heads/main.tar.gz | tar xz
 cd MicroCommander-main</code></pre>
-
-      <h3>3. Sestavení a spuštění</h3>
-      <pre><code>make run</code></pre>
-      <p>Hotová aplikace je v <code>build/MicroCommander.app</code> – můžete ji přetáhnout do
-        složky Aplikace. Novou verzi získáte zopakováním kroků 2 a 3. Další cíle
-        (<code>make test</code>, <code>make smoke</code>, <code>make selftest</code>) popisuje
-        <a href="https://github.com/svopex/MicroCommander#readme">README</a>.</p>
+        </li>
+        <li class="step">
+          <h3>Sestavení a spuštění</h3>
+          <p>Hotová aplikace je v <code>build/MicroCommander.app</code> – přetáhněte ji
+            do složky Aplikace.</p>
+          <pre><code>make run</code></pre>
+        </li>
+      </ol>
+      <p class="note">Novou verzi získáte zopakováním kroků 2 a 3. Další cíle
+        (<code>make test</code>, <code>make selftest</code>) popisuje
+        <a href="https://github.com/svopex/MicroCommander#readme" target="_blank" rel="noopener">README</a>.</p>
     </section>
   </main>
 
   <!-- Patička: licence a původ projektu -->
-  <footer>
-    <div class="wrap">
+  <footer class="footer">
+    <div class="wrap footer-inner">
       <p>MicroCommander je zcela zdarma – svobodný software pod licencí
-        <a href="https://github.com/svopex/MicroCommander/blob/main/LICENSE">GPL-2.0-or-later</a>,
-        vychází z <a href="https://github.com/KRtkovo-eu-AI/salamander">Open Salamanderu</a>.
-        · <a href="https://github.com/svopex/MicroCommander">github.com/svopex/MicroCommander</a></p>
+        <a href="https://github.com/svopex/MicroCommander/blob/main/LICENSE" target="_blank" rel="noopener">GPL-2.0-or-later</a>,
+        vychází z <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Salamanderu</a>.</p>
+      <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">github.com/svopex/MicroCommander ↗</a>
     </div>
   </footer>
 </body>

@@ -88,20 +88,23 @@ enum AboutInfo {
         system.append("Jazyk: \(Locale.current.identifier)")
         system.append("Spuštěno: \(Bundle.main.bundlePath)")
 
-        // Odkazy na web a zdrojáky udělá klikací show() (parametr links dialogu).
         return "Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů).\n\n"
-            + "Web: \(websiteURL.absoluteString)\nZdrojový kód: \(sourceURL.absoluteString)\n\n"
             + "Aplikace\n" + application.map { "  " + $0 }.joined(separator: "\n")
             + "\n\nSystém\n" + system.map { "  " + $0 }.joined(separator: "\n")
     }
 
     /// Zobrazí okno O aplikaci uprostřed obrazovky (nezávisle na hlavním okně);
-    /// tlačítko Kopírovat informace dá text do schránky.
+    /// tlačítko Kopírovat informace dá text do schránky, tlačítka s odkazy
+    /// otevřou web projektu a zdrojový kód na GitHubu.
     static func show() {
         let text = self.text
         let copyButton = 1
+        let links = [
+            DialogLink(title: "Webová stránka", symbol: "globe", url: websiteURL),
+            DialogLink(title: "Zdrojový kód na GitHubu", symbol: "chevron.left.forwardslash.chevron.right", url: sourceURL),
+        ]
         if PromptDialog.show(title: "MicroCommander", message: text, icon: NSApp.applicationIconImage,
-                             buttons: ["OK", "Kopírovat informace"], links: [websiteURL, sourceURL], over: nil) == copyButton {
+                             buttons: ["OK", "Kopírovat informace"], links: links, over: nil) == copyButton {
             copyTextToPasteboard("MicroCommander\n" + text)
         }
     }

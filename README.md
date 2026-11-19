@@ -171,7 +171,8 @@ tests/sftp_test.sh          # SFTP end-to-end proti dočasnému sshd (make sftp-
 Makefile                    # build celé aplikace jedním příkazem
 index.html                  # webová stránka projektu (GitHub Pages z kořene
                             #   větve main, https://svopex.github.io/MicroCommander/)
-site/                       # styly a ikona webové stránky
+site/                       # styly, skript (tlačítko Kopírovat u příkazů)
+                            #   a ikona webové stránky
 .nojekyll                   # GitHub Pages servíruje soubory bez Jekyllu
 fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)
 fetch-swiftterm.sh          # stáhne SwiftTerm v připnuté verzi do vendor/
@@ -600,8 +601,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   znovu a operaci zopakuje. ⌥F5 (Zabalit do ZIP) má v dialogu uložení volbu
   šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
   (prázdné nebo neshodné heslo dialog nepustí dál).
-- **O aplikaci** (aplikační menu): klikací odkazy na webovou stránku projektu
-  a na zdrojový kód na GitHubu; verze a číslo sestavení, git commit a datum
+- **O aplikaci** (aplikační menu): tlačítka **Webová stránka** a **Zdrojový kód
+  na GitHubu** (otevřou prohlížeč, okno zůstane otevřené); verze a číslo sestavení, git commit a datum
   sestavení (doplňuje je Makefile do `Info.plist`), architektura (nativně /
   přes Rosettu), verze jádra salcore a SwiftTerm, nejstarší podporovaný macOS;
   o systému verze macOS s číslem sestavení, model Macu, procesor a počet jader,
