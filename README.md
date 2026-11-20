@@ -34,9 +34,9 @@ Salamander → MicroCommander. Stránky mají sekci **Pro uživatele Salamanderu
 a **Časté otázky** (`#faq`, 7 otázek). V `<head>` je JSON-LD `SoftwareApplication`
 (+ `SoftwareSourceCode`, autor s odkazem na <https://svopex.eu>) a `FAQPage` – texty
 FAQPage musí odpovídat viditelným odpovědím v `#faq`; dále Open Graph a Twitter Card
-(`og:locale` cs_CZ / en_US s `og:locale:alternate`), odkaz na `llms.txt` a zakomentovaná
-místa pro ověřovací meta tagy Google Search Console, Seznam Webmaster a Bing
-(návod v komentáři; po získání kódu řádek odkomentovat jen v `index.html`, `en/` patří do stejné služby). Patička
+(`og:locale` cs_CZ / en_US s `og:locale:alternate`), odkaz na `llms.txt`, ověřovací
+značka Google Search Console a zakomentovaná místa pro Seznam Webmaster a Bing
+(návod v komentáři; kódy jen v `index.html`, `en/` patří do stejné služby). Patička
 obsahuje poznámku o ochranné známce Altap. Obrázky v obsahu mají `width`/`height`
 a kromě ikon nahoře `loading="lazy"`.
 
