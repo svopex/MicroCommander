@@ -17,6 +17,7 @@
   --accent-2: light-dark(#f5a524, #ffb547);
   --accent-text: light-dark(#ffffff, #1a1007);
   --accent-soft: light-dark(rgba(232, 113, 10, 0.12), rgba(255, 138, 42, 0.14));
+  --accent-line: color-mix(in srgb, var(--accent) 45%, var(--line));
   --free-bg: light-dark(#ecf8ef, #132219);
   --free-line: light-dark(#c6e8cf, #23452e);
   --free-text: light-dark(#17763a, #70dc8f);
@@ -389,7 +390,7 @@ button.button {
   transition: transform 0.15s, border-color 0.15s;
 }
 
-.card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.card:hover { transform: translateY(-2px); border-color: var(--accent-line); }
 
 .card svg {
   width: 40px;
@@ -448,17 +449,71 @@ kbd {
 
 .shot figcaption { margin-top: 14px; color: var(--muted); font-size: 0.9rem; text-align: center; }
 
-/* Časté otázky: karty pod sebou s otázkou jako nadpisem H3 */
+/* Časté otázky: rozbalovací karty <details> pod sebou, otázka (H3) v <summary>
+   a vpravo znaménko +, které se po otevření otočí na × */
 .faq { display: grid; gap: 12px; max-width: 820px; }
 
 .faq-item {
-  padding: 20px 22px;
   border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--line);
+  transition: border-color 0.15s;
 }
 
-.faq-item p { margin: 0; color: var(--muted); }
+.faq-item:hover,
+.faq-item[open] { border-color: var(--accent-line); }
+
+/* Klikací řádek s otázkou; skrývá výchozí trojúhelník (marker i WebKit varianta) */
+.faq-item summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: inherit;
+}
+
+.faq-item summary::-webkit-details-marker { display: none; }
+
+.faq-item summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.faq-item summary h3 { flex: 1; margin: 0; }
+
+/* Znaménko + kreslené dvěma čárami pozadí; po otevření se otočí o 45° na × */
+.faq-item summary::after {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) center / 100% 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat;
+  transition: transform 0.2s;
+}
+
+.faq-item[open] summary::after { transform: rotate(45deg); }
+
+.faq-item p { margin: 0; padding: 0 22px 20px; color: var(--muted); }
+
+/* Plynulé rozbalení v prohlížečích s ::details-content a interpolate-size;
+   ostatní kartu otevřou okamžitě */
+@supports (interpolate-size: allow-keywords) {
+  .faq-item { interpolate-size: allow-keywords; }
+
+  .faq-item::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition: block-size 0.25s ease, content-visibility 0.25s allow-discrete;
+  }
+
+  .faq-item[open]::details-content { block-size: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-item summary::after,
+  .faq-item::details-content { transition: none; }
+}
 
 /* Architektura: dvě vrstvy propojené C ABI */
 .arch { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }

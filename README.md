@@ -31,7 +31,8 @@ SEO webu (cílové dotazy „Salamander pro Mac“, „Altap Salamander alternat
 „Salamander pro Mac / for Mac“, úvod vysvětluje vztah Altap Salamander → Open
 Salamander → MicroCommander. Stránky mají sekci **Pro uživatele Salamanderu**
 (`#salamander`: zkratky, panely, barvy, co zatím chybí, skutečný screenshot okna)
-a **Časté otázky** (`#faq`, 7 otázek). V `<head>` je JSON-LD `SoftwareApplication`
+a **Časté otázky** (`#faq`, 7 rozbalovacích otázek v `<details>` – odpověď je
+v HTML i zavřená, takže ji vyhledávače indexují). V `<head>` je JSON-LD `SoftwareApplication`
 (+ `SoftwareSourceCode`, autor s odkazem na <https://svopex.eu>) a `FAQPage` – texty
 FAQPage musí odpovídat viditelným odpovědím v `#faq`; dále Open Graph a Twitter Card
 (`og:locale` cs_CZ / en_US s `og:locale:alternate`), odkaz na `llms.txt`, ověřovací

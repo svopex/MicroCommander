@@ -35,7 +35,7 @@
   <!-- ?v= obchází cache prohlížeče (GitHub Pages: max-age 10 min) – při změně souborů v site/ zvýšit -->
   <!-- theme.js bez defer: uložený motiv se nastaví ještě před vykreslením stránky -->
   <script src="../site/theme.js?v=6"></script>
-  <link rel="stylesheet" href="../site/style.css?v=6">
+  <link rel="stylesheet" href="../site/style.css?v=7">
   <script src="../site/site.js?v=6" defer></script>
   <!-- Strukturovaná data pro vyhledávače (schema.org, JSON-LD – data, ne skript):
        aplikace a její zdrojový kód. Údaje drží shodně s index.html. -->
@@ -374,20 +374,21 @@
       </figure>
     </section>
 
-    <!-- Časté otázky: viditelné odpovědi; shodné texty jsou ve FAQPage JSON-LD v <head> -->
+    <!-- Časté otázky: rozbalovací <details> (odpověď je v HTML i zavřená, takže ji
+         vyhledávače indexují); shodné texty jsou ve FAQPage JSON-LD v <head> -->
     <section class="wrap" id="faq">
       <p class="eyebrow">FAQ</p>
       <h2>Salamander for Mac – questions and answers</h2>
       <div class="faq">
-        <article class="faq-item">
-          <h3>Is there an Altap Salamander for Mac?</h3>
+        <details class="faq-item">
+          <summary><h3>Is there an Altap Salamander for Mac?</h3></summary>
           <p>Altap Salamander is a file manager for Windows and there is no official macOS
             version. MicroCommander is an independent dual-pane file manager for macOS that
             adopts Salamander's controls. It is a port of Open Salamander, not an official
             Altap product.</p>
-        </article>
-        <article class="faq-item">
-          <h3>What is the difference between Altap Salamander, Open Salamander and MicroCommander?</h3>
+        </details>
+        <details class="faq-item">
+          <summary><h3>What is the difference between Altap Salamander, Open Salamander and MicroCommander?</h3></summary>
           <p>Altap Salamander is the original dual-pane file manager for Windows made by Altap.
             <a href="https://github.com/OpenSalamander/salamander" target="_blank" rel="noopener">Open Salamander</a>
             is its open-source version, released under the GPL. MicroCommander is a new rewrite
@@ -395,41 +396,41 @@
             <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Samandarin</a>,
             a community fork of Open Salamander, as its behavior reference. It is not affiliated
             with Altap.</p>
-        </article>
-        <article class="faq-item">
-          <h3>Does it use the same keyboard shortcuts as Salamander?</h3>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Does it use the same keyboard shortcuts as Salamander?</h3></summary>
           <p>Yes, the controls follow Salamander: F2 rename, F3 view, F4 edit, F5 copy, F6 move,
             F7 new folder, F8 delete, Alt+F5 pack into ZIP and Ctrl+F3 to Ctrl+F6 to sort.
             Ctrl shortcuts also have a ⌘ variant on the Mac. On a Mac keyboard the F-keys need
             Fn, or turn on “Use F1, F2, etc. keys as standard function keys”. Every shortcut
             can be changed in Settings, and F1 shows an overview.</p>
-        </article>
-        <article class="faq-item">
-          <h3>Does it support FTP, SFTP and archives like Salamander?</h3>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Does it support FTP, SFTP and archives like Salamander?</h3></summary>
           <p>Yes. FTP and SFTP with saved servers and passwords in the Keychain; SFTP sign-in
             with a password, a key (ed25519, ECDSA, RSA) or ssh-agent. ZIP, TAR and TAR.GZ open
             like a folder, and you can create ZIP files, including AES-256 or ZipCrypto
             encryption. Archives are read-only for now; 7z, RAR and FTPS are not supported.</p>
-        </article>
-        <article class="faq-item">
-          <h3>Is MicroCommander free?</h3>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Is MicroCommander free?</h3></summary>
           <p>Yes, completely free, with no ads, accounts or telemetry. It is free software
             licensed under GPL-2.0-or-later, with its source code on
             <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">GitHub</a>.</p>
-        </article>
-        <article class="faq-item">
-          <h3>Does it run on Apple Silicon and Intel Macs?</h3>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Does it run on Apple Silicon and Intel Macs?</h3></summary>
           <p>MicroCommander requires macOS 13 or later and is built right on your Mac for its
             processor. It is developed and tested on Apple Silicon; building on an Intel Mac
             has not been verified yet.</p>
-        </article>
-        <article class="faq-item">
-          <h3>How do I install MicroCommander?</h3>
+        </details>
+        <details class="faq-item">
+          <summary><h3>How do I install MicroCommander?</h3></summary>
           <p>There is no prebuilt app to download yet. MicroCommander is built from source with
             <a href="#download">three commands in Terminal</a>; you need the Xcode Command Line
             Tools and Rust. Then drag the resulting <code>build/MicroCommander.app</code> to your
             Applications folder.</p>
-        </article>
+        </details>
       </div>
     </section>
 
