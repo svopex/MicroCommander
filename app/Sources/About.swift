@@ -63,7 +63,7 @@ enum AboutInfo {
         return text
     }
 
-    /// Text okna: oddíly Aplikace a Systém, řádky „Popis: hodnota“.
+    /// Text okna: popis, autor a oddíly Aplikace a Systém, řádky „Popis: hodnota“.
     static var text: String {
         let info = ProcessInfo.processInfo
         // Verze a číslo sestavení z Info.plist; commit a datum doplňuje Makefile.
@@ -88,7 +88,8 @@ enum AboutInfo {
         system.append("Jazyk: \(Locale.current.identifier)")
         system.append("Spuštěno: \(Bundle.main.bundlePath)")
 
-        return "Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů).\n\n"
+        return "Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů).\n"
+            + "Autor: © 2026 Petr Svoboda\n\n"
             + "Aplikace\n" + application.map { "  " + $0 }.joined(separator: "\n")
             + "\n\nSystém\n" + system.map { "  " + $0 }.joined(separator: "\n")
     }
