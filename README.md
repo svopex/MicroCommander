@@ -602,7 +602,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
   (prázdné nebo neshodné heslo dialog nepustí dál).
 - **O aplikaci** (aplikační menu): tlačítka **Webová stránka** a **Zdrojový kód
-  na GitHubu** (otevřou prohlížeč, okno zůstane otevřené); autor (© 2026 Petr Svoboda); verze a číslo sestavení, git commit a datum
+  na GitHubu** (otevřou prohlížeč, okno zůstane otevřené); autor (© 2026 Svopex); verze a číslo sestavení, git commit a datum
   sestavení (doplňuje je Makefile do `Info.plist`), architektura (nativně /
   přes Rosettu), verze jádra salcore a SwiftTerm, nejstarší podporovaný macOS;
   o systému verze macOS s číslem sestavení, model Macu, procesor a počet jader,

@@ -89,7 +89,7 @@ enum AboutInfo {
         system.append("Spuštěno: \(Bundle.main.bundlePath)")
 
         return "Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů).\n"
-            + "Autor: © 2026 Petr Svoboda\n\n"
+            + "Autor: © 2026 Svopex\n\n"
             + "Aplikace\n" + application.map { "  " + $0 }.joined(separator: "\n")
             + "\n\nSystém\n" + system.map { "  " + $0 }.joined(separator: "\n")
     }
