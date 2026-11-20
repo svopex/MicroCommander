@@ -433,8 +433,9 @@ kbd {
 
 .switch-item p { margin: 0; color: var(--muted); font-size: 0.95rem; }
 
-/* Skutečný screenshot aplikace: přes celou šířku sloupce, výška podle poměru stran */
-.shot { margin: 28px 0 0; }
+/* Skutečný screenshot aplikace: na střed, stejně široký jako ilustrace okna .app,
+   aby text v okně zůstal čitelný; obrázek má 2× šířku (1760 px) pro Retina */
+.shot { margin: 28px auto 0; max-width: 880px; }
 
 .shot img {
   display: block;

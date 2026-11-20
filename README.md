@@ -44,8 +44,11 @@ a kromě ikon nahoře `loading="lazy"`.
   (cs / en) a `site/screenshot-cs.webp`, `site/screenshot-en.webp` – screenshot do
   sekce Pro uživatele Salamanderu. Vznikly ze skutečného snímku okna
   (`SAL_SNAPSHOT=… SAL_LANG=cs|en`, panely spuštěné na ukázkových adresářích přes
-  argumenty `-leftPanelPath … -rightPanelPath … -viewModeLeft 2 -viewModeRight 2`)
-  oříznutého a složeného v Pillow; WebP přes `cwebp`.
+  argumenty `-leftPanelPath … -rightPanelPath … -viewModeLeft 2 -viewModeRight 2`,
+  okno 1060×760 pt přes `"-NSWindow Frame MicroCommanderMain" "200 150 1060 760 …"`),
+  který `tools/compose_screenshot.py` (Pillow) ořízne od řádku s cestou (bez toolbaru
+  a lišty disků), vyřízne pás prázdného místa pod seznamy a zmenší na 1760 px
+  (2× šířka na webu); WebP přes `cwebp -q 85`.
 - `sitemap.xml` – obě jazykové verze s `lastmod` a `xhtml:link` alternates; při
   změně obsahu stránek aktualizovat `lastmod`.
 - `llms.txt` – stručný popis projektu pro jazykové modely (formát llmstxt.org).
@@ -223,6 +226,7 @@ app/                        # tenké UI pro macOS
 tools/make-icon.swift       # vykreslí ikonu: oranžový disk s tlapkou mloka
                             #   ve stylu Salamandera na macOS dlaždici
 tools/i18n_check.py         # kontrola úplnosti překladů (Swift, Rust, slovníky)
+tools/compose_screenshot.py # složí screenshot okna pro web (site/screenshot-*.webp)
 tests/main.swift            # end-to-end smoke test FFI (Swift CLI)
 tests/sftp_test.sh          # SFTP end-to-end proti dočasnému sshd (make sftp-test)
 Makefile                    # build celé aplikace jedním příkazem
