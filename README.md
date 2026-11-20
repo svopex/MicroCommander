@@ -11,6 +11,10 @@ roboti ji nenajdou); patička odkazuje na web autora <https://svopex.eu>.
 Anglická verze webu je `en/index.html` (assety přes `../site/`); obě stránky mají
 v navigaci přepínač CS / EN, v hlavičce `canonical` a `hreflang` (cs, en, x-default)
 a obsah udržovaný 1:1; `site/site.js` volí texty podle `lang` stránky.
+Motiv webu: přepínač v navigaci cyklicky volí podle systému / světlý / tmavý
+(`site/theme.js` se načítá v `<head>` bez `defer`, aby se uložený motiv nastavil
+před vykreslením; volba v `localStorage`). Barvy jsou v `site/style.css` jako
+`light-dark()` a ruční volba přepne `color-scheme` atributem `data-theme`.
 Při změně souborů v `site/` zvýšit v `index.html` i `en/index.html` číslo `?v=`
 u odkazů na CSS a JS, jinak prohlížeče až 10 minut (cache GitHub Pages) drží starou verzi.
 
@@ -187,7 +191,8 @@ Makefile                    # build celé aplikace jedním příkazem
 index.html                  # webová stránka projektu (GitHub Pages z kořene
                             #   větve main, https://svopex.github.io/MicroCommander/)
 en/index.html               # anglická verze webové stránky
-site/                       # styly, skript (tlačítka Kopírovat a Poslat e-mail)
+site/                       # styly, skripty (tlačítka Kopírovat a Poslat e-mail,
+                            #   přepínač motivu theme.js)
                             #   a ikona webové stránky
 .nojekyll                   # GitHub Pages servíruje soubory bez Jekyllu
 fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)

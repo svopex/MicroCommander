@@ -1,63 +1,45 @@
 /* Styly webové stránky projektu (index.html v kořeni repozitáře). */
 
-/* Barevné tokeny – světlý režim; oranžová odpovídá ikoně aplikace */
+/* Barevné tokeny – každá barva jako light-dark(světlá, tmavá); oranžová odpovídá
+   ikoně aplikace. Bez ruční volby platí motiv prohlížeče / systému (color-scheme:
+   light dark), přepínač v navigaci nastaví data-theme (site/theme.js). */
 :root {
+  color-scheme: light dark;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
-  --bg: #fafaf8;
-  --surface: #ffffff;
-  --surface-2: #f2f1ee;
-  --text: #17171a;
-  --muted: #62626b;
-  --line: #e4e2dd;
-  --accent: #e8710a;
-  --accent-2: #f5a524;
-  --accent-text: #ffffff;
-  --accent-soft: rgba(232, 113, 10, 0.12);
-  --free-bg: #ecf8ef;
-  --free-line: #c6e8cf;
-  --free-text: #17763a;
-  --code-bg: #17171a;
+  --bg: light-dark(#fafaf8, #111113);
+  --surface: light-dark(#ffffff, #1a1a1d);
+  --surface-2: light-dark(#f2f1ee, #222226);
+  --text: light-dark(#17171a, #ededf0);
+  --muted: light-dark(#62626b, #a1a1aa);
+  --line: light-dark(#e4e2dd, #2c2c31);
+  --accent: light-dark(#e8710a, #ff8a2a);
+  --accent-2: light-dark(#f5a524, #ffb547);
+  --accent-text: light-dark(#ffffff, #1a1007);
+  --accent-soft: light-dark(rgba(232, 113, 10, 0.12), rgba(255, 138, 42, 0.14));
+  --free-bg: light-dark(#ecf8ef, #132219);
+  --free-line: light-dark(#c6e8cf, #23452e);
+  --free-text: light-dark(#17763a, #70dc8f);
+  --code-bg: light-dark(#17171a, #0b0b0d);
   --code-text: #ececef;
-  --app-chrome: #ececee;
-  --app-chrome-2: #dcdce0;
-  --panel-bg: #ffffff;
-  --panel-text: #1d1d1f;
-  --panel-path: #2a6ad4;
-  --panel-path-off: #e2e2e6;
-  --marked: #d01010;
-  --cursor: #d6d6dc;
-  --shadow: 0 30px 80px -20px rgba(30, 20, 10, 0.28), 0 8px 24px -8px rgba(30, 20, 10, 0.12);
+  --app-chrome: light-dark(#ececee, #2a2a2e);
+  --app-chrome-2: light-dark(#dcdce0, #3a3a3f);
+  --panel-bg: light-dark(#ffffff, #1c1c1f);
+  --panel-text: light-dark(#1d1d1f, #e6e6ea);
+  --panel-path: light-dark(#2a6ad4, #2f62ad);
+  --panel-path-off: light-dark(#e2e2e6, #303035);
+  --marked: light-dark(#d01010, #ff5c5c);
+  --cursor: light-dark(#d6d6dc, #3a3a40);
+  --shadow: 0 30px 80px -20px light-dark(rgba(30, 20, 10, 0.28), rgba(0, 0, 0, 0.7)),
+    0 8px 24px -8px light-dark(rgba(30, 20, 10, 0.12), rgba(0, 0, 0, 0.5));
 }
 
-/* Tmavý režim podle systému */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111113;
-    --surface: #1a1a1d;
-    --surface-2: #222226;
-    --text: #ededf0;
-    --muted: #a1a1aa;
-    --line: #2c2c31;
-    --accent: #ff8a2a;
-    --accent-2: #ffb547;
-    --accent-text: #1a1007;
-    --accent-soft: rgba(255, 138, 42, 0.14);
-    --free-bg: #132219;
-    --free-line: #23452e;
-    --free-text: #70dc8f;
-    --code-bg: #0b0b0d;
-    --code-text: #ececef;
-    --app-chrome: #2a2a2e;
-    --app-chrome-2: #3a3a3f;
-    --panel-bg: #1c1c1f;
-    --panel-text: #e6e6ea;
-    --panel-path: #2f62ad;
-    --panel-path-off: #303035;
-    --marked: #ff5c5c;
-    --cursor: #3a3a40;
-    --shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7), 0 8px 24px -8px rgba(0, 0, 0, 0.5);
-  }
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 /* Základ stránky */
@@ -133,11 +115,43 @@ main > section { margin-block: 64px; }
   text-decoration: none;
 }
 
-.nav-links { display: flex; gap: 22px; }
+.nav-links { display: flex; align-items: center; gap: 22px; }
 
 .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.95rem; }
 
 .nav-links a:hover { color: var(--text); }
+
+/* Přepínač motivu: podle systému → světlý → tmavý; ikona podle aktuálního režimu */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.theme-toggle:hover { color: var(--text); border-color: var(--muted); }
+
+.theme-icon {
+  display: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.theme-toggle[data-mode="auto"] .theme-icon-auto,
+.theme-toggle[data-mode="light"] .theme-icon-light,
+.theme-toggle[data-mode="dark"] .theme-icon-dark { display: block; }
 
 /* Úvod: text na střed, pod ním ukázka okna, v pozadí oranžová záře */
 .hero {
