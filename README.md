@@ -51,9 +51,10 @@ a kromě ikon nahoře `loading="lazy"`.
 - `llms.txt` – stručný popis projektu pro jazykové modely (formát llmstxt.org).
 - `632709df962ce1f96f4daba2fbbb760d.txt` – klíč IndexNow (Bing, Seznam, Yandex);
   obsah souboru je přesně klíč, nemazat ani neměnit.
-- `robots.txt` na projektových GitHub Pages nefunguje (musí být v kořeni
-  `svopex.github.io`), sitemapa se proto odesílá ručně v Google Search Console
-  a Seznam Webmaster.
+- `robots.txt` projektové GitHub Pages nemají (vyhledávače ho čtou jen z kořene
+  domény); odkaz na sitemapu je v `robots.txt` repozitáře
+  [svopex.github.io](https://github.com/svopex/svopex.github.io), kde jsou
+  i kódy Seznam Webmasteru pro ověření na kořeni domény.
 
 ## Prvotni zadani
 
