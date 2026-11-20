@@ -17,8 +17,8 @@ enum PanelColorScheme: String, CaseIterable {
     /// Název v Nastavení (jména schémat převzatá ze Salamandera).
     var title: String {
         switch self {
-        case .macDark: return "macOS – tmavé"
-        case .macSystem: return "macOS – podle systému"
+        case .macDark: return tr("macOS – tmavé")
+        case .macSystem: return tr("macOS – podle systému")
         case .salamander: return "Open Salamander"
         case .explorer: return "Windows Explorer"
         case .norton: return "Norton Commander"

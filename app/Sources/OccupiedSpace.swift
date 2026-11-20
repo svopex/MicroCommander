@@ -54,12 +54,12 @@ final class OccupiedSpaceDialog: InfoDialog {
     /// Sestaví dialog; zobrazuje se jako sheet (MainWindowController.presentSheet).
     /// - Parameter info: výsledek počítání
     init(info: OccupiedSpaceInfo) {
-        super.init(title: "Obsazené místo", width: 520)
+        super.init(title: tr("Obsazené místo"), width: 520)
         buildContent(info)
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Rozvržení: ikona s umístěním a položkami, pod čarou velikost a počty
@@ -85,22 +85,22 @@ final class OccupiedSpaceDialog: InfoDialog {
         icon.imageScaling = .scaleProportionallyUpOrDown
         content.place(icon, NSRect(x: 18, y: y, width: 36, height: 36))
         let textWidth = width - valueX - 16
-        addRow("Umístění:", makeValue(info.location), width: textWidth)
+        addRow(tr("Umístění:"), makeValue(info.location), width: textWidth)
         if info.itemCount == 1 {
-            addRow("Položka:", makeValue(info.itemNames[0]), width: textWidth)
+            addRow(tr("Položka:"), makeValue(info.itemNames[0]), width: textWidth)
         } else {
             // Jména více položek jsou v tooltipu (jen prvních pár).
-            let itemsField = makeValue("\(info.itemCount) označené")
+            let itemsField = makeValue(tr("%@ označené", String(info.itemCount)))
             let listed = info.itemNames.joined(separator: "\n")
             itemsField.toolTip = info.itemCount > info.itemNames.count ? listed + "\n…" : listed
-            addRow("Položky:", itemsField, width: textWidth)
+            addRow(tr("Položky:"), itemsField, width: textWidth)
         }
         y = content.addSeparator(y: y)
 
         // Velikost a počty souborů a adresářů (vpravo ve sloupci bajtů).
-        y = addSizeRow("Obsazené místo:", bytes: info.bytes, to: content, y: y)
-        addRow("Souborů:", makeValue(formatExactSize(UInt64(info.files)), alignment: .right), width: 190)
-        addRow("Adresářů:", makeValue(formatExactSize(UInt64(info.dirs)), alignment: .right), width: 190)
+        y = addSizeRow(tr("Obsazené místo:"), bytes: info.bytes, to: content, y: y)
+        addRow(tr("Souborů:"), makeValue(formatExactSize(UInt64(info.files)), alignment: .right), width: 190)
+        addRow(tr("Adresářů:"), makeValue(formatExactSize(UInt64(info.dirs)), alignment: .right), width: 190)
         y = content.addSeparator(y: y)
 
         finish(content: content, y: y)

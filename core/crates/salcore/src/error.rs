@@ -64,14 +64,15 @@ impl SalError {
 
 impl fmt::Display for SalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Pevné texty se překládají do jazyka jádra, text Io už je hotová hláška
         match self {
-            SalError::Cancelled => write!(f, "Operace byla zrušena."),
-            SalError::NotFound => write!(f, "Soubor nebo adresář nebyl nalezen."),
-            SalError::AlreadyExists => write!(f, "Cíl už existuje."),
-            SalError::NotEmpty => write!(f, "Adresář není prázdný."),
-            SalError::PermissionDenied => write!(f, "Přístup odepřen."),
-            SalError::PasswordRequired => write!(f, "Soubor v archivu je zaheslovaný – zadejte heslo."),
-            SalError::InvalidPassword => write!(f, "Chybné heslo k archivu."),
+            SalError::Cancelled => f.write_str(&crate::i18n::tr("Operace byla zrušena.")),
+            SalError::NotFound => f.write_str(&crate::i18n::tr("Soubor nebo adresář nebyl nalezen.")),
+            SalError::AlreadyExists => f.write_str(&crate::i18n::tr("Cíl už existuje.")),
+            SalError::NotEmpty => f.write_str(&crate::i18n::tr("Adresář není prázdný.")),
+            SalError::PermissionDenied => f.write_str(&crate::i18n::tr("Přístup odepřen.")),
+            SalError::PasswordRequired => f.write_str(&crate::i18n::tr("Soubor v archivu je zaheslovaný – zadejte heslo.")),
+            SalError::InvalidPassword => f.write_str(&crate::i18n::tr("Chybné heslo k archivu.")),
             SalError::Io(msg) => write!(f, "{}", msg),
         }
     }

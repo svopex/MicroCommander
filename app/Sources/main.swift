@@ -30,6 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Jazyk chybových hlášek jádra podle jazyka rozhraní (určený při startu).
+        sal_set_language(Localization.current)
         // Zbytky dočasných kopií po dřívějším pádu aplikace – na pozadí, mazání
         // velkých rozbalených souborů nesmí zdržet start.
         DispatchQueue.global(qos: .utility).async { TempFiles.removeStale() }
@@ -100,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Nabídka ikony v Docku: nové okno.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let menu = NSMenu()
-        let item = menu.addItem(withTitle: "Nové okno", action: #selector(newWindowFromDock(_:)), keyEquivalent: "")
+        let item = menu.addItem(withTitle: tr("Nové okno"), action: #selector(newWindowFromDock(_:)), keyEquivalent: "")
         item.target = self
         return menu
     }
@@ -147,129 +149,132 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         // Aplikační menu.
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "O aplikaci MicroCommander", action: #selector(showAbout(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: tr("O aplikaci MicroCommander"), action: #selector(showAbout(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Nastavení…", action: #selector(showSettings(_:)), keyEquivalent: ",")
+        appMenu.addItem(withTitle: tr("Nastavení…"), action: #selector(showSettings(_:)), keyEquivalent: ",")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Skrýt MicroCommander", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(withTitle: "Ukončit MicroCommander", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: tr("Skrýt MicroCommander"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: tr("Ukončit MicroCommander"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         addSubmenu(appMenu, title: "MicroCommander", to: mainMenu)
 
         // Standardní Úpravy – nutné pro ⌘C/⌘V/⌘X v textových polích
         // (⌘A / vybrat vše je v menu Označit › Označit vše).
-        let editMenu = NSMenu(title: "Úpravy")
-        editMenu.addItem(withTitle: "Zpět", action: Selector(("undo:")), keyEquivalent: "z")
+        let editMenu = NSMenu(title: tr("Úpravy"))
+        // „Zpět“ je ve slovníku příkaz historie panelu (Back); v Úpravách jde
+        // o vrácení úpravy (Undo), proto překlad s kontextem.
+        let undoTitle = trc("undo", "Zpět")
+        editMenu.addItem(withTitle: undoTitle, action: Selector(("undo:")), keyEquivalent: "z")
         editMenu.addItem(.separator())
-        editMenu.addItem(withTitle: "Vyjmout", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "Kopírovat", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Vložit", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: tr("Vyjmout"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: tr("Kopírovat"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: tr("Vložit"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(.separator())
         // Cesta aktuálního adresáře aktivního panelu (Ctrl+Alt+Insert v Salamanderu).
-        editMenu.addItem(makeItem(("Kopírovat cestu adresáře", .copyDirPath)))
+        editMenu.addItem(makeItem((tr("Kopírovat cestu adresáře"), .copyDirPath)))
 
         let fileEntries: [Entry] = [
-            ("Nové okno", .newWindow),
+            (tr("Nové okno"), .newWindow),
             nil,
-            ("Zobrazit", .view),
-            ("Upravit", .edit),
-            ("Zobrazit ve Finderu", .revealInFinder),
-            ("Nový soubor…", .newFile),
+            (tr("Zobrazit"), .view),
+            (tr("Upravit"), .edit),
+            (tr("Zobrazit ve Finderu"), .revealInFinder),
+            (tr("Nový soubor…"), .newFile),
             nil,
-            ("Kopírovat…", .copy),
-            ("Přesunout…", .move),
-            ("Duplikovat", .duplicate),
-            ("Přejmenovat…", .rename),
-            ("Změnit atributy…", .changeAttributes),
-            ("Vlastnosti…", .properties),
-            ("Oprávnění…", .permissions),
-            ("Smazat…", .delete),
-            ("Smazat trvale…", .deletePermanent),
-            ("Nový adresář…", .mkdir),
+            (tr("Kopírovat…"), .copy),
+            (tr("Přesunout…"), .move),
+            (tr("Duplikovat"), .duplicate),
+            (tr("Přejmenovat…"), .rename),
+            (tr("Změnit atributy…"), .changeAttributes),
+            (tr("Vlastnosti…"), .properties),
+            (tr("Oprávnění…"), .permissions),
+            (tr("Smazat…"), .delete),
+            (tr("Smazat trvale…"), .deletePermanent),
+            (tr("Nový adresář…"), .mkdir),
             nil,
-            ("Zabalit do ZIP…", .pack),
-            ("Rozbalit…", .unpack),
-            ("Spočítat velikost", .calcSize),
+            (tr("Zabalit do ZIP…"), .pack),
+            (tr("Rozbalit…"), .unpack),
+            (tr("Spočítat velikost"), .calcSize),
         ]
-        addSubmenu(makeMenu("Soubory", fileEntries), title: "Soubory", to: mainMenu)
-        addSubmenu(editMenu, title: "Úpravy", to: mainMenu)
+        addSubmenu(makeMenu(tr("Soubory"), fileEntries), title: tr("Soubory"), to: mainMenu)
+        addSubmenu(editMenu, title: tr("Úpravy"), to: mainMenu)
 
         let markEntries: [Entry] = [
-            ("Zrušit označení", .unselectAll),
-            ("Označit podle masky…", .selectMask),
-            ("Odznačit podle masky…", .unselectMask),
-            ("Invertovat označení (Num *)", .invertMarks),
+            (tr("Zrušit označení"), .unselectAll),
+            (tr("Označit podle masky…"), .selectMask),
+            (tr("Odznačit podle masky…"), .unselectMask),
+            (tr("Invertovat označení (Num *)"), .invertMarks),
             nil,
-            ("Porovnat adresáře", .compare),
+            (tr("Porovnat adresáře"), .compare),
         ]
-        let markMenu = makeMenu("Označit", markEntries)
+        let markMenu = makeMenu(tr("Označit"), markEntries)
         // ⌘A přes responder chain (cíl nil): v panelu označí vše (selectAll: →
         // příkaz Označit vše), v textových polích a dialozích vybere text.
-        let selectAllItem = markMenu.insertItem(withTitle: "Označit vše", action: #selector(NSText.selectAll(_:)),
+        let selectAllItem = markMenu.insertItem(withTitle: tr("Označit vše"), action: #selector(NSText.selectAll(_:)),
                                                 keyEquivalent: "", at: 0)
         AppDelegate.applyShortcut(to: selectAllItem)
-        addSubmenu(markMenu, title: "Označit", to: mainMenu)
+        addSubmenu(markMenu, title: tr("Označit"), to: mainMenu)
 
         let commandEntries: [Entry] = [
-            ("Vyhledat soubory a adresáře…", .find),
-            ("Terminál na celé okno", .terminalFull),
-            ("Nová záložka terminálu", .terminalNewTab),
-            ("Zavřít záložku terminálu", .terminalCloseTab),
-            ("Další záložka terminálu", .terminalNextTab),
-            ("Předchozí záložka terminálu", .terminalPreviousTab),
-            ("Terminal.app v adresáři", .terminal),
+            (tr("Vyhledat soubory a adresáře…"), .find),
+            (tr("Terminál na celé okno"), .terminalFull),
+            (tr("Nová záložka terminálu"), .terminalNewTab),
+            (tr("Zavřít záložku terminálu"), .terminalCloseTab),
+            (tr("Další záložka terminálu"), .terminalNextTab),
+            (tr("Předchozí záložka terminálu"), .terminalPreviousTab),
+            (tr("Terminal.app v adresáři"), .terminal),
             nil,
-            ("FTP/SFTP servery…", .connect),
-            ("Odpojit / zavřít archiv", .disconnect),
+            (tr("FTP/SFTP servery…"), .connect),
+            (tr("Odpojit / zavřít archiv"), .disconnect),
             nil,
-            ("Nápověda ke klávesám", .help),
+            (tr("Nápověda ke klávesám"), .help),
         ]
-        addSubmenu(makeMenu("Příkazy", commandEntries), title: "Příkazy", to: mainMenu)
+        addSubmenu(makeMenu(tr("Příkazy"), commandEntries), title: tr("Příkazy"), to: mainMenu)
 
         let panelEntries: [Entry] = [
-            ("Zpět", .back),
-            ("Vpřed", .forward),
-            ("Nadřazený adresář", .up),
-            ("Kořenový adresář", .root),
-            ("Domovský adresář", .home),
-            ("Změnit adresář…", .changeDir),
-            ("Poslat adresář do druhého panelu", .sameDirOther),
-            ("Převzít adresář z druhého panelu", .sameDir),
+            (tr("Zpět"), .back),
+            (tr("Vpřed"), .forward),
+            (tr("Nadřazený adresář"), .up),
+            (tr("Kořenový adresář"), .root),
+            (tr("Domovský adresář"), .home),
+            (tr("Změnit adresář…"), .changeDir),
+            (tr("Poslat adresář do druhého panelu"), .sameDirOther),
+            (tr("Převzít adresář z druhého panelu"), .sameDir),
             nil,
-            ("Disk v levém panelu…", .driveLeft),
-            ("Disk v pravém panelu…", .driveRight),
-            ("Upravit nabídku disků…", .editPlaces),
-            ("Informace o jednotce…", .driveInfo),
+            (tr("Disk v levém panelu…"), .driveLeft),
+            (tr("Disk v pravém panelu…"), .driveRight),
+            (tr("Upravit nabídku disků…"), .editPlaces),
+            (tr("Informace o jednotce…"), .driveInfo),
             nil,
-            ("Řadit podle jména", .sortName),
-            ("Řadit podle přípony", .sortExt),
-            ("Řadit podle času", .sortTime),
-            ("Řadit podle velikosti", .sortSize),
+            (tr("Řadit podle jména"), .sortName),
+            (tr("Řadit podle přípony"), .sortExt),
+            (tr("Řadit podle času"), .sortTime),
+            (tr("Řadit podle velikosti"), .sortSize),
             nil,
-            ("Obnovit", .refresh),
-            ("Prohodit panely", .swap),
+            (tr("Obnovit"), .refresh),
+            (tr("Prohodit panely"), .swap),
         ]
-        addSubmenu(makeMenu("Panel", panelEntries), title: "Panel", to: mainMenu)
+        addSubmenu(makeMenu(tr("Panel"), panelEntries), title: tr("Panel"), to: mainMenu)
 
         // Zobrazení – režimy panelu jako v Salamanderu (Alt+1..6 → ⌥1..⌥6) a skryté soubory.
         let viewEntries: [Entry] = [
-            ("Stručný", .viewBrief),
-            ("Podrobný", .viewDetailed),
-            ("Ikony", .viewIcons),
-            ("Miniatury", .viewThumbnails),
-            ("Dlaždice", .viewTiles),
-            ("Typy", .viewTypes),
+            (tr("Stručný"), .viewBrief),
+            (tr("Podrobný"), .viewDetailed),
+            (tr("Ikony"), .viewIcons),
+            (tr("Miniatury"), .viewThumbnails),
+            (tr("Dlaždice"), .viewTiles),
+            (tr("Typy"), .viewTypes),
             nil,
-            ("Zobrazovat skryté soubory", .toggleHidden),
+            (tr("Zobrazovat skryté soubory"), .toggleHidden),
         ]
-        addSubmenu(makeMenu("Zobrazení", viewEntries), title: "Zobrazení", to: mainMenu)
+        addSubmenu(makeMenu(tr("Zobrazení"), viewEntries), title: tr("Zobrazení"), to: mainMenu)
 
         // Okno – nové okno (⌘N) a standardní položky; macOS sem sám doplňuje
         // seznam otevřených oken.
-        let windowMenu = makeMenu("Okno", [("Nové okno", .newWindow)])
+        let windowMenu = makeMenu(tr("Okno"), [(tr("Nové okno"), .newWindow)])
         windowMenu.addItem(.separator())
-        windowMenu.addItem(withTitle: "Minimalizovat", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowMenu.addItem(withTitle: "Zavřít okno", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        addSubmenu(windowMenu, title: "Okno", to: mainMenu)
+        windowMenu.addItem(withTitle: tr("Minimalizovat"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: tr("Zavřít okno"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        addSubmenu(windowMenu, title: tr("Okno"), to: mainMenu)
         NSApplication.shared.windowsMenu = windowMenu
 
         NSApplication.shared.mainMenu = mainMenu

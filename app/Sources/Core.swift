@@ -77,7 +77,7 @@ struct Item: Equatable {
     /// který se prochází a počítá. `isDir` platí i pro odkaz na adresář.
     var isRealDir: Bool { isDir && !isLink }
     /// Slovní druh položky pro dotazy („smazat soubor …“).
-    var kindNoun: String { isLink ? "odkaz" : isDir ? "adresář" : "soubor" }
+    var kindNoun: String { isLink ? tr("odkaz") : isDir ? tr("adresář") : tr("soubor") }
     var isHidden: Bool { flags & SAL_FLAG_HIDDEN != 0 }
     var isReadonly: Bool { flags & SAL_FLAG_READONLY != 0 }
     var isEncrypted: Bool { flags & SAL_FLAG_ENCRYPTED != 0 }
@@ -91,9 +91,9 @@ enum CoreError: LocalizedError {
         switch self {
         case .code(let code, let message):
             if code == SAL_ERR_EXISTS {
-                return "\(message) (cíl už existuje)"
+                return tr("%@ (cíl už existuje)", message)
             }
-            return message.isEmpty ? "Chyba jádra (\(code))." : message
+            return message.isEmpty ? tr("Chyba jádra (%@).", String(code)) : message
         }
     }
 
@@ -531,25 +531,25 @@ func coreDelete(vfs: Vfs, dir: String, names: [String], state: ProgressState) th
 ///   - vfs: VFS položek – koš je jen na lokálním disku
 ///   - dirs: adresáře položek ve VFS (koš nemusí mít všechny – viz Vfs.hasTrash)
 ///   - toTrash: požadováno smazání do koše (F8 / Delete), jinak trvale
-///   - verb: sloveso v textu („smazat“, „odstranit“)
+///   - verb: sloveso v textu, už přeložené volajícím (tr("smazat"), tr("odstranit"))
 /// - Returns: text dialogu a adresáře, jejichž položky půjdou do koše (z ostatních
 ///   se maže trvale)
 func deleteConfirmation(items: [Item], vfs: Vfs, dirs: Set<String>, toTrash: Bool,
                         verb: String) -> (text: String, trashDirs: Set<String>) {
     let trashDirs = toTrash ? vfs.trashDirectories(among: dirs) : []
     let what = items.count == 1
-        ? "\(items[0].kindNoun) „\(items[0].name)“"
-        : "\(items.count) označených položek"
+        ? tr("%@ „%@“", items[0].kindNoun, items[0].name)
+        : plural(items.count, "označenou položku", "označené položky", "označených položek")
     // U trvalého mazání text uvede i proč, když byl požadován koš, ale není kam.
     let text: String
     if !toTrash {
-        text = "Opravdu trvale \(verb) \(what)?\nPoložky se nepřesunou do koše."
+        text = tr("Opravdu trvale %@ %@?\nPoložky se nepřesunou do koše.", verb, what)
     } else if trashDirs.isEmpty {
-        text = "Opravdu \(verb) \(what)?\nZde koš není – mazání je trvalé."
+        text = tr("Opravdu %@ %@?\nZde koš není – mazání je trvalé.", verb, what)
     } else if trashDirs.count < dirs.count {
-        text = "Opravdu \(verb) \(what)?\nPoložky na discích bez koše se smažou trvale, ostatní se přesunou do koše."
+        text = tr("Opravdu %@ %@?\nPoložky na discích bez koše se smažou trvale, ostatní se přesunou do koše.", verb, what)
     } else {
-        text = "Opravdu přesunout \(what) do koše?"
+        text = tr("Opravdu přesunout %@ do koše?", what)
     }
     return (text, trashDirs)
 }
@@ -579,14 +579,14 @@ private func coreTrash(vfs: Vfs, dir: String, names: [String], state: ProgressSt
         }
         // realPath je nil jen mimo lokální disk (sem se díky Vfs.hasTrash nedostane).
         guard let path = vfs.realPath(joinPath(dir, name)) else {
-            throw CoreError.code(SAL_ERR_GENERIC, "Do koše lze přesouvat jen položky na lokálním disku.")
+            throw CoreError.code(SAL_ERR_GENERIC, tr("Do koše lze přesouvat jen položky na lokálním disku."))
         }
         // trashItem přesouvá samotný odkaz, ne jeho cíl (poslední složku
         // cesty nesleduje), takže smazání odkazu na adresář cíl nezasáhne.
         do {
             try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
         } catch {
-            throw CoreError.code(SAL_ERR_GENERIC, "Nelze přesunout do koše „\(name)“: \(error.localizedDescription)")
+            throw CoreError.code(SAL_ERR_GENERIC, tr("Nelze přesunout do koše „%@“: %@", name, error.localizedDescription))
         }
     }
     state.update(done: total, total: total)

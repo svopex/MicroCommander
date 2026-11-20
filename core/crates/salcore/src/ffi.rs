@@ -92,6 +92,11 @@ const VERSION_CSTR: &str = concat!(env!("CARGO_PKG_VERSION"), "\0");
 
 /// Zapíše text (chybovou zprávu, popisek) do volajícím daného bufferu –
 /// vždy NUL-ukončený; delší text se zkrátí na hranici znaku UTF-8.
+/// Zapíše chybu „Neplatné argumenty <funkce>.“ (společná hláška kontrol vstupů FFI).
+fn write_invalid_args(err: *mut c_char, err_len: usize, function: &str) {
+    write_err(err, err_len, &crate::i18n::trf("Neplatné argumenty {}.", &[&function]));
+}
+
 fn write_err(err: *mut c_char, err_len: usize, msg: &str) {
     if err.is_null() || err_len == 0 {
         return;
@@ -132,9 +137,7 @@ fn connect_timeout(timeout_sec: f64) -> Duration {
 /// Spustí closures v catch_unwind – panika nesmí přejít přes C ABI.
 fn catch<T>(f: impl FnOnce() -> SalResult<T>) -> SalResult<T> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or_else(|_| {
-        Err(SalError::Io(
-            "Interní chyba jádra (neošetřená panika).".to_string(),
-        ))
+        Err(SalError::Io(crate::i18n::tr("Interní chyba jádra (neošetřená panika).")))
     })
 }
 
@@ -245,6 +248,15 @@ pub extern "C" fn sal_version() -> *const c_char {
     VERSION_CSTR.as_ptr() as *const c_char
 }
 
+/// Nastaví jazyk textů jádra (chybové hlášky): "en" = angličtina, jinak čeština.
+///
+/// # Safety
+/// `language` je NULL nebo platný C řetězec.
+#[no_mangle]
+pub unsafe extern "C" fn sal_set_language(language: *const c_char) {
+    crate::i18n::set_language(&opt_string(language).unwrap_or_default());
+}
+
 /// # Safety
 /// `root` je NULL nebo platný C řetězec.
 #[no_mangle]
@@ -286,7 +298,7 @@ pub unsafe extern "C" fn sal_connect_ftp(
     err_len: usize,
 ) -> *mut SalVfs {
     let Some(host) = opt_string(host) else {
-        write_err(err, err_len, "Chybí adresa serveru.");
+        write_err(err, err_len, &crate::i18n::tr("Chybí adresa serveru."));
         return std::ptr::null_mut();
     };
     let user = opt_string(user).unwrap_or_else(|| "anonymous".to_string());
@@ -369,7 +381,7 @@ pub unsafe extern "C" fn sal_vfs_list(
     err_len: usize,
 ) -> i32 {
     if vfs.is_null() || path.is_null() || out_items.is_null() || out_count.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_vfs_list.");
+        write_invalid_args(err, err_len, "sal_vfs_list");
         return crate::error::SAL_ERR_GENERIC;
     }
     let path_str = CStr::from_ptr(path).to_string_lossy().into_owned();
@@ -417,7 +429,7 @@ pub unsafe extern "C" fn sal_vfs_is_dir(
     err_len: usize,
 ) -> i32 {
     if vfs.is_null() || path.is_null() || out.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_vfs_is_dir.");
+        write_invalid_args(err, err_len, "sal_vfs_is_dir");
         return crate::error::SAL_ERR_GENERIC;
     }
     let path_str = CStr::from_ptr(path).to_string_lossy().into_owned();
@@ -446,7 +458,7 @@ pub unsafe extern "C" fn sal_vfs_exists(
     err_len: usize,
 ) -> i32 {
     if vfs.is_null() || path.is_null() || out.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_vfs_exists.");
+        write_invalid_args(err, err_len, "sal_vfs_exists");
         return crate::error::SAL_ERR_GENERIC;
     }
     let path_str = CStr::from_ptr(path).to_string_lossy().into_owned();
@@ -509,7 +521,7 @@ unsafe fn transfer_ffi(
     err_len: usize,
 ) -> i32 {
     if src.is_null() || dst.is_null() || src_dir.is_null() || dst_dir.is_null() {
-        write_err(err, err_len, &format!("Neplatné argumenty {}.", function_name));
+        write_err(err, err_len, &crate::i18n::trf("Neplatné argumenty {}.", &[&function_name]));
         return crate::error::SAL_ERR_GENERIC;
     }
     let src_dir_str = CStr::from_ptr(src_dir).to_string_lossy().into_owned();
@@ -582,7 +594,7 @@ pub unsafe extern "C" fn sal_delete(
     err_len: usize,
 ) -> i32 {
     if vfs.is_null() || dir.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_delete.");
+        write_invalid_args(err, err_len, "sal_delete");
         return crate::error::SAL_ERR_GENERIC;
     }
     let dir_str = CStr::from_ptr(dir).to_string_lossy().into_owned();
@@ -604,7 +616,7 @@ pub unsafe extern "C" fn sal_mkdir(
     err_len: usize,
 ) -> i32 {
     if vfs.is_null() || path.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_mkdir.");
+        write_invalid_args(err, err_len, "sal_mkdir");
         return crate::error::SAL_ERR_GENERIC;
     }
     let path_str = CStr::from_ptr(path).to_string_lossy().into_owned();
@@ -625,7 +637,7 @@ pub unsafe extern "C" fn sal_rename(
     err_len: usize,
 ) -> i32 {
     if vfs.is_null() || dir.is_null() || old_name.is_null() || new_name.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_rename.");
+        write_invalid_args(err, err_len, "sal_rename");
         return crate::error::SAL_ERR_GENERIC;
     }
     let dir_str = CStr::from_ptr(dir).to_string_lossy().into_owned();
@@ -652,7 +664,7 @@ pub unsafe extern "C" fn sal_find(
     err_len: usize,
 ) -> i32 {
     if vfs.is_null() || root.is_null() || mask.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_find.");
+        write_invalid_args(err, err_len, "sal_find");
         return crate::error::SAL_ERR_GENERIC;
     }
     let root_str = CStr::from_ptr(root).to_string_lossy().into_owned();
@@ -708,7 +720,7 @@ pub unsafe extern "C" fn sal_find_ex(
     err_len: usize,
 ) -> i32 {
     if vfs.is_null() || root.is_null() || mask.is_null() || (content.is_null() && content_len > 0) {
-        write_err(err, err_len, "Neplatné argumenty sal_find_ex.");
+        write_invalid_args(err, err_len, "sal_find_ex");
         return crate::error::SAL_ERR_GENERIC;
     }
     let root_str = CStr::from_ptr(root).to_string_lossy().into_owned();
@@ -800,7 +812,7 @@ pub unsafe extern "C" fn sal_mask_select(
     err_len: usize,
 ) -> i32 {
     if mask.is_null() || (count > 0 && (names.is_null() || out_matches.is_null())) {
-        write_err(err, err_len, "Neplatné argumenty sal_mask_select.");
+        write_invalid_args(err, err_len, "sal_mask_select");
         return crate::error::SAL_ERR_GENERIC;
     }
     let mask_str = CStr::from_ptr(mask).to_string_lossy().into_owned();
@@ -842,7 +854,7 @@ pub unsafe extern "C" fn sal_pack_zip(
     err_len: usize,
 ) -> i32 {
     if src.is_null() || src_dir.is_null() || dest_zip.is_null() {
-        write_err(err, err_len, "Neplatné argumenty sal_pack_zip.");
+        write_invalid_args(err, err_len, "sal_pack_zip");
         return crate::error::SAL_ERR_GENERIC;
     }
     let password_str = opt_string(password).unwrap_or_default();
@@ -852,7 +864,7 @@ pub unsafe extern "C" fn sal_pack_zip(
         1 => PackEncryption::Aes256(password_str),
         2 => PackEncryption::ZipCrypto(password_str),
         _ => {
-            write_err(err, err_len, "Neznámý režim šifrování ZIP.");
+            write_err(err, err_len, &crate::i18n::tr("Neznámý režim šifrování ZIP."));
             return crate::error::SAL_ERR_GENERIC;
         }
     };
@@ -912,7 +924,7 @@ unsafe fn connect_sftp_handle(
     err_len: usize,
 ) -> *mut SalVfs {
     let Some(host) = opt_string(host) else {
-        write_err(err, err_len, "Chybí adresa serveru.");
+        write_err(err, err_len, &crate::i18n::tr("Chybí adresa serveru."));
         return std::ptr::null_mut();
     };
     let user = opt_string(user).unwrap_or_else(|| "root".to_string());
@@ -935,7 +947,7 @@ pub unsafe extern "C" fn sal_connect_sftp_key(
     err_len: usize,
 ) -> *mut SalVfs {
     let Some(key) = opt_string(private_key_path) else {
-        write_err(err, err_len, "Chybí cesta k souboru s klíčem.");
+        write_err(err, err_len, &crate::i18n::tr("Chybí cesta k souboru s klíčem."));
         return std::ptr::null_mut();
     };
     let passphrase = opt_string(passphrase).filter(|value| !value.is_empty());

@@ -16,6 +16,7 @@ pub mod error;
 pub mod ffi;
 pub mod find;
 pub mod ftp;
+pub mod i18n;
 pub mod local;
 pub mod mask;
 pub mod ops;

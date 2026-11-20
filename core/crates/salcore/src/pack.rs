@@ -50,7 +50,7 @@ pub fn pack_zip(
     // Kontrola hesla před vytvořením cílového souboru.
     match encryption {
         PackEncryption::Aes256(password) | PackEncryption::ZipCrypto(password) if password.is_empty() => {
-            return Err(SalError::Io("Heslo pro šifrovaný archiv nesmí být prázdné.".to_string()));
+            return Err(SalError::Io(crate::i18n::tr("Heslo pro šifrovaný archiv nesmí být prázdné.")));
         }
         _ => {}
     }

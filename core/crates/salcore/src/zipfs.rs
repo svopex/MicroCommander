@@ -72,7 +72,7 @@ impl Seek for SharedFile {
             SeekFrom::End(delta) => self.file.metadata()?.len().checked_add_signed(delta),
         };
         self.pos = new_pos
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Neplatná pozice v souboru archivu."))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, crate::i18n::tr("Neplatná pozice v souboru archivu.")))?;
         Ok(self.pos)
     }
 }
@@ -252,27 +252,27 @@ impl Vfs for ZipFs {
     }
 
     fn open_write(&self, _path: &str, _size_hint: Option<u64>) -> SalResult<Box<dyn VfsWriteStream>> {
-        Err(SalError::Io(
-            "Do otevřeného ZIP archivu nelze zapisovat (jen pro čtení).".to_string(),
-        ))
+        Err(SalError::Io(crate::i18n::tr(
+            "Do otevřeného ZIP archivu nelze zapisovat (jen pro čtení).",
+        )))
     }
 
     fn mkdir(&self, _path: &str) -> SalResult<()> {
-        Err(SalError::Io(
-            "Do otevřeného ZIP archivu nelze zapisovat (jen pro čtení).".to_string(),
-        ))
+        Err(SalError::Io(crate::i18n::tr(
+            "Do otevřeného ZIP archivu nelze zapisovat (jen pro čtení).",
+        )))
     }
 
     fn delete(&self, _path: &str, _recursive: bool) -> SalResult<()> {
-        Err(SalError::Io(
-            "Z otevřeného ZIP archivu nelze mazat (jen pro čtení).".to_string(),
-        ))
+        Err(SalError::Io(crate::i18n::tr(
+            "Z otevřeného ZIP archivu nelze mazat (jen pro čtení).",
+        )))
     }
 
     fn rename(&self, _path: &str, _new_name: &str) -> SalResult<()> {
-        Err(SalError::Io(
-            "V otevřeném ZIP archivu nelze přejmenovávat (jen pro čtení).".to_string(),
-        ))
+        Err(SalError::Io(crate::i18n::tr(
+            "V otevřeném ZIP archivu nelze přejmenovávat (jen pro čtení).",
+        )))
     }
 
     fn exists(&self, path: &str) -> SalResult<bool> {

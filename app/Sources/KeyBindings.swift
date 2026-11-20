@@ -152,7 +152,7 @@ struct Shortcut: Codable, Hashable {
     /// Klávesy s vlastním názvem (šipky, Enter, numerická klávesnice…).
     static let namedKeys: [UInt16: String] = [
         KeyCode.up: "↑", KeyCode.down: "↓", KeyCode.left: "←", KeyCode.right: "→",
-        KeyCode.returnKey: "↩", KeyCode.enter: "⌤", KeyCode.tab: "⇥", KeyCode.space: "Mezerník",
+        KeyCode.returnKey: "↩", KeyCode.enter: "⌤", KeyCode.tab: "⇥", KeyCode.space: tr("Mezerník"),
         KeyCode.backspace: "⌫", KeyCode.forwardDelete: "⌦", KeyCode.escape: "Esc",
         KeyCode.insert: "Insert", KeyCode.home: "Home", KeyCode.end: "End",
         KeyCode.pageUp: "PgUp", KeyCode.pageDown: "PgDn",
@@ -176,117 +176,118 @@ struct Shortcut: Codable, Hashable {
 }
 
 extension Command {
-    /// Název příkazu (Nastavení › Klávesnice).
+    /// Název příkazu (Nastavení › Klávesnice) v jazyce rozhraní – jen k zobrazení;
+    /// zkratky se ukládají pod stálým názvem KeyBindings.name(of:).
     var title: String {
         switch self {
-        case .help: return "Nápověda ke klávesám"
-        case .rename: return "Přejmenovat"
-        case .view: return "Zobrazit"
-        case .edit: return "Upravit"
-        case .newFile: return "Nový soubor"
-        case .copy: return "Kopírovat"
-        case .move: return "Přesunout"
-        case .duplicate: return "Duplikovat"
-        case .mkdir: return "Nový adresář"
-        case .changeDir: return "Změnit adresář"
-        case .delete: return "Smazat (do koše)"
-        case .deletePermanent: return "Smazat trvale (bez koše)"
-        case .terminal: return "Terminal.app v adresáři"
-        case .terminalFull: return "Terminál na celé okno"
-        case .terminalNewTab: return "Nová záložka terminálu"
-        case .terminalCloseTab: return "Zavřít záložku terminálu"
-        case .terminalNextTab: return "Další záložka terminálu"
-        case .terminalPreviousTab: return "Předchozí záložka terminálu"
-        case .newWindow: return "Nové okno"
-        case .quit: return "Ukončit"
-        case .connect: return "FTP/SFTP servery"
-        case .disconnect: return "Odpojit / zavřít archiv"
-        case .sortName: return "Řadit podle jména"
-        case .sortExt: return "Řadit podle přípony"
-        case .sortTime: return "Řadit podle času"
-        case .sortSize: return "Řadit podle velikosti"
-        case .refresh: return "Obnovit"
-        case .compare: return "Porovnat adresáře"
-        case .driveLeft: return "Disk v levém panelu"
-        case .driveRight: return "Disk v pravém panelu"
-        case .editPlaces: return "Upravit nabídku disků"
-        case .driveInfo: return "Informace o jednotce"
-        case .pack: return "Zabalit do ZIP"
-        case .unpack: return "Rozbalit"
-        case .find: return "Vyhledat soubory a adresáře"
-        case .calcSize: return "Spočítat velikost"
-        case .back: return "Zpět"
-        case .forward: return "Vpřed"
-        case .up: return "Nadřazený adresář"
-        case .root: return "Kořenový adresář"
-        case .home: return "Domovský adresář"
-        case .swap: return "Prohodit panely"
-        case .sameDir: return "Převzít adresář z druhého panelu"
-        case .sameDirOther: return "Poslat adresář do druhého panelu"
-        case .toggleHidden: return "Zobrazovat skryté soubory"
-        case .copyDirPath: return "Kopírovat cestu adresáře"
-        case .revealInFinder: return "Zobrazit ve Finderu"
-        case .clipboardCopy: return "Kopírovat do schránky"
-        case .clipboardCut: return "Vyjmout do schránky"
-        case .clipboardPaste: return "Vložit ze schránky"
-        case .changeAttributes: return "Změnit atributy"
-        case .properties: return "Vlastnosti"
-        case .permissions: return "Oprávnění"
-        case .selectMask: return "Označit podle masky"
-        case .unselectMask: return "Odznačit podle masky"
-        case .invertMarks: return "Invertovat označení"
-        case .selectAll: return "Označit vše"
-        case .unselectAll: return "Zrušit označení"
-        case .viewMenu: return "Nabídka režimů zobrazení"
-        case .viewBrief: return "Režim Stručný"
-        case .viewDetailed: return "Režim Podrobný"
-        case .viewIcons: return "Režim Ikony"
-        case .viewThumbnails: return "Režim Miniatury"
-        case .viewTiles: return "Režim Dlaždice"
-        case .viewTypes: return "Režim Typy"
-        case .openItem: return "Otevřít položku"
-        case .launchItem: return "Spustit systémově"
-        case .firstItem: return "První položka"
-        case .lastItem: return "Poslední položka"
-        case .toggleMark: return "Označit položku a posunout se"
-        case .insertLeftPath: return "Cesta levého panelu do terminálu"
-        case .insertRightPath: return "Cesta pravého panelu do terminálu"
-        case .toggleTerminalFocus: return "Přepnout panel ↔ řádek terminálu"
-        case .insertNameToTerminal: return "Cesta položky do terminálu"
-        case .terminalTab9: return "Poslední záložka terminálu"
+        case .help: return tr("Nápověda ke klávesám")
+        case .rename: return tr("Přejmenovat")
+        case .view: return tr("Zobrazit")
+        case .edit: return tr("Upravit")
+        case .newFile: return tr("Nový soubor")
+        case .copy: return tr("Kopírovat")
+        case .move: return tr("Přesunout")
+        case .duplicate: return tr("Duplikovat")
+        case .mkdir: return tr("Nový adresář")
+        case .changeDir: return tr("Změnit adresář")
+        case .delete: return tr("Smazat (do koše)")
+        case .deletePermanent: return tr("Smazat trvale (bez koše)")
+        case .terminal: return tr("Terminal.app v adresáři")
+        case .terminalFull: return tr("Terminál na celé okno")
+        case .terminalNewTab: return tr("Nová záložka terminálu")
+        case .terminalCloseTab: return tr("Zavřít záložku terminálu")
+        case .terminalNextTab: return tr("Další záložka terminálu")
+        case .terminalPreviousTab: return tr("Předchozí záložka terminálu")
+        case .newWindow: return tr("Nové okno")
+        case .quit: return tr("Ukončit")
+        case .connect: return tr("FTP/SFTP servery")
+        case .disconnect: return tr("Odpojit / zavřít archiv")
+        case .sortName: return tr("Řadit podle jména")
+        case .sortExt: return tr("Řadit podle přípony")
+        case .sortTime: return tr("Řadit podle času")
+        case .sortSize: return tr("Řadit podle velikosti")
+        case .refresh: return tr("Obnovit")
+        case .compare: return tr("Porovnat adresáře")
+        case .driveLeft: return tr("Disk v levém panelu")
+        case .driveRight: return tr("Disk v pravém panelu")
+        case .editPlaces: return tr("Upravit nabídku disků")
+        case .driveInfo: return tr("Informace o jednotce")
+        case .pack: return tr("Zabalit do ZIP")
+        case .unpack: return tr("Rozbalit")
+        case .find: return tr("Vyhledat soubory a adresáře")
+        case .calcSize: return tr("Spočítat velikost")
+        case .back: return tr("Zpět")
+        case .forward: return tr("Vpřed")
+        case .up: return tr("Nadřazený adresář")
+        case .root: return tr("Kořenový adresář")
+        case .home: return tr("Domovský adresář")
+        case .swap: return tr("Prohodit panely")
+        case .sameDir: return tr("Převzít adresář z druhého panelu")
+        case .sameDirOther: return tr("Poslat adresář do druhého panelu")
+        case .toggleHidden: return tr("Zobrazovat skryté soubory")
+        case .copyDirPath: return tr("Kopírovat cestu adresáře")
+        case .revealInFinder: return tr("Zobrazit ve Finderu")
+        case .clipboardCopy: return tr("Kopírovat do schránky")
+        case .clipboardCut: return tr("Vyjmout do schránky")
+        case .clipboardPaste: return tr("Vložit ze schránky")
+        case .changeAttributes: return tr("Změnit atributy")
+        case .properties: return tr("Vlastnosti")
+        case .permissions: return tr("Oprávnění")
+        case .selectMask: return tr("Označit podle masky")
+        case .unselectMask: return tr("Odznačit podle masky")
+        case .invertMarks: return tr("Invertovat označení")
+        case .selectAll: return tr("Označit vše")
+        case .unselectAll: return tr("Zrušit označení")
+        case .viewMenu: return tr("Nabídka režimů zobrazení")
+        case .viewBrief: return tr("Režim Stručný")
+        case .viewDetailed: return tr("Režim Podrobný")
+        case .viewIcons: return tr("Režim Ikony")
+        case .viewThumbnails: return tr("Režim Miniatury")
+        case .viewTiles: return tr("Režim Dlaždice")
+        case .viewTypes: return tr("Režim Typy")
+        case .openItem: return tr("Otevřít položku")
+        case .launchItem: return tr("Spustit systémově")
+        case .firstItem: return tr("První položka")
+        case .lastItem: return tr("Poslední položka")
+        case .toggleMark: return tr("Označit položku a posunout se")
+        case .insertLeftPath: return tr("Cesta levého panelu do terminálu")
+        case .insertRightPath: return tr("Cesta pravého panelu do terminálu")
+        case .toggleTerminalFocus: return tr("Přepnout panel ↔ řádek terminálu")
+        case .insertNameToTerminal: return tr("Cesta položky do terminálu")
+        case .terminalTab9: return tr("Poslední záložka terminálu")
         case .terminalTab1, .terminalTab2, .terminalTab3, .terminalTab4, .terminalTab5,
              .terminalTab6, .terminalTab7, .terminalTab8:
-            return "Záložka terminálu \(terminalTabNumber ?? 0)"
+            return tr("Záložka terminálu %@", String(terminalTabNumber ?? 0))
         }
     }
 
     /// Krátký popisek na liště F-kláves.
     var shortTitle: String {
         switch self {
-        case .help: return "Nápověda"
-        case .rename: return "Přejmen."
-        case .newFile: return "Nový soub."
-        case .mkdir: return "Nový adr."
-        case .changeDir: return "Změnit adr."
-        case .delete: return "Smazat"
-        case .deletePermanent: return "Smazat trvale"
-        case .connect: return "Připojit"
-        case .disconnect: return "Odpojit"
-        case .sortName: return "Jméno"
-        case .sortExt: return "Přípona"
-        case .sortTime: return "Čas"
-        case .sortSize: return "Velikost"
-        case .compare: return "Porovnat"
-        case .driveLeft: return "Levý disk"
-        case .driveRight: return "Pravý disk"
-        case .driveInfo: return "Jednotka"
+        case .help: return tr("Nápověda")
+        case .rename: return tr("Přejmen.")
+        case .newFile: return tr("Nový soub.")
+        case .mkdir: return tr("Nový adr.")
+        case .changeDir: return tr("Změnit adr.")
+        case .delete: return tr("Smazat")
+        case .deletePermanent: return tr("Smazat trvale")
+        case .connect: return tr("Připojit")
+        case .disconnect: return tr("Odpojit")
+        case .sortName: return tr("Jméno")
+        case .sortExt: return tr("Přípona")
+        case .sortTime: return tr("Čas")
+        case .sortSize: return tr("Velikost")
+        case .compare: return tr("Porovnat")
+        case .driveLeft: return tr("Levý disk")
+        case .driveRight: return tr("Pravý disk")
+        case .driveInfo: return tr("Jednotka")
         case .revealInFinder: return "Finder"
-        case .pack: return "Zabalit"
-        case .find: return "Hledat"
-        case .calcSize: return "Velikost"
-        case .changeAttributes: return "Atributy"
+        case .pack: return tr("Zabalit")
+        case .find: return tr("Hledat")
+        case .calcSize: return tr("Velikost")
+        case .changeAttributes: return tr("Atributy")
         case .terminal: return "Terminal.app"
-        case .terminalFull: return "Terminál"
+        case .terminalFull: return tr("Terminál")
         default: return title
         }
     }

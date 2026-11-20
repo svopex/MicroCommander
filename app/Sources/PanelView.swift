@@ -94,7 +94,7 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     // MARK: - Sestavení
@@ -102,13 +102,13 @@ final class PanelView: NSView, NSTableViewDataSource, NSTableViewDelegate {
     /// Sloupce tabulky podle výchozího „Detailed“ pohledu Salamandera.
     private func buildTable() {
         let columns: [(String, String, CGFloat, CGFloat)] = [
-            (ColumnID.name, "Jméno", 200, 80),
-            (ColumnID.ext, "Přípona", 50, 30),
-            (ColumnID.type, "Typ", 130, 50),
-            (ColumnID.size, "Velikost", Self.sizeColumnWidth, 40),
-            (ColumnID.date, "Datum", 76, 50),
-            (ColumnID.time, "Čas", 58, 40),
-            (ColumnID.attr, "Atr", 34, 24),
+            (ColumnID.name, tr("Jméno"), 200, 80),
+            (ColumnID.ext, trc("column", "Přípona"), 50, 30),
+            (ColumnID.type, tr("Typ"), 130, 50),
+            (ColumnID.size, tr("Velikost"), Self.sizeColumnWidth, 40),
+            (ColumnID.date, tr("Datum"), 76, 50),
+            (ColumnID.time, tr("Čas"), 58, 40),
+            (ColumnID.attr, tr("Atr"), 34, 24),
         ]
         for (identifier, title, width, minWidth) in columns {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
@@ -713,7 +713,7 @@ final class FileCellView: NSTableCellView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 }
 
@@ -991,7 +991,7 @@ extension PanelView {
             receiver.receivePromisedFiles(atDestination: destination, options: [:], operationQueue: .main) { [weak self] url, error in
                 guard let self else { return }
                 if let error {
-                    PromptDialog.show(title: "Přetažení souboru", message: error.localizedDescription, over: self.window)
+                    PromptDialog.show(title: tr("Přetažení souboru"), message: error.localizedDescription, over: self.window)
                     return
                 }
                 // Kurzor na nový soubor jen při puštění do adresáře panelu.
@@ -1055,7 +1055,7 @@ extension PanelView: NSDraggingSource {
                 }
             }
             if let failure {
-                PromptDialog.show(title: "Přesun do koše", message: failure.localizedDescription, over: window)
+                PromptDialog.show(title: tr("Přesun do koše"), message: failure.localizedDescription, over: window)
             }
         }
         scheduleReload(after: 1)
@@ -1188,13 +1188,13 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
 
-        driveButton.image = NSImage(systemSymbolName: "internaldrive", accessibilityDescription: "Disk")
+        driveButton.image = NSImage(systemSymbolName: "internaldrive", accessibilityDescription: tr("Disk"))
         driveButton.imagePosition = .imageOnly
         driveButton.bezelStyle = .accessoryBarAction
         driveButton.isBordered = false
         driveButton.target = self
         driveButton.action = #selector(driveClicked(_:))
-        driveButton.toolTip = "Změnit disk (⌥F1 / ⌥F2)"
+        driveButton.toolTip = tr("Změnit disk (⌥F1 / ⌥F2)")
 
         pathLabel.font = NSFont.boldSystemFont(ofSize: 12)
         pathLabel.lineBreakMode = .byTruncatingHead
@@ -1230,7 +1230,7 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Barvy podle aktivity a schématu (titulek aktivního/neaktivního panelu).
@@ -1270,10 +1270,10 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
     override func menu(for event: NSEvent) -> NSMenu? {
         onActivate?()
         let menu = NSMenu()
-        let change = NSMenuItem(title: "Změnit adresář…", action: #selector(changePathClicked(_:)), keyEquivalent: "")
+        let change = NSMenuItem(title: tr("Změnit adresář…"), action: #selector(changePathClicked(_:)), keyEquivalent: "")
         change.target = self
         menu.addItem(change)
-        let copy = NSMenuItem(title: "Kopírovat cestu do schránky", action: #selector(copyPathClicked(_:)), keyEquivalent: "")
+        let copy = NSMenuItem(title: tr("Kopírovat cestu do schránky"), action: #selector(copyPathClicked(_:)), keyEquivalent: "")
         copy.target = self
         menu.addItem(copy)
         return menu
@@ -1357,7 +1357,7 @@ final class InfoLineView: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Horní dělicí čára (oddělení od tabulky).
@@ -1430,7 +1430,7 @@ final class DropHighlightView: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }

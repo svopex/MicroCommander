@@ -78,12 +78,12 @@ fn expand_home(path: &Path) -> PathBuf {
 fn auth_key_file(session: &Session, username: &str, private_key: &Path, passphrase: Option<&str>) -> SalResult<()> {
     let private_key = expand_home(private_key);
     if !private_key.is_file() {
-        return Err(SalError::Io(format!("Soubor s klíčem {} neexistuje.", private_key.display())));
+        return Err(SalError::Io(crate::i18n::trf("Soubor s klíčem {} neexistuje.", &[&private_key.display()])));
     }
     let passphrase = passphrase.filter(|value| !value.is_empty());
     // Klíč chráněný heslem bez zadaného hesla: chyba hned (UI se zeptá na heslo).
     if passphrase.is_none() && key_file_encrypted(&private_key)? {
-        return Err(SalError::Io(KEY_PASSPHRASE_REQUIRED.to_string()));
+        return Err(SalError::Io(key_passphrase_required()));
     }
     // Veřejný klíč záměrně nepředáváme – libssh2 ho odvodí ze soukromého, takže
     // klíč (a heslo k němu) se ověří lokálně ještě před dotazem na server
@@ -93,8 +93,11 @@ fn auth_key_file(session: &Session, username: &str, private_key: &Path, passphra
         .map_err(|error| key_auth_error(error, passphrase.is_some()))
 }
 
-/// Text chyby „klíč je chráněný heslem“ (UI podle něj nabídne zadání hesla ke klíči).
-pub const KEY_PASSPHRASE_REQUIRED: &str = "Klíč je chráněný heslem – zadejte heslo ke klíči.";
+/// Text chyby „klíč je chráněný heslem“ v jazyce jádra (UI podle něj nabídne
+/// zadání hesla ke klíči). Funkce místo konstanty, protože text se překládá.
+pub fn key_passphrase_required() -> String {
+    crate::i18n::tr("Klíč je chráněný heslem – zadejte heslo ke klíči.")
+}
 
 /// Je soubor se soukromým klíčem zašifrovaný heslem?
 /// OpenSSH formát: šifra v hlavičce „openssh-key-v1“ ≠ „none“;
@@ -102,7 +105,7 @@ pub const KEY_PASSPHRASE_REQUIRED: &str = "Klíč je chráněný heslem – zade
 pub fn key_file_encrypted(path: &Path) -> SalResult<bool> {
     let path = expand_home(path);
     let text = std::fs::read_to_string(&path)
-        .map_err(|err| SalError::Io(format!("Soubor s klíčem {} nelze přečíst: {}", path.display(), err)))?;
+        .map_err(|err| SalError::Io(crate::i18n::trf("Soubor s klíčem {} nelze přečíst: {}", &[&path.display(), &err])))?;
     if text.contains("BEGIN ENCRYPTED PRIVATE KEY") || text.contains("Proc-Type: 4,ENCRYPTED") {
         return Ok(true);
     }
@@ -154,21 +157,21 @@ fn decode_base64(text: &str) -> Vec<u8> {
 fn auth_agent(session: &Session, username: &str) -> SalResult<()> {
     let mut agent = session.agent().map_err(ssh_error)?;
     agent.connect().map_err(|_| {
-        SalError::Io("Nelze se připojit k ssh-agentovi (není spuštěn nebo chybí SSH_AUTH_SOCK).".to_string())
+        SalError::Io(crate::i18n::tr("Nelze se připojit k ssh-agentovi (není spuštěn nebo chybí SSH_AUTH_SOCK)."))
     })?;
     agent.list_identities().map_err(ssh_error)?;
     let identities = agent.identities().map_err(ssh_error)?;
     if identities.is_empty() {
-        return Err(SalError::Io("ssh-agent nemá načtené žádné klíče (přidejte je příkazem ssh-add).".to_string()));
+        return Err(SalError::Io(crate::i18n::tr("ssh-agent nemá načtené žádné klíče (přidejte je příkazem ssh-add).")));
     }
     for identity in &identities {
         if agent.userauth(username, identity).is_ok() {
             return Ok(());
         }
     }
-    Err(SalError::Io(format!(
+    Err(SalError::Io(crate::i18n::trf(
         "Server nepřijal žádný z {} klíčů v ssh-agentovi.",
-        identities.len()
+        &[&identities.len()],
     )))
 }
 
@@ -178,14 +181,14 @@ fn key_auth_error(error: ssh2::Error, has_passphrase: bool) -> SalError {
     // -19 PUBLICKEY_UNVERIFIED (server klíč odmítl).
     match error.code() {
         ssh2::ErrorCode::Session(-16) => SalError::Io(if has_passphrase {
-            "Klíč nelze načíst – chybné heslo ke klíči nebo nepodporovaný formát.".to_string()
+            crate::i18n::tr("Klíč nelze načíst – chybné heslo ke klíči nebo nepodporovaný formát.")
         } else {
-            "Klíč nelze načíst – je chráněný heslem (zadejte heslo ke klíči) nebo má nepodporovaný formát.".to_string()
+            crate::i18n::tr("Klíč nelze načíst – je chráněný heslem (zadejte heslo ke klíči) nebo má nepodporovaný formát.")
         }),
         ssh2::ErrorCode::Session(-18) | ssh2::ErrorCode::Session(-19) => SalError::Io(
-            "Server klíč odmítl (veřejný klíč není v ~/.ssh/authorized_keys na serveru?).".to_string(),
+            crate::i18n::tr("Server klíč odmítl (veřejný klíč není v ~/.ssh/authorized_keys na serveru?)."),
         ),
-        _ => SalError::Io(format!("Přihlášení klíčem selhalo: {}", error)),
+        _ => SalError::Io(crate::i18n::trf("Přihlášení klíčem selhalo: {}", &[&error])),
     }
 }
 
@@ -213,10 +216,10 @@ impl SftpFs {
         let addresses = (host, port)
             .to_socket_addrs()
             .map_err(|err| {
-                SalError::Io(format!("Nepodařilo se přeložit adresu {}: {}", host, err))
+                SalError::Io(crate::i18n::trf("Nepodařilo se přeložit adresu {}: {}", &[&host, &err]))
             })?;
         let mut tcp = None;
-        let mut last_error = SalError::Io(format!("Server {}:{} nenalezen.", host, port));
+        let mut last_error = SalError::Io(crate::i18n::trf("Server {}:{} nenalezen.", &[&host, &port]));
         for address in addresses {
             match TcpStream::connect_timeout(&address, timeout) {
                 Ok(stream) => {
@@ -239,7 +242,7 @@ impl SftpFs {
         match auth {
             SftpAuth::Password(password) => session
                 .userauth_password(username, password)
-                .map_err(|_| SalError::Io("Přihlášení heslem selhalo (chybné jméno nebo heslo).".to_string()))?,
+                .map_err(|_| SalError::Io(crate::i18n::tr("Přihlášení heslem selhalo (chybné jméno nebo heslo).")))?,
             SftpAuth::KeyFile { private_key, passphrase } => {
                 auth_key_file(&session, username, private_key, passphrase.as_deref())?
             }
@@ -277,7 +280,7 @@ impl SftpFs {
     /// Uzamkne backend (všechny operace nad Session musí běžet pod zámkem).
     fn lock(&self) -> SalResult<MutexGuard<'_, SftpBackend>> {
         self.backend.lock().map_err(|_| {
-            SalError::Io("SFTP spojení je nedostupné (uzamčené).".to_string())
+            SalError::Io(crate::i18n::tr("SFTP spojení je nedostupné (uzamčené)."))
         })
     }
 }
@@ -310,7 +313,7 @@ fn stat_to_item(name: &str, stat: &FileStat) -> Option<VfsItem> {
 
 /// Zámek backendu pro čtení/zápis bloku ve streamu (chyba jako io::Error).
 fn lock_stream(backend: &Mutex<SftpBackend>) -> io::Result<MutexGuard<'_, SftpBackend>> {
-    backend.lock().map_err(|_| io::Error::other("SFTP spojení je uzamčené."))
+    backend.lock().map_err(|_| io::Error::other(crate::i18n::tr("SFTP spojení je uzamčené.")))
 }
 
 /// Čtecí stream z SFTP: drží otevřený handle a Arc na backend.
@@ -344,7 +347,7 @@ impl Write for SftpWriteStream {
         let Some(file) = self.file.as_mut() else {
             return Err(io::Error::new(
                 io::ErrorKind::NotConnected,
-                "SFTP handle už je uzavřený.",
+                crate::i18n::tr("SFTP handle už je uzavřený."),
             ));
         };
         // Zámek držíme po dobu zápisu – libssh2 Session není vláknově bezpečná.

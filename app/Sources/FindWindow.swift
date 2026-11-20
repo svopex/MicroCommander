@@ -41,8 +41,8 @@ struct FindAdvanced: Codable, Equatable {
     static let sizeUnits = ["B", "KB", "MB", "GB"]
     /// Jednotky „Změněno během“ a jejich délka v sekundách.
     static let duringUnits: [(String, Double)] = [
-        ("sekund", 1), ("minut", 60), ("hodin", 3600), ("dnů", 86400),
-        ("týdnů", 7 * 86400), ("měsíců", 30 * 86400), ("let", 365 * 86400),
+        (tr("sekund"), 1), (tr("minut"), 60), (tr("hodin"), 3600), (tr("dnů"), 86400),
+        (tr("týdnů"), 7 * 86400), (tr("měsíců"), 30 * 86400), (tr("let"), 365 * 86400),
     ]
 
     /// Velikost v bajtech podle hodnoty a jednotky.
@@ -58,11 +58,11 @@ struct FindAdvanced: Codable, Equatable {
         for (value, letter) in [(readonly, "R"), (hidden, "H"), (encrypted, "E"), (directory, "D")] {
             if let value { attributes += (value ? "+" : "-") + letter }
         }
-        if !attributes.isEmpty { parts.append("Atributy: " + attributes) }
-        if useMinSize || useMaxSize { parts.append("Velikost") }
-        if timeMode == 1 { parts.append(duringUnit >= 3 ? "Datum" : "Čas") }
-        if timeMode == 2 && (useFrom || useTo) { parts.append("Datum") }
-        return isActive ? "Používá možnosti: " + parts.joined(separator: ", ") : "Žádné možnosti"
+        if !attributes.isEmpty { parts.append(tr("Atributy: %@", attributes)) }
+        if useMinSize || useMaxSize { parts.append(tr("Velikost")) }
+        if timeMode == 1 { parts.append(duringUnit >= 3 ? tr("Datum") : tr("Čas")) }
+        if timeMode == 2 && (useFrom || useTo) { parts.append(tr("Datum")) }
+        return isActive ? tr("Používá možnosti: %@", parts.joined(separator: ", ")) : tr("Žádné možnosti")
     }
 
     /// Používá dialog nějaké kritérium?
@@ -103,19 +103,19 @@ final class FindAdvancedController: NSWindowController {
     private var result: FindAdvanced
     private var completion: ((FindAdvanced?) -> Void)?
 
-    private let readonlyBox = NSButton.triStateCheckbox("&Jen pro čtení")
-    private let hiddenBox = NSButton.triStateCheckbox("&Skrytý")
-    private let encryptedBox = NSButton.triStateCheckbox("Ši&frovaný")
-    private let directoryBox = NSButton.triStateCheckbox("Ad&resář")
-    private let minSizeBox = NSButton(checkboxWithTitle: "Nejméně:", target: nil, action: nil)
+    private let readonlyBox = NSButton.triStateCheckbox(tr("&Jen pro čtení"))
+    private let hiddenBox = NSButton.triStateCheckbox(tr("&Skrytý"))
+    private let encryptedBox = NSButton.triStateCheckbox(tr("Ši&frovaný"))
+    private let directoryBox = NSButton.triStateCheckbox(tr("Ad&resář"))
+    private let minSizeBox = NSButton(checkboxWithTitle: tr("Nejméně:"), target: nil, action: nil)
     private let minSizeField = NSTextField()
     private let minUnitPopup = NSPopUpButton()
-    private let maxSizeBox = NSButton(checkboxWithTitle: "Nejvýše:", target: nil, action: nil)
+    private let maxSizeBox = NSButton(checkboxWithTitle: tr("Nejvýše:"), target: nil, action: nil)
     private let maxSizeField = NSTextField()
     private let maxUnitPopup = NSPopUpButton()
-    private let ignoreRadio = NSButton(radioButtonWithTitle: "Ignorovat", target: nil, action: nil)
-    private let duringRadio = NSButton(radioButtonWithTitle: "Změněno během:", target: nil, action: nil)
-    private let fromToRadio = NSButton(radioButtonWithTitle: "Změněno od:", target: nil, action: nil)
+    private let ignoreRadio = NSButton(radioButtonWithTitle: tr("Ignorovat"), target: nil, action: nil)
+    private let duringRadio = NSButton(radioButtonWithTitle: tr("Změněno během:"), target: nil, action: nil)
+    private let fromToRadio = NSButton(radioButtonWithTitle: tr("Změněno od:"), target: nil, action: nil)
     private let duringField = NSTextField()
     private let duringUnitPopup = NSPopUpButton()
     private let fromBox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
@@ -141,14 +141,14 @@ final class FindAdvancedController: NSWindowController {
         result = value
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 404),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "Upřesnit možnosti"
+        window.title = tr("Upřesnit možnosti")
         super.init(window: window)
         buildContent()
         load(value)
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Rozvržení podle IDD_FINDADVANCED (Atributy, Velikost souboru, Datum a čas).
@@ -157,10 +157,10 @@ final class FindAdvancedController: NSWindowController {
 
         // Atributy: Windows-only atributy (Archivovat, Systémový, Komprimovaný)
         // macOS nemá – zobrazí se jako nedostupné, aby rozvržení odpovídalo originálu.
-        content.addSection("Atributy", y: 10)
-        let archiveBox = NSButton(checkboxWithTitle: "Archivovat", target: nil, action: nil)
-        let systemBox = NSButton(checkboxWithTitle: "Systémový", target: nil, action: nil)
-        let compressedBox = NSButton(checkboxWithTitle: "Komprimovaný", target: nil, action: nil)
+        content.addSection(tr("Atributy"), y: 10)
+        let archiveBox = NSButton(checkboxWithTitle: tr("Archivovat"), target: nil, action: nil)
+        let systemBox = NSButton(checkboxWithTitle: tr("Systémový"), target: nil, action: nil)
+        let compressedBox = NSButton(checkboxWithTitle: tr("Komprimovaný"), target: nil, action: nil)
         for box in [archiveBox, systemBox, compressedBox] { box.isEnabled = false }
         content.place(archiveBox, NSRect(x: 24, y: 32, width: 120, height: 18))
         content.place(hiddenBox, NSRect(x: 146, y: 32, width: 110, height: 18))
@@ -171,7 +171,7 @@ final class FindAdvancedController: NSWindowController {
         content.place(directoryBox, NSRect(x: 24, y: 76, width: 120, height: 18))
 
         // Velikost souboru: nejméně / nejvýše s jednotkou.
-        content.addSection("Velikost souboru", y: 106)
+        content.addSection(tr("Velikost souboru"), y: 106)
         minUnitPopup.addItems(withTitles: FindAdvanced.sizeUnits)
         maxUnitPopup.addItems(withTitles: FindAdvanced.sizeUnits)
         content.place(minSizeBox, NSRect(x: 24, y: 130, width: 110, height: 18))
@@ -182,7 +182,7 @@ final class FindAdvancedController: NSWindowController {
         content.place(maxUnitPopup, NSRect(x: 274, y: 154, width: 114, height: 26))
 
         // Datum a čas: ignorovat / změněno během / změněno od–do.
-        content.addSection("Datum a čas", y: 192)
+        content.addSection(tr("Datum a čas"), y: 192)
         for radio in [ignoreRadio, duringRadio, fromToRadio] {
             radio.target = self
             radio.action = #selector(timeModeChanged(_:))
@@ -199,12 +199,12 @@ final class FindAdvancedController: NSWindowController {
         content.place(fromToRadio, NSRect(x: 24, y: 270, width: 120, height: 18))
         content.place(fromBox, NSRect(x: 146, y: 270, width: 20, height: 18))
         content.place(fromPicker, NSRect(x: 168, y: 267, width: 220, height: 24))
-        let toLabel = NSTextField(labelWithString: "Do:")
+        let toLabel = NSTextField(labelWithString: tr("Do:"))
         toLabel.alignment = .right
         content.place(toLabel, NSRect(x: 100, y: 300, width: 40, height: 17))
         content.place(toBox, NSRect(x: 146, y: 299, width: 20, height: 18))
         content.place(toPicker, NSRect(x: 168, y: 296, width: 220, height: 24))
-        let note = NSTextField(labelWithString: "Poznámka: nezaškrtnuté hodnoty se ignorují")
+        let note = NSTextField(labelWithString: tr("Poznámka: nezaškrtnuté hodnoty se ignorují"))
         note.alignment = .right
         note.textColor = .secondaryLabelColor
         content.place(note, NSRect(x: 12, y: 328, width: 376, height: 17))
@@ -213,12 +213,12 @@ final class FindAdvancedController: NSWindowController {
         let line = NSBox(frame: NSRect(x: 12, y: 354, width: 376, height: 1))
         line.boxType = .separator
         content.addSubview(line)
-        let resetButton = NSButton(title: "Obnovit", target: self, action: #selector(resetClicked(_:)))
+        let resetButton = NSButton(title: trc("reset", "Obnovit"), target: self, action: #selector(resetClicked(_:)))
         content.place(resetButton, NSRect(x: 12, y: 366, width: 100, height: 28))
         let okButton = NSButton(title: "OK", target: self, action: #selector(okClicked(_:)))
         okButton.keyEquivalent = "\r"
         content.place(okButton, NSRect(x: 184, y: 366, width: 100, height: 28))
-        let cancelButton = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
+        let cancelButton = NSButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:)))
         cancelButton.keyEquivalent = "\u{1b}"
         content.place(cancelButton, NSRect(x: 288, y: 366, width: 100, height: 28))
         window?.contentView = content
@@ -404,12 +404,12 @@ private enum FoundColumn: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .name: return "Název"
-        case .path: return "Cesta"
-        case .size: return "Velikost"
-        case .date: return "Datum"
-        case .time: return "Čas"
-        case .attr: return "Atributy"
+        case .name: return tr("Název")
+        case .path: return tr("Cesta")
+        case .size: return tr("Velikost")
+        case .date: return tr("Datum")
+        case .time: return tr("Čas")
+        case .attr: return tr("Atributy")
         }
     }
 
@@ -462,13 +462,13 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     /// Otevřená okna hledání (drží kontrolery naživu).
     private static var openWindows: [FindWindowController] = []
     /// Titulek okna (IDS_FF_NAME).
-    private static let baseTitle = "Vyhledat soubory a adresáře"
+    private static let baseTitle = tr("Vyhledat soubory a adresáře")
     /// Příkazy hledání (menu Příkazy i nabídka u tlačítka Najít): titulek, akce, klávesa s Ctrl.
     private static let findCommands: [(title: String, action: Selector, key: String)] = [
-        ("Najít", #selector(findNowClicked(_:)), "f"),
-        ("Vytřídit - Průnik s nalezenými položkami", #selector(intersectClicked(_:)), "i"),
-        ("Vytřídit - Odečíst od nalezených položek", #selector(subtractClicked(_:)), "s"),
-        ("Připojit k nalezeným položkám", #selector(appendClicked(_:)), "w"),
+        (tr("Najít"), #selector(findNowClicked(_:)), "f"),
+        (tr("Vytřídit - Průnik s nalezenými položkami"), #selector(intersectClicked(_:)), "i"),
+        (tr("Vytřídit - Odečíst od nalezených položek"), #selector(subtractClicked(_:)), "s"),
+        (tr("Připojit k nalezeným položkám"), #selector(appendClicked(_:)), "w"),
     ]
     /// Maximální délka historie rozbalovacích polí.
     private static let historyLimit = 20
@@ -491,25 +491,25 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     // Ovládací prvky podle IDD_FIND.
     private let content = FlippedView()
     private let topLine = NSBox()
-    private let namedLabel = NSTextField(labelWithString: "Název:")
+    private let namedLabel = NSTextField(labelWithString: tr("Název:"))
     private let namedCombo = NSComboBox()
-    private let findButton = NSButton(title: "Najít", target: nil, action: nil)
+    private let findButton = NSButton(title: tr("Najít"), target: nil, action: nil)
     private let findMenuButton = NSButton(title: "", target: nil, action: nil)
-    private let lookInLabel = NSTextField(labelWithString: "Hledat v:")
+    private let lookInLabel = NSTextField(labelWithString: tr("Hledat v:"))
     private let lookInCombo = NSComboBox()
-    private let addButton = NSButton(title: "Přidat", target: nil, action: nil)
-    private let subdirsBox = NSButton(checkboxWithTitle: "Včetně podadresářů", target: nil, action: nil)
-    private let archivesBox = NSButton(checkboxWithTitle: "Hledat v archivech", target: nil, action: nil)
-    private let grepBox = NSButton(checkboxWithTitle: "Hledat v souboru", target: nil, action: nil)
+    private let addButton = NSButton(title: tr("Přidat"), target: nil, action: nil)
+    private let subdirsBox = NSButton(checkboxWithTitle: tr("Včetně podadresářů"), target: nil, action: nil)
+    private let archivesBox = NSButton(checkboxWithTitle: tr("Hledat v archivech"), target: nil, action: nil)
+    private let grepBox = NSButton(checkboxWithTitle: tr("Hledat v souboru"), target: nil, action: nil)
     private let grepLine = NSBox()
-    private let containingLabel = NSTextField(labelWithString: "Obsahující:")
+    private let containingLabel = NSTextField(labelWithString: tr("Obsahující:"))
     private let containingCombo = NSComboBox()
     private let regexHelpButton = NSButton(title: "", target: nil, action: nil)
-    private let hexBox = NSButton(checkboxWithTitle: "Šestnáctkový režim", target: nil, action: nil)
-    private let caseBox = NSButton(checkboxWithTitle: "Rozlišovat malá a velká písmena", target: nil, action: nil)
-    private let wholeBox = NSButton(checkboxWithTitle: "Celá slova", target: nil, action: nil)
-    private let regexBox = NSButton(checkboxWithTitle: "Regulární výraz", target: nil, action: nil)
-    private let advancedButton = NSButton(title: "Upřesnit…", target: nil, action: nil)
+    private let hexBox = NSButton(checkboxWithTitle: tr("Šestnáctkový režim"), target: nil, action: nil)
+    private let caseBox = NSButton(checkboxWithTitle: tr("Rozlišovat malá a velká písmena"), target: nil, action: nil)
+    private let wholeBox = NSButton(checkboxWithTitle: tr("Celá slova"), target: nil, action: nil)
+    private let regexBox = NSButton(checkboxWithTitle: tr("Regulární výraz"), target: nil, action: nil)
+    private let advancedButton = NSButton(title: tr("Upřesnit…"), target: nil, action: nil)
     private let advancedField = NSTextField()
     private let foundLabel = NSTextField(labelWithString: "")
     private let headerToolbar = NSStackView()
@@ -600,12 +600,12 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         } else if window.frame.origin == .zero {
             window.center()
         }
-        setStatus("Zadejte možnosti hledání a klepněte na tlačítko Najít.")
+        setStatus(tr("Zadejte možnosti hledání a klepněte na tlačítko Najít."))
         updateFoundLabel()
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     // MARK: Ovládací prvky
@@ -628,7 +628,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         findButton.action = #selector(findNowClicked(_:))
         findButton.bezelStyle = .rounded
         // Šipka vedle Najít = nabídka dalších příkazů (Průnik, Odečíst, Připojit).
-        findMenuButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Další příkazy hledání")
+        findMenuButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: tr("Další příkazy hledání"))
         findMenuButton.imagePosition = .imageOnly
         findMenuButton.bezelStyle = .rounded
         findMenuButton.target = self
@@ -640,9 +640,9 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         // Archivy se prohledávají jen na lokálním disku (archiv se otevírá ze souboru).
         archivesBox.isEnabled = vfs.kind == SAL_VFS_LOCAL
         archivesBox.toolTip = archivesBox.isEnabled
-            ? "Prohledá i obsah archivů ZIP, TAR a TAR.GZ (soubory .zip, .jar, .tar, .tgz, .tar.gz). "
-                + "Zaheslované soubory se při hledání v obsahu přeskočí, archiv v archivu se neotevírá."
-            : "Archivy se prohledávají jen při hledání na lokálním disku."
+            ? tr("Prohledá i obsah archivů ZIP, TAR a TAR.GZ (soubory .zip, .jar, .tar, .tgz, .tar.gz). "
+                + "Zaheslované soubory se při hledání v obsahu přeskočí, archiv v archivu se neotevírá.")
+            : tr("Archivy se prohledávají jen při hledání na lokálním disku.")
 
         grepBox.target = self
         grepBox.action = #selector(grepToggled(_:))
@@ -650,7 +650,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             box.target = self
             box.action = #selector(contentOptionChanged(_:))
         }
-        regexHelpButton.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: "Regulární výrazy")
+        regexHelpButton.image = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: tr("Regulární výrazy"))
         regexHelpButton.imagePosition = .imageOnly
         regexHelpButton.bezelStyle = .rounded
         regexHelpButton.target = self
@@ -666,13 +666,13 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         // Nástrojová lišta vpravo nad seznamem (Ukázat, Zobrazit, Upravit,
         // Odstranit, Vyjmout, Kopírovat, Zastavit) jako hlavička originálu.
         let tools: [(String, String, Selector)] = [
-            ("scope", "Ukázat položku (mezerník)", #selector(focusItem(_:))),
-            ("eye", "Zobrazit soubor (F3)", #selector(viewItem(_:))),
-            ("square.and.pencil", "Upravit soubor (F4)", #selector(editItem(_:))),
-            ("trash", "Odstranit do koše (F8, ⇧F8 trvale)", #selector(deleteItems(_:))),
-            ("scissors", "Vyjmout (⌘X)", #selector(cut(_:))),
-            ("doc.on.doc", "Kopírovat (⌘C)", #selector(copy(_:))),
-            ("stop.circle", "Zastavit (Escape)", #selector(stopClicked(_:))),
+            ("scope", tr("Ukázat položku (mezerník)"), #selector(focusItem(_:))),
+            ("eye", tr("Zobrazit soubor (F3)"), #selector(viewItem(_:))),
+            ("square.and.pencil", tr("Upravit soubor (F4)"), #selector(editItem(_:))),
+            ("trash", tr("Odstranit do koše (F8, ⇧F8 trvale)"), #selector(deleteItems(_:))),
+            ("scissors", tr("Vyjmout (⌘X)"), #selector(cut(_:))),
+            ("doc.on.doc", tr("Kopírovat (⌘C)"), #selector(copy(_:))),
+            ("stop.circle", tr("Zastavit (Escape)"), #selector(stopClicked(_:))),
         ]
         headerToolbar.orientation = .horizontal
         headerToolbar.spacing = 2
@@ -854,34 +854,34 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
 
     /// Položky nabídky Soubory (pro menu dialogu i kontextové menu seznamu).
     private func makeFilesMenu(withShortcuts: Bool) -> NSMenu {
-        let menu = NSMenu(title: "Soubory")
+        let menu = NSMenu(title: tr("Soubory"))
         func add(_ title: String, _ action: Selector, _ key: String = "", _ modifiers: NSEvent.ModifierFlags = []) {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: withShortcuts ? key : "")
             item.keyEquivalentModifierMask = modifiers
             item.target = self
             menu.addItem(item)
         }
-        add("Otevřít", #selector(openItem(_:)))
-        add("Otevřít všechny označené", #selector(openSelected(_:)))
-        add("Ukázat", #selector(focusItem(_:)))
-        add("Skrýt", #selector(hideSelected(_:)), "h", [.control])
-        add("Skrýt duplicitní názvy", #selector(hideDuplicates(_:)), "h", [.control, .shift])
+        add(tr("Otevřít"), #selector(openItem(_:)))
+        add(tr("Otevřít všechny označené"), #selector(openSelected(_:)))
+        add(tr("Ukázat"), #selector(focusItem(_:)))
+        add(tr("Skrýt"), #selector(hideSelected(_:)), "h", [.control])
+        add(tr("Skrýt duplicitní názvy"), #selector(hideDuplicates(_:)), "h", [.control, .shift])
         menu.addItem(.separator())
-        add("Zobrazit", #selector(viewItem(_:)), KeyCode.functionKeyString(3), [])
-        add("Upravit", #selector(editItem(_:)), KeyCode.functionKeyString(4), [])
-        add("Odstranit", #selector(deleteItems(_:)), KeyCode.functionKeyString(8), [])
-        add("Odstranit trvale", #selector(deleteItemsPermanently(_:)), KeyCode.functionKeyString(8), [.shift])
-        add("Zobrazit ve Finderu", #selector(revealInFinder(_:)))
+        add(tr("Zobrazit"), #selector(viewItem(_:)), KeyCode.functionKeyString(3), [])
+        add(tr("Upravit"), #selector(editItem(_:)), KeyCode.functionKeyString(4), [])
+        add(tr("Odstranit"), #selector(deleteItems(_:)), KeyCode.functionKeyString(8), [])
+        add(tr("Odstranit trvale"), #selector(deleteItemsPermanently(_:)), KeyCode.functionKeyString(8), [.shift])
+        add(tr("Zobrazit ve Finderu"), #selector(revealInFinder(_:)))
         if withShortcuts {
             menu.addItem(.separator())
-            add("Zavřít", #selector(closeWindow(_:)), "w", [.command])
+            add(tr("Zavřít"), #selector(closeWindow(_:)), "w", [.command])
         }
         return menu
     }
 
     /// Sestaví menu dialogu (Soubory, Příkazy, Upravit, Zobrazit, Možnosti).
     private func buildMenu() {
-        let menu = NSMenu(title: "Hledat")
+        let menu = NSMenu(title: tr("Hledat"))
         func submenu(_ title: String, _ items: [NSMenuItem]) {
             let sub = NSMenu(title: title)
             items.forEach { $0.menu?.removeItem($0); sub.addItem($0) }
@@ -898,34 +898,34 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             return entry
         }
 
-        submenu("Soubory", makeFilesMenu(withShortcuts: true).items)
-        submenu("Příkazy", Self.findCommands.map { item($0.title, $0.action, $0.key, [.control]) } + [
+        submenu(tr("Soubory"), makeFilesMenu(withShortcuts: true).items)
+        submenu(tr("Příkazy"), Self.findCommands.map { item($0.title, $0.action, $0.key, [.control]) } + [
             .separator(),
-            item("Zastavit", #selector(stopClicked(_:)), "p", [.option]),
+            item(tr("Zastavit"), #selector(stopClicked(_:)), "p", [.option]),
         ])
 
         // Upravit: standardní akce (cut:/copy:/paste:/selectAll:) jdou přes responder
         // chain – v textových polích pracují s textem, v seznamu s nalezenými položkami.
-        submenu("Upravit", [
-            item("Vyjmout", #selector(NSText.cut(_:)), "x", [.command], toResponder: true),
-            item("Kopírovat", #selector(NSText.copy(_:)), "c", [.command], toResponder: true),
-            item("Vložit", #selector(NSText.paste(_:)), "v", [.command], toResponder: true),
+        submenu(tr("Upravit"), [
+            item(tr("Vyjmout"), #selector(NSText.cut(_:)), "x", [.command], toResponder: true),
+            item(tr("Kopírovat"), #selector(NSText.copy(_:)), "c", [.command], toResponder: true),
+            item(tr("Vložit"), #selector(NSText.paste(_:)), "v", [.command], toResponder: true),
             .separator(),
-            item("Kopírovat cestu + název jako text", #selector(copyFullNameAsText(_:)), "c", [.command, .option]),
-            item("Kopírovat název jako text", #selector(copyNameAsText(_:)), "c", [.command, .option, .shift]),
-            item("Kopírovat cestu jako text", #selector(copyPathAsText(_:)), "c", [.command, .control]),
+            item(tr("Kopírovat cestu + název jako text"), #selector(copyFullNameAsText(_:)), "c", [.command, .option]),
+            item(tr("Kopírovat název jako text"), #selector(copyNameAsText(_:)), "c", [.command, .option, .shift]),
+            item(tr("Kopírovat cestu jako text"), #selector(copyPathAsText(_:)), "c", [.command, .control]),
             .separator(),
-            item("Vybrat vše", #selector(NSText.selectAll(_:)), "a", [.command], toResponder: true),
-            item("Invertovat výběr", #selector(invertSelection(_:))),
+            item(tr("Vybrat vše"), #selector(NSText.selectAll(_:)), "a", [.command], toResponder: true),
+            item(tr("Invertovat výběr"), #selector(invertSelection(_:))),
         ])
-        submenu("Zobrazit", [
-            item("Seřadit podle názvu", #selector(sortByName(_:)), KeyCode.functionKeyString(3), [.control]),
-            item("Seřadit podle cesty", #selector(sortByPath(_:)), KeyCode.functionKeyString(4), [.control]),
-            item("Seřadit podle data", #selector(sortByTime(_:)), KeyCode.functionKeyString(5), [.control]),
-            item("Seřadit podle velikosti", #selector(sortBySize(_:)), KeyCode.functionKeyString(6), [.control]),
+        submenu(tr("Zobrazit"), [
+            item(tr("Seřadit podle názvu"), #selector(sortByName(_:)), KeyCode.functionKeyString(3), [.control]),
+            item(tr("Seřadit podle cesty"), #selector(sortByPath(_:)), KeyCode.functionKeyString(4), [.control]),
+            item(tr("Seřadit podle data"), #selector(sortByTime(_:)), KeyCode.functionKeyString(5), [.control]),
+            item(tr("Seřadit podle velikosti"), #selector(sortBySize(_:)), KeyCode.functionKeyString(6), [.control]),
         ])
-        submenu("Možnosti", [
-            item("Řadit soubory a adresáře dohromady", #selector(toggleSortMixed(_:))),
+        submenu(tr("Možnosti"), [
+            item(tr("Řadit soubory a adresáře dohromady"), #selector(toggleSortMixed(_:))),
         ])
         findMenu = menu
     }
@@ -1056,7 +1056,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             let text = containingCombo.stringValue
             if hexBox.state == .on {
                 guard let bytes = Self.parseHex(text) else {
-                    showError("Chybný šestnáctkový řetězec. Zadejte dvojice číslic 0–9, A–F, text uzavřete do uvozovek.")
+                    showError(tr("Chybný šestnáctkový řetězec. Zadejte dvojice číslic 0–9, A–F, text uzavřete do uvozovek."))
                     return nil
                 }
                 content = bytes
@@ -1105,7 +1105,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             refinePaths = []
             jobs = lookInRoots().map { ($0, nil) }
             guard !jobs.isEmpty else {
-                showError("Prázdný řetězec zde není povolen.")
+                showError(tr("Prázdný řetězec zde není povolen."))
                 window?.makeFirstResponder(lookInCombo)
                 return
             }
@@ -1149,7 +1149,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
                     self.updateFoundLabel()
                 }
             }
-            self.setStatus("Vyhledávání: " + collector.currentDir)
+            self.setStatus(tr("Vyhledávání: %@", collector.currentDir))
         }
         RunLoop.main.add(timer, forMode: .common)
 
@@ -1205,12 +1205,12 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
 
     /// Přepne vzhled okna mezi hledáním a nečinností (tlačítko Najít/Zastavit, titulek).
     private func setSearching(_ searching: Bool) {
-        findButton.title = searching ? "Zastavit" : "Najít"
+        findButton.title = searching ? tr("Zastavit") : tr("Najít")
         findButton.action = searching ? #selector(stopClicked(_:)) : #selector(findNowClicked(_:))
         findMenuButton.isEnabled = !searching
         stopButton.isEnabled = searching
         window?.title = searching
-            ? "\(Self.baseTitle) [vyhledávání \(namedCombo.stringValue)]"
+            ? tr("%@ [vyhledávání %@]", Self.baseTitle, namedCombo.stringValue)
             : Self.baseTitle
     }
 
@@ -1223,15 +1223,15 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         if let failure {
             setStatus(failure.localizedDescription)
         } else if stopped {
-            setStatus("Zastaveno.")
+            setStatus(tr("Zastaveno."))
         } else if rows.isEmpty {
-            setStatus("Nenalezeny žádné soubory nebo adresáře.")
+            setStatus(tr("Nenalezeny žádné soubory nebo adresáře."))
         } else {
             updateSelectionStatus()
         }
         // Přeskočené nečitelné adresáře/soubory (obdoba Protokolu hledání).
         if errors > 0 && failure == nil {
-            statusLabel.stringValue += "  (přeskočeno nečitelných položek: \(errors))"
+            statusLabel.stringValue += tr("  (přeskočeno nečitelných položek: %@)", String(errors))
         }
         if !stopped, !rows.isEmpty, window?.firstResponder is NSTextView {
             // Po hledání fokus do seznamu na první položku (jako originál).
@@ -1250,7 +1250,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     }
 
     private func updateFoundLabel() {
-        foundLabel.stringValue = "Nalezené položky: (\(rows.count))"
+        foundLabel.stringValue = tr("Nalezené položky: (%@)", String(rows.count))
     }
 
     /// Stavový řádek podle označení: velikost a počet souborů/adresářů.
@@ -1264,22 +1264,18 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         let files = selected.filter { !$0.item.isDir }
         let dirs = selected.count - files.count
         if dirs > 0 {
-            setStatus("Označeno: \(Self.plural(files.count, "soubor", "soubory", "souborů")), \(Self.plural(dirs, "adresář", "adresáře", "adresářů"))")
+            setStatus(tr("Označeno: %@, %@", plural(files.count, "soubor", "soubory", "souborů"),
+                         plural(dirs, "adresář", "adresáře", "adresářů")))
         } else {
             let size = files.reduce(UInt64(0)) { $0 + $1.item.size }
-            setStatus("Označeno: \(formatSize(size)) v \(Self.plural(files.count, "souboru", "souborech", "souborech"))")
+            // Tvar „v N souboru/souborech“ (6. pád) – vlastní slova ve slovníku.
+            setStatus(tr("Označeno: %@ v %@", formatSize(size), plural(files.count, "souboru", "souborech", "souborech")))
         }
-    }
-
-    /// Číslo s českým tvarem slova (1 / 2–4 / 5+).
-    private static func plural(_ count: Int, _ one: String, _ few: String, _ many: String) -> String {
-        let word = count == 1 ? one : (2...4).contains(count) ? few : many
-        return "\(count) \(word)"
     }
 
     /// Chybové hlášení jako sheet nad oknem hledání.
     private func showError(_ text: String) {
-        PromptDialog.show(title: "Chyba", message: text, over: window)
+        PromptDialog.show(title: tr("Chyba"), message: text, over: window)
     }
 
     // MARK: Ovládací prvky – akce
@@ -1298,11 +1294,11 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     /// Přidat: Procházet… (výběr adresáře) a Všechny místní jednotky.
     @objc private func addClicked(_ sender: NSButton) {
         let menu = NSMenu()
-        let browse = NSMenuItem(title: "Procházet…", action: #selector(browseLookIn(_:)), keyEquivalent: "")
+        let browse = NSMenuItem(title: tr("Procházet…"), action: #selector(browseLookIn(_:)), keyEquivalent: "")
         browse.target = self
         menu.addItem(browse)
         menu.addItem(.separator())
-        let drives = NSMenuItem(title: "Všechny místní jednotky", action: #selector(addLocalDrives(_:)), keyEquivalent: "")
+        let drives = NSMenuItem(title: tr("Všechny místní jednotky"), action: #selector(addLocalDrives(_:)), keyEquivalent: "")
         drives.target = self
         menu.addItem(drives)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 2), in: sender)
@@ -1324,7 +1320,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
-        panel.prompt = "Přidat"
+        panel.prompt = tr("Přidat")
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK else { return }
             self?.appendLookIn(panel.urls.map(\.path))
@@ -1341,18 +1337,18 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
     /// Nabídka pomocníka regulárních výrazů (vloží konstrukci do pole Obsahující).
     @objc private func regexHelpClicked(_ sender: NSButton) {
         let entries: [(String, String)?] = [
-            ("Libovolný znak", "."), ("Libovolný z množiny znaků", "[]"),
-            ("Libovolný mimo množinu znaků", "[^]"), ("Libovolný z rozsahu znaků", "[-]"),
-            ("Začátek řádku", "^"), ("Konec řádku", "$"), ("Nebo", "|"),
-            ("0 nebo více odpovídajících", "*"), ("1 nebo více odpovídajících", "+"),
-            ("0 nebo 1 odpovídající", "?"), nil,
-            ("Levá závorka '('", "\\("), ("Pravá závorka ')'", "\\)"), ("Tečka '.'", "\\."),
-            ("Plus '+'", "\\+"), ("Hvězdička '*'", "\\*"), nil,
-            ("Alfanumerický znak", "[a-zA-Z0-9]"), ("Znak abecedy", "[a-zA-Z]"), ("Desítková číslice", "[0-9]"), nil,
-            ("Desítkové číslo", "[0-9]+"), ("Šestnáctkové číslo", "[0-9a-fA-F]+"),
-            ("Reálné číslo", "[0-9]+\\.[0-9]*"), nil,
-            ("Řetězec ze znaků abecedy", "[a-zA-Z]+"), ("Identifikátor", "[a-zA-Z_][a-zA-Z0-9_]*"),
-            ("Řetězec v uvozovkách", "\"[^\"]*\""),
+            (tr("Libovolný znak"), "."), (tr("Libovolný z množiny znaků"), "[]"),
+            (tr("Libovolný mimo množinu znaků"), "[^]"), (tr("Libovolný z rozsahu znaků"), "[-]"),
+            (tr("Začátek řádku"), "^"), (tr("Konec řádku"), "$"), (tr("Nebo"), "|"),
+            (tr("0 nebo více odpovídajících"), "*"), (tr("1 nebo více odpovídajících"), "+"),
+            (tr("0 nebo 1 odpovídající"), "?"), nil,
+            (tr("Levá závorka '('"), "\\("), (tr("Pravá závorka ')'"), "\\)"), (tr("Tečka '.'"), "\\."),
+            ("Plus '+'", "\\+"), (tr("Hvězdička '*'"), "\\*"), nil,
+            (tr("Alfanumerický znak"), "[a-zA-Z0-9]"), (tr("Znak abecedy"), "[a-zA-Z]"), (tr("Desítková číslice"), "[0-9]"), nil,
+            (tr("Desítkové číslo"), "[0-9]+"), (tr("Šestnáctkové číslo"), "[0-9a-fA-F]+"),
+            (tr("Reálné číslo"), "[0-9]+\\.[0-9]*"), nil,
+            (tr("Řetězec ze znaků abecedy"), "[a-zA-Z]+"), (tr("Identifikátor"), "[a-zA-Z_][a-zA-Z0-9_]*"),
+            (tr("Řetězec v uvozovkách"), "\"[^\"]*\""),
         ]
         let menu = NSMenu()
         for entry in entries {
@@ -1576,9 +1572,9 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         let selected = selectedRows
         guard let window, runningState == nil, canDelete(selected) else { return }
         let (text, trashDirs) = deleteConfirmation(items: selected.map(\.item), vfs: vfs, dirs: Set(selected.map(\.dir)),
-                                                   toTrash: toTrash, verb: "odstranit")
+                                                   toTrash: toTrash, verb: tr("odstranit"))
         // Bez nadpisu, stejně jako potvrzení mazání v hlavním okně (confirm).
-        guard PromptDialog.show(title: "Odstranit", showsHeading: false, message: text, buttons: ["Odstranit"],
+        guard PromptDialog.show(title: tr("Odstranit"), showsHeading: false, message: text, buttons: [tr("Odstranit")],
                                 showsCancel: true, over: window) == 0 else { return }
         performDelete(selected, trashDirs: trashDirs)
     }
@@ -1591,7 +1587,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         let groups = Dictionary(grouping: selected, by: \.dir)
         let state = ProgressState()
         runningState = state
-        setStatus(trashDirs.isEmpty ? "Odstraňuji…" : "Přesouvám do koše…")
+        setStatus(trashDirs.isEmpty ? tr("Odstraňuji…") : tr("Přesouvám do koše…"))
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var deleted = Set<String>()
             var failure: Error?
@@ -1662,7 +1658,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
             return
         }
         FileClipboard.write(paths: paths, cut: cut)
-        if cut { setStatus("Soubory jsou ve schránce – v panelu je přesunete pomocí ⌘V, ve Finderu ⌥⌘V.") }
+        if cut { setStatus(tr("Soubory jsou ve schránce – v panelu je přesunete pomocí ⌘V, ve Finderu ⌥⌘V.")) }
     }
 
     /// Zapíše text označených položek do schránky (jedna položka na řádek).
@@ -1780,7 +1776,7 @@ final class FindWindowController: NSWindowController, NSWindowDelegate, NSTableV
         case .path:
             cell.textField?.stringValue = vfs.realPath(entry.fullDir) ?? entry.fullDir
         case .size:
-            cell.textField?.stringValue = item.isDir ? "ADRESÁŘ" : formatSize(item.size)
+            cell.textField?.stringValue = item.isDir ? tr("ADRESÁŘ") : formatSize(item.size)
         case .date:
             cell.textField?.stringValue = formatDay(item.mtime)
         case .time:

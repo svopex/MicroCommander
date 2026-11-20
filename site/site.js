@@ -14,6 +14,13 @@ document.querySelectorAll(".email-btn").forEach((button) => {
   });
 });
 
+// Texty tlačítka kopírování podle jazyka stránky (<html lang>): anglická verze
+// (en/index.html) má "en", cokoli jiného zůstává česky (výchozí index.html)
+const IS_ENGLISH = (document.documentElement.lang || "").toLowerCase().startsWith("en");
+const COPY_TEXTS = IS_ENGLISH
+  ? { copy: "Copy", copied: "Copied", failed: "Copy failed" }
+  : { copy: "Kopírovat", copied: "Zkopírováno", failed: "Nelze kopírovat" };
+
 // Ke každému bloku <pre><code> přidá tlačítko, které zkopíruje text příkazů
 // do schránky a na chvíli ukáže potvrzení. Bez přístupu ke schránce (starý
 // prohlížeč, nezabezpečená stránka) se tlačítko nepřidá a blok nemá vpravo
@@ -24,16 +31,16 @@ if (navigator.clipboard) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "copy";
-    button.textContent = "Kopírovat";
+    button.textContent = COPY_TEXTS.copy;
 
     button.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(code.innerText.trim());
-        button.textContent = "Zkopírováno";
+        button.textContent = COPY_TEXTS.copied;
       } catch {
-        button.textContent = "Nelze kopírovat";
+        button.textContent = COPY_TEXTS.failed;
       }
-      setTimeout(() => { button.textContent = "Kopírovat"; }, 1600);
+      setTimeout(() => { button.textContent = COPY_TEXTS.copy; }, 1600);
     });
 
     block.classList.add("has-copy");

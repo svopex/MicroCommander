@@ -8,8 +8,11 @@ Webová stránka projektu: <https://svopex.github.io/MicroCommander/>
 zvýrazněné tlačítko „Nahlásit chybu na GitHubu“ a za ním „Poslat e-mail“ – e-mailová adresa je v `data-email` obrácená a v base64 a `site/site.js`
 ji složí až po kliknutí a otevře poštovního klienta (na stránce se nezobrazí,
 roboti ji nenajdou); patička odkazuje na web autora <https://svopex.eu>.
-Při změně souborů v `site/` zvýšit v `index.html` číslo `?v=` u odkazů na CSS
-a JS, jinak prohlížeče až 10 minut (cache GitHub Pages) drží starou verzi.
+Anglická verze webu je `en/index.html` (assety přes `../site/`); obě stránky mají
+v navigaci přepínač CS / EN, v hlavičce `canonical` a `hreflang` (cs, en, x-default)
+a obsah udržovaný 1:1; `site/site.js` volí texty podle `lang` stránky.
+Při změně souborů v `site/` zvýšit v `index.html` i `en/index.html` číslo `?v=`
+u odkazů na CSS a JS, jinak prohlížeče až 10 minut (cache GitHub Pages) drží starou verzi.
 
 ## Prvotni zadani
 
@@ -128,10 +131,16 @@ core/                       # Rust workspace
     src/pack.rs             # vytváření ZIP z položek libovolného VFS
                             #   (bez hesla / AES-256 / ZipCrypto)
     src/error.rs            # SalError + kódy pro FFI
+    src/i18n.rs             # překlady hlášek jádra: tr/trf, tabulka EN
+                            #   (český text → anglický), jazyk z FFI
     src/ffi.rs              # C ABI (handle, list, operace, find, pack, probe, masky)
   include/microcommander.h  # C hlavička pro UI (přes module.modulemap)
 app/                        # tenké UI pro macOS
   Sources/Core.swift        # Swift obálka nad C ABI (Vfs, operace, progress)
+  Sources/Localization.swift  # překlady UI: tr / trc / plural, jazyk
+                            #   (Nastavení › Obecné, jinak jazyk macOS)
+  Locales/en/*.json         # anglické slovníky UI (český text → překlad),
+                            #   Makefile je kopíruje do Resources/Locales
   Sources/Panel.swift       # model panelu: lokace, řádky s „..“, kurzor,
                             #   označení, řazení, rychlé hledání, historie
   Sources/PanelView.swift   # vizuál panelu: řádek adresáře, tabulka, info řádek,
@@ -171,11 +180,13 @@ app/                        # tenké UI pro macOS
   AppIcon.icns              # ikona aplikace (generuje `make icon`)
 tools/make-icon.swift       # vykreslí ikonu: oranžový disk s tlapkou mloka
                             #   ve stylu Salamandera na macOS dlaždici
+tools/i18n_check.py         # kontrola úplnosti překladů (Swift, Rust, slovníky)
 tests/main.swift            # end-to-end smoke test FFI (Swift CLI)
 tests/sftp_test.sh          # SFTP end-to-end proti dočasnému sshd (make sftp-test)
 Makefile                    # build celé aplikace jedním příkazem
 index.html                  # webová stránka projektu (GitHub Pages z kořene
                             #   větve main, https://svopex.github.io/MicroCommander/)
+en/index.html               # anglická verze webové stránky
 site/                       # styly, skript (tlačítka Kopírovat a Poslat e-mail)
                             #   a ikona webové stránky
 .nojekyll                   # GitHub Pages servíruje soubory bez Jekyllu
@@ -222,6 +233,24 @@ bez něj zůstane ad-hoc podpis.
 
 Aplikace se spouští jako `build/MicroCommander.app`; knihovna `libsalcore.dylib`
 je součástí bundle (`Contents/Frameworks`, načítá se přes `@rpath`).
+
+### Jazyk rozhraní
+
+Aplikace je česky a anglicky. Jazyk se volí v Nastavení › Obecné (Podle systému /
+Čeština / English) a projeví se po restartu; „Podle systému“ = čeština, když je
+preferovaným jazykem macOS, jinak angličtina. Přeložené je celé UI (menu, dialogy,
+nápověda F1, názvy příkazů klávesových zkratek) i chybové hlášky jádra (Swift předá
+jazyk jádru přes `sal_set_language`). Self-test a kontrola kláves běží vždy česky;
+proměnná prostředí `SAL_LANG=cs|en` volbu přebije (např. pro `SAL_SNAPSHOT`).
+
+Pro vývojáře: zdrojové texty jsou česky a slouží jako klíče slovníků. Ve Swiftu
+`tr("text")`, s hodnotami `tr("Smazat %@?", name)` (hodnoty jako String přes `%@`,
+ne interpolace), tvary podle počtu `plural(n, "soubor", "soubory", "souborů")`
+a stejný text s různým významem `trc("undo", "Zpět")` (klíč `undo|Zpět`); překlady
+v `app/Locales/en/*.json`. V jádře `tr("…")` / `trf("… {} …", &[&x])` a tabulka `EN`
+v `core/crates/salcore/src/i18n.rs`. Úplnost kontroluje `python3 tools/i18n_check.py`
+(české texty mimo tr, chybějící překlady, počet zástupných symbolů, konflikty mezi
+slovníky); texty bez diakritiky kontrola nepozná, nové texty proto vždy psát přes `tr`.
 
 ### Ovládání
 
@@ -675,7 +704,9 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   FFI (kódy chyb hesla) a kompatibilita s libarchive (`bsdtar`) oběma směry:
   náš AES-256 archiv rozbalí bsdtar, AES-256 i ZipCrypto archiv z bsdtar
   přečte jádro
-- `make selftest` – UI self-test: aplikace si posílá skutečné klávesové události
+- `make selftest` – UI self-test (vždy česky; Klíčenku nepoužívá – hesla serverů
+  se při automatickém běhu nečtou ani neukládají, aby test nezablokoval dotaz macOS
+  na přístup ke Klíčence): aplikace si posílá skutečné klávesové události
   a ověřuje kurzor, Space, Tab, rychlé hledání, F7/F5/F8 dialogy (žádné
   zamrznutí), ⌫ s návratem kurzoru, ⌘U, ⌃F (okno hledání: Enter najde položky, Hledat v archivech najde položky uvnitř ZIP a Ukázat zavede panel do archivu, Escape zavře) a F11 (správa serverů) se zavřením Escapem
   a zaheslovaný AES-256 ZIP (Enter do archivu, F5, chybné → správné heslo),

@@ -88,7 +88,7 @@ private func applyAttributeChanges(_ changes: AttributeChanges, at path: String)
 ///   - state: progress (zrušení, počet zpracovaných položek)
 func applyAttributeChanges(_ changes: AttributeChanges, to paths: [String], state: ProgressState) throws {
     try applyToLocalItems(paths, recursive: changes.recursive, state: state,
-                          failureMessage: "Některé atributy se nepodařilo změnit") { path in
+                          failureMessage: tr("Některé atributy se nepodařilo změnit")) { path in
         try applyAttributeChanges(changes, at: path)
     }
 }
@@ -134,7 +134,7 @@ func applyToLocalItems(_ paths: [String], recursive: Bool, state: ProgressState,
     }
     if !failures.isEmpty {
         let shown = failures.prefix(10).joined(separator: "\n")
-        let more = failures.count > 10 ? "\n… a dalších \(failures.count - 10)" : ""
+        let more = failures.count > 10 ? tr("\n… a dalších %@", String(failures.count - 10)) : ""
         throw CoreError.code(SAL_ERR_GENERIC, "\(failureMessage):\n\(shown)\(more)")
     }
 }
@@ -143,15 +143,15 @@ func applyToLocalItems(_ paths: [String], recursive: Bool, state: ProgressState,
 final class AttributesDialog: NSWindowController {
     private var completion: ((AttributeChanges?) -> Void)?
 
-    private let readonlyBox = NSButton.triStateCheckbox("Jen pro čtení")
-    private let hiddenBox = NSButton.triStateCheckbox("Skrytý")
-    private let modifiedBox = NSButton(checkboxWithTitle: "Změněno:", target: nil, action: nil)
-    private let createdBox = NSButton(checkboxWithTitle: "Vytvořeno:", target: nil, action: nil)
-    private let accessedBox = NSButton(checkboxWithTitle: "Otevřeno:", target: nil, action: nil)
+    private let readonlyBox = NSButton.triStateCheckbox(tr("Jen pro čtení"))
+    private let hiddenBox = NSButton.triStateCheckbox(tr("Skrytý"))
+    private let modifiedBox = NSButton(checkboxWithTitle: tr("Změněno:"), target: nil, action: nil)
+    private let createdBox = NSButton(checkboxWithTitle: tr("Vytvořeno:"), target: nil, action: nil)
+    private let accessedBox = NSButton(checkboxWithTitle: tr("Otevřeno:"), target: nil, action: nil)
     private let modifiedPicker = NSDatePicker()
     private let createdPicker = NSDatePicker()
     private let accessedPicker = NSDatePicker()
-    private let recursiveBox = NSButton(checkboxWithTitle: "Včetně podadresářů", target: nil, action: nil)
+    private let recursiveBox = NSButton(checkboxWithTitle: tr("Včetně podadresářů"), target: nil, action: nil)
     /// Řádky změny data a času: zaškrtávací pole a výběr data.
     private lazy var dateRows = [(modifiedBox, modifiedPicker), (createdBox, createdPicker), (accessedBox, accessedPicker)]
 
@@ -176,13 +176,13 @@ final class AttributesDialog: NSWindowController {
     private init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 372),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "Změnit atributy"
+        window.title = tr("Změnit atributy")
         super.init(window: window)
         buildContent()
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Rozvržení podle IDD_ATTRIBUTES: Atributy, Změna data a času, Možnosti.
@@ -190,11 +190,11 @@ final class AttributesDialog: NSWindowController {
         let content = FlippedView(frame: NSRect(x: 0, y: 0, width: 380, height: 372))
 
         // Atributy; Windows atributy jen pro shodné rozvržení (nedostupné).
-        content.addSection("Atributy", y: 10)
-        let archiveBox = NSButton(checkboxWithTitle: "Archivovat", target: nil, action: nil)
-        let compressedBox = NSButton(checkboxWithTitle: "Komprimovaný", target: nil, action: nil)
-        let systemBox = NSButton(checkboxWithTitle: "Systémový", target: nil, action: nil)
-        let encryptedBox = NSButton(checkboxWithTitle: "Šifrovaný", target: nil, action: nil)
+        content.addSection(tr("Atributy"), y: 10)
+        let archiveBox = NSButton(checkboxWithTitle: tr("Archivovat"), target: nil, action: nil)
+        let compressedBox = NSButton(checkboxWithTitle: tr("Komprimovaný"), target: nil, action: nil)
+        let systemBox = NSButton(checkboxWithTitle: tr("Systémový"), target: nil, action: nil)
+        let encryptedBox = NSButton(checkboxWithTitle: tr("Šifrovaný"), target: nil, action: nil)
         for box in [archiveBox, compressedBox, systemBox, encryptedBox] { box.isEnabled = false }
         content.place(archiveBox, NSRect(x: 24, y: 32, width: 110, height: 18))
         content.place(hiddenBox, NSRect(x: 140, y: 32, width: 100, height: 18))
@@ -204,7 +204,7 @@ final class AttributesDialog: NSWindowController {
         content.place(encryptedBox, NSRect(x: 246, y: 54, width: 124, height: 18))
 
         // Změna data a času: zaškrtnuté hodnoty se nastaví, ostatní se nemění.
-        content.addSection("Změna data a času", y: 90)
+        content.addSection(tr("Změna data a času"), y: 90)
         for (index, (box, picker)) in dateRows.enumerated() {
             let y = 114 + CGFloat(index) * 30
             picker.datePickerStyle = .textFieldAndStepper
@@ -214,11 +214,11 @@ final class AttributesDialog: NSWindowController {
             content.place(box, NSRect(x: 24, y: y + 2, width: 110, height: 18))
             content.place(picker, NSRect(x: 140, y: y, width: 228, height: 24))
         }
-        let currentButton = NSButton(title: "Nastavit aktuální", target: self, action: #selector(setCurrentClicked(_:)))
+        let currentButton = NSButton(title: tr("Nastavit aktuální"), target: self, action: #selector(setCurrentClicked(_:)))
         content.place(currentButton, NSRect(x: 228, y: 204, width: 140, height: 28))
 
         // Možnosti.
-        content.addSection("Možnosti", y: 246)
+        content.addSection(tr("Možnosti"), y: 246)
         content.place(recursiveBox, NSRect(x: 24, y: 270, width: 300, height: 18))
 
         // Tlačítka.
@@ -228,7 +228,7 @@ final class AttributesDialog: NSWindowController {
         let okButton = NSButton(title: "OK", target: self, action: #selector(okClicked(_:)))
         okButton.keyEquivalent = "\r"
         content.place(okButton, NSRect(x: 164, y: 322, width: 100, height: 28))
-        let cancelButton = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
+        let cancelButton = NSButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:)))
         cancelButton.keyEquivalent = "\u{1b}"
         content.place(cancelButton, NSRect(x: 268, y: 322, width: 100, height: 28))
         window?.contentView = content

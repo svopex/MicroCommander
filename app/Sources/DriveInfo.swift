@@ -62,32 +62,32 @@ struct VolumeInfo {
         let isLocal = values?.volumeIsLocal ?? (stats.f_flags & UInt32(MNT_LOCAL) != 0)
         let type: String
         if !isLocal {
-            type = "síťová jednotka"
+            type = tr("síťová jednotka")
         } else if values?.volumeIsInternal == true {
-            type = "interní disk"
+            type = tr("interní disk")
         } else if values?.volumeIsRemovable == true || values?.volumeIsEjectable == true {
-            type = "výměnný disk"
+            type = tr("výměnný disk")
         } else {
-            type = "externí disk"
+            type = tr("externí disk")
         }
 
         // Příznaky: jen ty, které svazek opravdu má (nil = neznámé, vynechá se).
         var flags: [String] = []
         let readOnly = values?.volumeIsReadOnly ?? (stats.f_flags & UInt32(MNT_RDONLY) != 0)
-        if readOnly { flags.append("jen pro čtení") }
+        if readOnly { flags.append(tr("jen pro čtení")) }
         if let caseSensitive = values?.volumeSupportsCaseSensitiveNames {
-            flags.append(caseSensitive ? "rozlišuje malá a velká písmena v názvech" : "nerozlišuje malá a velká písmena v názvech")
+            flags.append(caseSensitive ? tr("rozlišuje malá a velká písmena v názvech") : tr("nerozlišuje malá a velká písmena v názvech"))
         }
         let optionalFlags: [(Bool?, String)] = [
-            (values?.volumeSupportsCasePreservedNames, "zachovává malá a velká písmena v názvech"),
-            (values?.volumeIsEncrypted, "šifrovaný"),
-            (values?.volumeIsJournaling, "žurnálovaný"),
-            (values?.volumeSupportsCompression, "podporuje zhuštěné soubory"),
-            (values?.volumeSupportsSparseFiles, "podporuje řídké soubory"),
-            (values?.volumeSupportsFileCloning, "podporuje klonování souborů"),
-            (values?.volumeSupportsHardLinks, "podporuje pevné odkazy"),
-            (values?.volumeSupportsSymbolicLinks, "podporuje symbolické odkazy"),
-            (values?.volumeSupportsExtendedSecurity, "podporuje seznamy oprávnění (ACL)"),
+            (values?.volumeSupportsCasePreservedNames, tr("zachovává malá a velká písmena v názvech")),
+            (values?.volumeIsEncrypted, tr("šifrovaný")),
+            (values?.volumeIsJournaling, tr("žurnálovaný")),
+            (values?.volumeSupportsCompression, tr("podporuje zhuštěné soubory")),
+            (values?.volumeSupportsSparseFiles, tr("podporuje řídké soubory")),
+            (values?.volumeSupportsFileCloning, tr("podporuje klonování souborů")),
+            (values?.volumeSupportsHardLinks, tr("podporuje pevné odkazy")),
+            (values?.volumeSupportsSymbolicLinks, tr("podporuje symbolické odkazy")),
+            (values?.volumeSupportsExtendedSecurity, tr("podporuje seznamy oprávnění (ACL)")),
         ]
         flags += optionalFlags.filter { $0.0 == true }.map(\.1)
 
@@ -182,7 +182,7 @@ class InfoDialog: NSWindowController {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Hodnota řádku: lze ji označit a zkopírovat; dlouhý text se zkrátí
@@ -201,7 +201,7 @@ class InfoDialog: NSWindowController {
     /// - Returns: svislá poloha dalšího řádku
     func addSizeRow(_ label: String, bytes: UInt64, to content: FlippedView, y: CGFloat) -> CGFloat {
         content.place(NSTextField(labelWithString: label), NSRect(x: 70, y: y, width: 110, height: 17))
-        content.place(makeValue(formatExactSize(bytes) + " bajtů", alignment: .right),
+        content.place(makeValue(tr("%@ bajtů", formatExactSize(bytes)), alignment: .right),
                       NSRect(x: 180, y: y, width: 190, height: 17))
         content.place(makeValue(formatSize(bytes), alignment: .right), NSRect(x: 376, y: y, width: 90, height: 17))
         return y + 24
@@ -213,7 +213,7 @@ class InfoDialog: NSWindowController {
     ///   - content: sestavený obsah dialogu
     ///   - y: svislá poloha pod posledním prvkem obsahu
     func finish(content: FlippedView, y: CGFloat) {
-        let closeButton = NSButton(title: "Zavřít", target: self, action: #selector(close(_:)))
+        let closeButton = NSButton(title: tr("Zavřít"), target: self, action: #selector(close(_:)))
         closeButton.keyEquivalent = "\r"
         content.place(closeButton, NSRect(x: (width - 110) / 2, y: y, width: 110, height: 28))
         let height = y + 28 + 16
@@ -234,12 +234,12 @@ final class DriveInfoDialog: InfoDialog {
     /// Sestaví dialog; zobrazuje se jako sheet (MainWindowController.presentSheet).
     /// - Parameter info: údaje o svazku
     init(info: VolumeInfo) {
-        super.init(title: "Informace o jednotce", width: 600)
+        super.init(title: tr("Informace o jednotce"), width: 600)
         buildContent(info)
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Rozvržení podle dialogu Salamandera: svazek, místo s grafem, bloky,
@@ -271,20 +271,20 @@ final class DriveInfoDialog: InfoDialog {
         // Svazek: ikona disku vlevo, vedle ní základní údaje.
         let icon = NSImageView(image: NSWorkspace.shared.icon(forFile: info.mountPoint))
         content.place(icon, NSRect(x: 18, y: y, width: 36, height: 36))
-        addRow("Název svazku:", info.name)
-        addRow("Přípojný bod:", info.mountPoint)
-        addRow("Zařízení:", info.device)
-        addRow("UUID svazku:", info.uuid.isEmpty ? "–" : info.uuid)
-        addRow("Typ:", info.type)
+        addRow(tr("Název svazku:"), info.name)
+        addRow(tr("Přípojný bod:"), info.mountPoint)
+        addRow(tr("Zařízení:"), info.device)
+        addRow(tr("UUID svazku:"), info.uuid.isEmpty ? "–" : info.uuid)
+        addRow(tr("Typ:"), info.type)
         addSeparator()
 
         // Místo: barevná značka (legenda grafu), popisek, bajty a zaokrouhlená
         // velikost zarovnané vpravo, vpravo koláčový graf.
         let spaceTop = y
         let spaceRows: [(String, UInt64, NSColor?)] = [
-            ("Využité místo:", info.used, UsagePieView.usedColor),
-            ("Volné místo:", info.free, UsagePieView.freeColor),
-            ("Kapacita:", info.capacity, nil),
+            (tr("Využité místo:"), info.used, UsagePieView.usedColor),
+            (tr("Volné místo:"), info.free, UsagePieView.freeColor),
+            (tr("Kapacita:"), info.capacity, nil),
         ]
         for (label, bytes, color) in spaceRows {
             if let color {
@@ -300,22 +300,22 @@ final class DriveInfoDialog: InfoDialog {
         }
         let pie = UsagePieView()
         pie.freeFraction = info.capacity > 0 ? CGFloat(info.free) / CGFloat(info.capacity) : 0
-        pie.toolTip = String(format: "Volných %.1f %%", pie.freeFraction * 100)
+        pie.toolTip = tr("Volných %@ %%", String(format: "%.1f", pie.freeFraction * 100))
         content.place(pie, NSRect(x: width - 16 - 76, y: spaceTop - 4, width: 76, height: 76))
         addSeparator()
 
         // Bloky (obdoba sektorů a clusterů ve Windows).
-        addRow("Bajtů v bloku:", formatExactSize(info.blockSize))
-        addRow("Počet bloků:", formatExactSize(info.blockCount))
-        addRow("Volných bloků:", formatExactSize(info.freeBlocks))
+        addRow(tr("Bajtů v bloku:"), formatExactSize(info.blockSize))
+        addRow(tr("Počet bloků:"), formatExactSize(info.blockCount))
+        addRow(tr("Volných bloků:"), formatExactSize(info.freeBlocks))
         addSeparator()
 
         // Systém souborů a jeho příznaky (zalomený text, výška podle obsahu).
-        addRow("Systém souborů:", info.fileSystem)
+        addRow(tr("Systém souborů:"), info.fileSystem)
         let flagsField = NSTextField(wrappingLabelWithString: info.flags.isEmpty ? "–" : info.flags.joined(separator: ", "))
         flagsField.isSelectable = true
         let flagsHeight = ceil(flagsField.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: valueWidth, height: 10000)).height ?? 17)
-        addRow("Příznaky:", flagsField, height: flagsHeight)
+        addRow(tr("Příznaky:"), flagsField, height: flagsHeight)
         addSeparator()
         finish(content: content, y: y)
     }

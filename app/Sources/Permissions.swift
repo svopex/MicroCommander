@@ -107,7 +107,7 @@ private func applyPermissionChanges(_ changes: PermissionChanges, at path: Strin
 ///   - state: progress (zrušení, počet zpracovaných položek)
 func applyPermissionChanges(_ changes: PermissionChanges, to paths: [String], state: ProgressState) throws {
     try applyToLocalItems(paths, recursive: changes.recursive, state: state,
-                          failureMessage: "Některá oprávnění se nepodařilo změnit") { path in
+                          failureMessage: tr("Některá oprávnění se nepodařilo změnit")) { path in
         try applyPermissionChanges(changes, at: path)
     }
 }
@@ -162,7 +162,7 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
     private let groupPopup = NSPopUpButton()
     private let octalField = NSTextField()
     private let symbolicLabel = NSTextField(labelWithString: "")
-    private let recursiveBox = NSButton(checkboxWithTitle: "Včetně podadresářů", target: nil, action: nil)
+    private let recursiveBox = NSButton(checkboxWithTitle: tr("Včetně podadresářů"), target: nil, action: nil)
     private let scopePopup = NSPopUpButton()
     /// Skupina položek, když je u všech stejná (výběr ve vyskakovacím seznamu
     /// ji pak nemění); nil = různé skupiny.
@@ -189,13 +189,13 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
     private init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 452),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "Oprávnění"
+        window.title = tr("Oprávnění")
         super.init(window: window)
         buildContent()
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Rozvržení: Položky (jméno, vlastník, skupina), Oprávnění (mřížka
@@ -204,32 +204,32 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
         let content = FlippedView(frame: NSRect(x: 0, y: 0, width: 420, height: 452))
 
         // Položky: jméno, vlastník (jen ke čtení – změna vyžaduje root) a skupina.
-        content.addSection("Položky", y: 10)
-        let rows: [(String, NSView, CGFloat)] = [("Jméno:", nameLabel, 32), ("Vlastník:", ownerLabel, 56)]
+        content.addSection(tr("Položky"), y: 10)
+        let rows: [(String, NSView, CGFloat)] = [(tr("Jméno:"), nameLabel, 32), (tr("Vlastník:"), ownerLabel, 56)]
         for (title, value, y) in rows {
             content.place(NSTextField(labelWithString: title), NSRect(x: 24, y: y, width: 80, height: 17))
             (value as? NSTextField)?.lineBreakMode = .byTruncatingMiddle
             content.place(value, NSRect(x: 110, y: y, width: 296, height: 17))
         }
-        content.place(NSTextField(labelWithString: "Skupina:"), NSRect(x: 24, y: 82, width: 80, height: 17))
+        content.place(NSTextField(labelWithString: tr("Skupina:")), NSRect(x: 24, y: 82, width: 80, height: 17))
         content.place(groupPopup, NSRect(x: 106, y: 77, width: 220, height: 26))
 
         // Mřížka práv: sloupce Čtení / Zápis / Spouštění, řádky u / g / o.
-        content.addSection("Oprávnění", y: 118)
+        content.addSection(tr("Oprávnění"), y: 118)
         let columns: [CGFloat] = [150, 230, 310]
-        for (title, x) in zip(["Čtení", "Zápis", "Spouštění"], columns) {
+        for (title, x) in zip([tr("Čtení"), tr("Zápis"), tr("Spouštění")], columns) {
             let label = NSTextField(labelWithString: title)
             label.alignment = .center
             content.place(label, NSRect(x: x - 32, y: 140, width: 80, height: 17))
         }
-        for (row, title) in ["Vlastník", "Skupina", "Ostatní"].enumerated() {
+        for (row, title) in [tr("Vlastník"), tr("Skupina"), tr("Ostatní")].enumerated() {
             let y = 164 + CGFloat(row) * 24
             content.place(NSTextField(labelWithString: title), NSRect(x: 24, y: y, width: 100, height: 17))
             for column in 0..<3 {
                 content.place(modeBoxes[row * 3 + column].box, NSRect(x: columns[column], y: y, width: 20, height: 18))
             }
         }
-        content.place(NSTextField(labelWithString: "Zvláštní:"), NSRect(x: 24, y: 242, width: 80, height: 17))
+        content.place(NSTextField(labelWithString: tr("Zvláštní:")), NSRect(x: 24, y: 242, width: 80, height: 17))
         for (index, entry) in specialBoxes.enumerated() {
             content.place(entry.box, NSRect(x: 110 + CGFloat(index) * 96, y: 242, width: 90, height: 18))
         }
@@ -238,7 +238,7 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
             entry.box.action = #selector(boxChanged(_:))
         }
         // Číselný zápis (3 nebo 4 osmičkové číslice) a symbolický náhled.
-        content.place(NSTextField(labelWithString: "Číselně:"), NSRect(x: 24, y: 274, width: 80, height: 17))
+        content.place(NSTextField(labelWithString: tr("Číselně:")), NSRect(x: 24, y: 274, width: 80, height: 17))
         octalField.delegate = self
         octalField.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         content.place(octalField, NSRect(x: 110, y: 271, width: 64, height: 22))
@@ -247,12 +247,12 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
         content.place(symbolicLabel, NSRect(x: 186, y: 274, width: 200, height: 17))
 
         // Možnosti: rekurze a rozsah (jen soubory / jen adresáře).
-        content.addSection("Možnosti", y: 308)
+        content.addSection(tr("Možnosti"), y: 308)
         recursiveBox.target = self
         recursiveBox.action = #selector(recursiveChanged(_:))
         content.place(recursiveBox, NSRect(x: 24, y: 332, width: 300, height: 18))
-        content.place(NSTextField(labelWithString: "Použít na:"), NSRect(x: 44, y: 360, width: 80, height: 17))
-        scopePopup.addItems(withTitles: ["Soubory i adresáře", "Jen soubory", "Jen adresáře"])
+        content.place(NSTextField(labelWithString: tr("Použít na:")), NSRect(x: 44, y: 360, width: 80, height: 17))
+        scopePopup.addItems(withTitles: [tr("Soubory i adresáře"), tr("Jen soubory"), tr("Jen adresáře")])
         content.place(scopePopup, NSRect(x: 126, y: 355, width: 200, height: 26))
 
         // Tlačítka.
@@ -260,7 +260,7 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
         let okButton = NSButton(title: "OK", target: self, action: #selector(okClicked(_:)))
         okButton.keyEquivalent = "\r"
         content.place(okButton, NSRect(x: 204, y: 410, width: 100, height: 28))
-        let cancelButton = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
+        let cancelButton = NSButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:)))
         cancelButton.keyEquivalent = "\u{1b}"
         content.place(cancelButton, NSRect(x: 308, y: 410, width: 100, height: 28))
         window?.contentView = content
@@ -270,7 +270,7 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
     private func load(itemsDescription: String, infos: [PermissionInfo]) {
         nameLabel.stringValue = itemsDescription
         let owners = Set(infos.map(\.uid))
-        ownerLabel.stringValue = owners.count == 1 ? userName(owners.first!) : "různí"
+        ownerLabel.stringValue = owners.count == 1 ? userName(owners.first!) : tr("různí")
 
         // Bity jedním průchodem: nastavený u všech (AND) = zaškrtnuto, u některých
         // (OR bez AND) = smíšený. Smíšený stav se nabízí jen tam, kde opravdu nastal.
@@ -286,7 +286,7 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
         let groups = Set(infos.map(\.gid))
         commonGroup = groups.count == 1 ? groups.first : nil
         if commonGroup == nil {
-            groupPopup.addItem(withTitle: "(různé – neměnit)")
+            groupPopup.addItem(withTitle: tr("(různé – neměnit)"))
         }
         let choices = currentUserGroups().union(groups)
             .map { (gid: $0, name: groupName($0)) }
@@ -316,7 +316,7 @@ final class PermissionsDialog: NSWindowController, NSTextFieldDelegate {
     /// Číselný a symbolický zápis podle zaškrtávacích polí; smíšený bit číslo nemá.
     private func updateOctalField() {
         let bits = currentBits
-        octalField.placeholderString = bits.unknown != 0 ? "různé" : nil
+        octalField.placeholderString = bits.unknown != 0 ? tr("různé") : nil
         octalField.stringValue = bits.unknown != 0 ? "" : String(format: "%03o", UInt32(bits.set))
         symbolicLabel.stringValue = symbolicMode(bits.set, unknown: bits.unknown)
     }

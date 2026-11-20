@@ -89,6 +89,9 @@ typedef void (*SalFoundFn)(void *user, const char *archive, const char *path, ui
 /* Verze jádra (statický řetězec, neuvolňovat). */
 const char *sal_version(void);
 
+/* Jazyk textů jádra (chybové hlášky): "en" = angličtina, jinak čeština (výchozí). */
+void sal_set_language(const char *language);
+
 /* Otevření lokálního VFS; root NULL nebo "" = celý disk ("/"). */
 SalVfs *sal_open_local(const char *root);
 

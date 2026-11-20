@@ -22,12 +22,12 @@ enum ViewMode: Int, CaseIterable {
     /// Název v menu (jako v Salamanderu).
     var title: String {
         switch self {
-        case .brief: return "Stručný"
-        case .detailed: return "Podrobný"
-        case .icons: return "Ikony"
-        case .thumbnails: return "Miniatury"
-        case .tiles: return "Dlaždice"
-        case .types: return "Typy"
+        case .brief: return tr("Stručný")
+        case .detailed: return tr("Podrobný")
+        case .icons: return tr("Ikony")
+        case .thumbnails: return tr("Miniatury")
+        case .tiles: return tr("Dlaždice")
+        case .types: return tr("Typy")
         }
     }
 
@@ -45,11 +45,11 @@ enum NavigationKey {
 /// Popis typu souboru pro režimy Typy a Dlaždice (lokalizovaný systémem, cache).
 func typeDescription(for row: Row) -> String {
     if row.isParent { return "" }
-    if row.item.isDir { return "Složka" }
+    if row.item.isDir { return tr("Složka") }
     let ext = row.ext.lowercased()
     if let cached = typeDescriptionCache[ext] { return cached }
     let description = (ext.isEmpty ? nil : UTType(filenameExtension: ext))?.localizedDescription
-        ?? (ext.isEmpty ? "Soubor" : "Soubor \(ext.uppercased())")
+        ?? (ext.isEmpty ? tr("Soubor") : tr("Soubor %@", ext.uppercased()))
     typeDescriptionCache[ext] = description
     return description
 }

@@ -30,10 +30,9 @@ impl LocalFs {
             Some(root_str) if !root_str.is_empty() => {
                 let path = PathBuf::from(root_str);
                 if !path.is_absolute() {
-                    return Err(SalError::Io(
-                        "Kořen lokálního souborového systému musí být absolutní cesta."
-                            .to_string(),
-                    ));
+                    return Err(SalError::Io(crate::i18n::tr(
+                        "Kořen lokálního souborového systému musí být absolutní cesta.",
+                    )));
                 }
                 path
             }

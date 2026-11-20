@@ -95,7 +95,8 @@ smoke: release
 	@mkdir -p $(BUILD)
 	swiftc -O -target $(SWIFT_TARGET) -I $(CORE)/include -L $(CORE)/target/release -lsalcore \
 		-Xlinker -rpath -Xlinker $(CORE)/target/release \
-		$(ROOT)/tests/main.swift $(APP)/Sources/Core.swift -o $(BUILD)/ffi-smoke
+		$(ROOT)/tests/main.swift $(APP)/Sources/Core.swift $(APP)/Sources/Localization.swift \
+		-o $(BUILD)/ffi-smoke
 	$(BUILD)/ffi-smoke
 
 # .app bundle: vždy celá sekvence (install name → kopie dylib → swiftc → plist).
@@ -126,6 +127,10 @@ app: release $(SWIFTTERM_LIB)
 	/usr/libexec/PlistBuddy -c "Add :MCBuildDate string $$(date '+%Y-%m-%d %H:%M')" $(APPDIR)/Contents/Info.plist
 	@mkdir -p $(APPDIR)/Contents/Resources
 	cp $(APP)/AppIcon.icns $(APPDIR)/Contents/Resources/AppIcon.icns
+	# Anglické slovníky UI (app/Locales/en/*.json); starou kopii nejdřív smažeme,
+	# aby v balíčku nezůstal odstraněný slovník.
+	rm -rf $(APPDIR)/Contents/Resources/Locales
+	cp -R $(APP)/Locales $(APPDIR)/Contents/Resources/Locales
 	# Licence staticky přilinkované knihovny SwiftTerm (MIT) jde s aplikací.
 	cp $(SWIFTTERM_SRC)/LICENSE $(APPDIR)/Contents/Resources/SwiftTerm-LICENSE.txt
 	# Podpis stálou identitou (nejdřív knihovna, pak bundle), pokud je certifikát v klíčence.

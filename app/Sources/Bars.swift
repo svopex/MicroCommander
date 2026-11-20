@@ -199,7 +199,7 @@ final class CommandBar: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     @objc private func buttonClicked(_ sender: NSButton) {
@@ -253,7 +253,7 @@ final class DriveBar: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     @objc private func placesChanged(_ notification: Notification) {
@@ -271,7 +271,7 @@ final class DriveBar: NSView {
             button.imagePosition = .imageLeading
             button.font = NSFont.systemFont(ofSize: 11)
             button.tag = index
-            button.toolTip = place.detail + " – pravým tlačítkem změníte pořadí nebo položku skryjete"
+            button.toolTip = tr("%@ – pravým tlačítkem změníte pořadí nebo položku skryjete", place.detail)
             button.menu = contextMenu(for: index)
             stack.addArrangedSubview(button)
         }
@@ -281,19 +281,19 @@ final class DriveBar: NSView {
         ftp.isBordered = false
         ftp.imagePosition = .imageLeading
         ftp.font = NSFont.systemFont(ofSize: 11)
-        ftp.toolTip = "FTP/SFTP servery – přidat, upravit, připojit (F11)"
+        ftp.toolTip = tr("FTP/SFTP servery – přidat, upravit, připojit (F11)")
         stack.addArrangedSubview(ftp)
     }
 
     /// Kontextové menu tlačítka: změna pořadí, skrytí, úprava nabídky disků.
     private func contextMenu(for index: Int) -> NSMenu {
         let menu = NSMenu()
-        let front = NSMenuItem(title: "Na první místo", action: #selector(moveToFrontSelected(_:)), keyEquivalent: "")
+        let front = NSMenuItem(title: tr("Na první místo"), action: #selector(moveToFrontSelected(_:)), keyEquivalent: "")
         front.target = self
         front.tag = index
         front.isEnabled = index > 0
         menu.addItem(front)
-        for (title, target) in [("Posunout doleva", index - 1), ("Posunout doprava", index + 1)] {
+        for (title, target) in [(tr("Posunout doleva"), index - 1), (tr("Posunout doprava"), index + 1)] {
             let item = NSMenuItem(title: title, action: #selector(swapSelected(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = [index, target]
@@ -301,11 +301,11 @@ final class DriveBar: NSView {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let hide = NSMenuItem(title: "Skrýt", action: #selector(hideSelected(_:)), keyEquivalent: "")
+        let hide = NSMenuItem(title: tr("Skrýt"), action: #selector(hideSelected(_:)), keyEquivalent: "")
         hide.target = self
         hide.tag = index
         menu.addItem(hide)
-        let edit = NSMenuItem(title: "Upravit nabídku disků…", action: #selector(editSelected(_:)), keyEquivalent: "")
+        let edit = NSMenuItem(title: tr("Upravit nabídku disků…"), action: #selector(editSelected(_:)), keyEquivalent: "")
         edit.target = self
         menu.addItem(edit)
         menu.autoenablesItems = false
@@ -406,7 +406,7 @@ final class FunctionKeyBar: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Přepne popisky podle modifikátorů (volá monitor flagsChanged).
@@ -455,7 +455,7 @@ final class FunctionKeyButton: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Rámeček, výplň a text; nepoužitá klávesa má jen šedé číslo.

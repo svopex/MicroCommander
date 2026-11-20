@@ -49,8 +49,8 @@ struct Place {
     /// Popis typu položky pro dialog úprav.
     var kindName: String {
         switch kind {
-        case .drive: return "Disk"
-        case .folder: return "Adresář"
+        case .drive: return tr("Disk")
+        case .folder: return tr("Adresář")
         case .server(let server): return server.isSftp ? "SFTP" : "FTP"
         }
     }
@@ -113,7 +113,7 @@ enum PlaceStore {
         }
         var result = [
             Place(key: Place.key(drive: "/"), kind: .drive, title: "/", detail: "/", icon: icon("/")),
-            Place(key: Place.key(drive: NSHomeDirectory()), kind: .drive, title: "Domů", detail: NSHomeDirectory(),
+            Place(key: Place.key(drive: NSHomeDirectory()), kind: .drive, title: tr("Domů"), detail: NSHomeDirectory(),
                   icon: icon(NSHomeDirectory())),
         ]
         // Svazky kromě systémového (ten je už jako "/").
@@ -269,7 +269,7 @@ enum PlaceStore {
 /// Změny se ukládají hned.
 final class PlacesWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private let tableView = NSTableView()
-    private let removeButton = NSButton(title: "Odebrat", target: nil, action: nil)
+    private let removeButton = NSButton(title: tr("Odebrat"), target: nil, action: nil)
     private let upButton = NSButton()
     private let downButton = NSButton()
     private let noteLabel = NSTextField(wrappingLabelWithString: "")
@@ -292,7 +292,7 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
     init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 440),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "Upravit nabídku disků"
+        window.title = tr("Upravit nabídku disků")
         super.init(window: window)
         buildLayout()
         reload(selecting: 0)
@@ -300,7 +300,7 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     // MARK: Rozvržení
@@ -308,10 +308,10 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
     /// Tabulka (Zobrazit / Název / Typ a cesta), pod ní tlačítka.
     private func buildLayout() {
         let columns: [(NSUserInterfaceItemIdentifier, String, CGFloat)] = [
-            (PlacesWindowController.showColumn, "Zobrazit", 64),
-            (PlacesWindowController.titleColumn, "Název", 210),
-            (PlacesWindowController.shortcutColumn, "Zkratka", 86),
-            (PlacesWindowController.detailColumn, "Typ a cesta / adresa", 350),
+            (PlacesWindowController.showColumn, trc("show", "Zobrazit"), 64),
+            (PlacesWindowController.titleColumn, tr("Název"), 210),
+            (PlacesWindowController.shortcutColumn, tr("Zkratka"), 86),
+            (PlacesWindowController.detailColumn, tr("Typ a cesta / adresa"), 350),
         ]
         for (identifier, title, width) in columns {
             let column = NSTableColumn(identifier: identifier)
@@ -336,12 +336,12 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
 
-        let addButton = NSButton(title: "Přidat adresář…", target: self, action: #selector(addClicked(_:)))
+        let addButton = NSButton(title: tr("Přidat adresář…"), target: self, action: #selector(addClicked(_:)))
         removeButton.target = self
         removeButton.action = #selector(removeClicked(_:))
         let arrows: [(NSButton, String, Selector, String)] = [
-            (upButton, "chevron.up", #selector(upClicked(_:)), "Posunout nahoru"),
-            (downButton, "chevron.down", #selector(downClicked(_:)), "Posunout dolů"),
+            (upButton, "chevron.up", #selector(upClicked(_:)), tr("Posunout nahoru")),
+            (downButton, "chevron.down", #selector(downClicked(_:)), tr("Posunout dolů")),
         ]
         for (button, symbol, action, tip) in arrows {
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
@@ -352,7 +352,7 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
         for button in [addButton, removeButton, upButton, downButton] {
             button.bezelStyle = .rounded
         }
-        let closeButton = NSButton(title: "Zavřít", target: self, action: #selector(closeClicked(_:)))
+        let closeButton = NSButton(title: tr("Zavřít"), target: self, action: #selector(closeClicked(_:)))
         closeButton.bezelStyle = .rounded
         closeButton.keyEquivalent = "\u{1b}"
         let spacer = NSView()
@@ -361,9 +361,9 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
         buttons.spacing = 8
         noteLabel.font = NSFont.systemFont(ofSize: 11)
         noteLabel.textColor = .secondaryLabelColor
-        noteLabel.stringValue = "Odškrtnutá místa se v nabídce disků (⌥F1/⌥F2) a na liště disků nezobrazí. "
+        noteLabel.stringValue = tr("Odškrtnutá místa se v nabídce disků (⌥F1/⌥F2) a na liště disků nezobrazí. "
             + "Pořadí změníte přetažením myší nebo šipkami. Zkratka ⌘0–⌘9 otevře místo v aktivním panelu. "
-            + "Název vlastního adresáře změníte dvojklikem. Servery se přidávají a odebírají ve správě FTP/SFTP serverů (F11)."
+            + "Název vlastního adresáře změníte dvojklikem. Servery se přidávají a odebírají ve správě FTP/SFTP serverů (F11).")
 
         let content = NSView()
         for view in [scroll, noteLabel, buttons] as [NSView] {
@@ -572,8 +572,8 @@ final class PlacesWindowController: NSWindowController, NSTableViewDataSource, N
     @objc private func addClicked(_ sender: Any?) {
         guard let window else { return }
         let panel = NSOpenPanel()
-        panel.title = "Přidat adresáře do nabídky disků"
-        panel.prompt = "Přidat"
+        panel.title = tr("Přidat adresáře do nabídky disků")
+        panel.prompt = tr("Přidat")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true

@@ -221,7 +221,7 @@ final class TerminalSession: NSView, LocalProcessTerminalViewDelegate {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Sváže výšku terminálu s výškou plochy, kterou zabírá v režimu celého okna
@@ -700,7 +700,7 @@ final class TerminalSession: NSView, LocalProcessTerminalViewDelegate {
         resetShellState()
         if lifetime < Self.minimumShellLifetime {
             waitsForRestart = true
-            terminalView.feed(text: "\r\n[Shell skončil hned po spuštění – další klávesa ho spustí znovu.]\r\n")
+            terminalView.feed(text: "\r\n" + tr("[Shell skončil hned po spuštění – další klávesa ho spustí znovu.]") + "\r\n")
             updatePosition()
         } else {
             onShellExited?()
@@ -740,7 +740,7 @@ final class TerminalTabButton: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     override var intrinsicContentSize: NSSize {
@@ -817,7 +817,7 @@ final class TerminalTabBar: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Přestaví lištu: záložky s pořadím a názvem a na konci tlačítko „+“.
@@ -828,13 +828,13 @@ final class TerminalTabBar: NSView {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for (index, title) in titles.enumerated() {
             let button = TerminalTabButton(number: "\(index + 1)", title: title, isSelected: index == selected, closable: true)
-            button.toolTip = "Terminál \(index + 1): \(title)"
+            button.toolTip = tr("Terminál %@: %@", String(index + 1), title)
             button.onClick = { [weak self] in self?.onSelect?(index) }
             button.onClose = { [weak self] in self?.onClose?(index) }
             stack.addArrangedSubview(button)
         }
         let add = TerminalTabButton(number: "+", title: "", isSelected: false, closable: false)
-        add.toolTip = "Nová záložka terminálu"
+        add.toolTip = tr("Nová záložka terminálu")
         add.onClick = { [weak self] in self?.onAdd?() }
         stack.addArrangedSubview(add)
     }
@@ -899,7 +899,7 @@ final class TerminalPane: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Vybraná relace.

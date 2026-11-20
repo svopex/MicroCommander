@@ -73,7 +73,7 @@ impl ContentMatcher {
     /// - `hex` – `pattern` jsou syrové bajty (porovnávají se přesně).
     pub fn new(pattern: &[u8], case_sensitive: bool, whole_words: bool, regex: bool, hex: bool) -> SalResult<Self> {
         if pattern.is_empty() {
-            return Err(SalError::Io("Prázdný řetězec zde není povolen.".to_string()));
+            return Err(SalError::Io(crate::i18n::tr("Prázdný řetězec zde není povolen.")));
         }
         // Prostý text i HEX vzor se escapují na bajtové literály \xHH (bez Unicode,
         // aby šly hledat i bajty mimo UTF-8); regulární výraz se bere tak, jak je.
@@ -99,7 +99,7 @@ impl ContentMatcher {
             .crlf(true)
             .unicode(!hex)
             .build()
-            .map_err(|e| SalError::Io(format!("Chybný regulární výraz: {}", e)))?;
+            .map_err(|e| SalError::Io(crate::i18n::trf("Chybný regulární výraz: {}", &[&e])))?;
         Ok(ContentMatcher {
             regex: compiled,
             line_based: regex && !hex,

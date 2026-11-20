@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MicroCommander – Salamander for Mac, a free dual-pane file manager</title>
+  <meta name="description" content="MicroCommander – Salamander for Mac: a free dual-pane file manager for macOS. A rewrite of Open Salamander and an Altap Salamander alternative with a Rust core and a native Swift/AppKit UI.">
+  <!-- Jazykové verze pro vyhledávače: česká je výchozí, anglická v en/ -->
+  <link rel="canonical" href="https://svopex.github.io/MicroCommander/en/">
+  <link rel="alternate" hreflang="cs" href="https://svopex.github.io/MicroCommander/">
+  <link rel="alternate" hreflang="en" href="https://svopex.github.io/MicroCommander/en/">
+  <link rel="alternate" hreflang="x-default" href="https://svopex.github.io/MicroCommander/">
+  <link rel="icon" type="image/png" href="../site/icon.png">
+  <!-- ?v= obchází cache prohlížeče (GitHub Pages: max-age 10 min) – při změně souborů v site/ zvýšit -->
+  <link rel="stylesheet" href="../site/style.css?v=3">
+  <script src="../site/site.js?v=3" defer></script>
+</head>
+<body>
+  <!-- Horní navigace: logo a odkazy na sekce, GitHub v nové záložce, přepínač na českou verzi -->
+  <nav class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top"><img src="../site/icon.png" width="28" height="28" alt="">MicroCommander</a>
+      <div class="nav-links">
+        <a class="wide-only" href="#features">Features</a>
+        <a class="wide-only" href="#download">Download</a>
+        <a class="wide-only" href="#contact">Contact</a>
+        <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">GitHub ↗</a>
+        <a class="nav-lang" href="../" hreflang="cs" lang="cs" aria-label="Česká verze" title="Česká verze">CS</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Úvod: štítek zdarma, název, popis, tlačítka a ukázka okna -->
+  <header class="hero" id="top">
+    <div class="wrap">
+      <div class="hero-text">
+        <img class="hero-icon" src="../site/icon.png" width="96" height="96" alt="MicroCommander icon">
+        <p class="badge">Completely free · open source</p>
+        <h1>Salamander-style dual-pane file manager <span class="accent">for Mac</span></h1>
+        <p class="lead">MicroCommander brings Open Salamander to macOS – a free Altap Salamander
+          alternative with a fast Rust core and a native Swift/AppKit app. Keyboard-driven, no compromises.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">Source code on GitHub ↗</a>
+          <a class="button" href="#download">Download and run</a>
+        </div>
+        <ul class="facts">
+          <li>No fees, no ads</li>
+          <li>macOS 13 or later</li>
+          <li>Apple Silicon</li>
+        </ul>
+      </div>
+
+      <!-- Ukázka celého okna aplikace (jen ilustrace, ne skutečný screenshot) -->
+      <div class="app" aria-hidden="true">
+        <div class="app-title"><span class="lights"><i></i><i></i><i></i></span>MicroCommander</div>
+        <div class="app-toolbar">
+          <i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i>
+        </div>
+        <div class="app-drives">
+          <span>⌂ Home</span><span>/</span><span>Macintosh HD</span><span>Downloads</span><span>Projects</span>
+        </div>
+        <div class="app-panels">
+          <div class="panel active">
+            <div class="panel-path"><span>~/Projects/MicroCommander</span><em>195.6 GB (23.4 GB)</em></div>
+            <div class="panel-head"><span>Name</span><span>Size</span><span class="date">Date</span></div>
+            <div class="panel-row"><span>..</span><span>UP-DIR</span><span class="date"></span></div>
+            <div class="panel-row"><span>app</span><span>DIR</span><span class="date">11/18/2026</span></div>
+            <div class="panel-row"><span>build</span><span>DIR</span><span class="date">11/19/2026</span></div>
+            <div class="panel-row cursor"><span>core</span><span>DIR</span><span class="date">11/18/2026</span></div>
+            <div class="panel-row"><span>samandarin</span><span>DIR</span><span class="date">11/13/2026</span></div>
+            <div class="panel-row"><span>site</span><span>DIR</span><span class="date">11/19/2026</span></div>
+            <div class="panel-row"><span>tests</span><span>DIR</span><span class="date">11/13/2026</span></div>
+            <div class="panel-row"><span>tools</span><span>DIR</span><span class="date">11/13/2026</span></div>
+            <div class="panel-row"><span>vendor</span><span>DIR</span><span class="date">11/14/2026</span></div>
+            <div class="panel-row"><span>.gitignore</span><span>356</span><span class="date">11/14/2026</span></div>
+            <div class="panel-row"><span>.nojekyll</span><span>0</span><span class="date">11/19/2026</span></div>
+            <div class="panel-row"><span>CLAUDE.md</span><span>465</span><span class="date">11/12/2026</span></div>
+            <div class="panel-row"><span>CODESIGNING.md</span><span>3,400</span><span class="date">11/13/2026</span></div>
+            <div class="panel-row"><span>fetch-samandarin.sh</span><span>1,755</span><span class="date">11/13/2026</span></div>
+            <div class="panel-row"><span>fetch-swiftterm.sh</span><span>2,154</span><span class="date">11/14/2026</span></div>
+            <div class="panel-row marked"><span>index.html</span><span>9,812</span><span class="date">11/19/2026</span></div>
+            <div class="panel-row"><span>LICENSE</span><span>18,092</span><span class="date">11/13/2026</span></div>
+            <div class="panel-row marked"><span>Makefile</span><span>8,538</span><span class="date">11/14/2026</span></div>
+            <div class="panel-row"><span>README.md</span><span>52,853</span><span class="date">11/18/2026</span></div>
+            <div class="panel-info">Selected: 2 files, 18,350 B</div>
+          </div>
+          <div class="panel">
+            <div class="panel-path"><span>sftp://server/~/www</span><em>SFTP</em></div>
+            <div class="panel-head"><span>Name</span><span>Size</span><span class="date">Date</span></div>
+            <div class="panel-row"><span>..</span><span>UP-DIR</span><span class="date"></span></div>
+            <div class="panel-row"><span>assets</span><span>DIR</span><span class="date">11/02/2026</span></div>
+            <div class="panel-row"><span>cache</span><span>DIR</span><span class="date">11/19/2026</span></div>
+            <div class="panel-row"><span>logs</span><span>DIR</span><span class="date">11/19/2026</span></div>
+            <div class="panel-row"><span>public</span><span>DIR</span><span class="date">11/17/2026</span></div>
+            <div class="panel-row"><span>tmp</span><span>DIR</span><span class="date">11/19/2026</span></div>
+            <div class="panel-row"><span>uploads</span><span>DIR</span><span class="date">11/16/2026</span></div>
+            <div class="panel-row"><span>.env</span><span>284</span><span class="date">11/05/2026</span></div>
+            <div class="panel-row"><span>.htaccess</span><span>412</span><span class="date">10/03/2026</span></div>
+            <div class="panel-row"><span>backup.tar.gz</span><span>81,004,112</span><span class="date">11/15/2026</span></div>
+            <div class="panel-row"><span>composer.json</span><span>1,187</span><span class="date">10/28/2026</span></div>
+            <div class="panel-row"><span>config.php</span><span>2,905</span><span class="date">11/11/2026</span></div>
+            <div class="panel-row"><span>cron.php</span><span>1,532</span><span class="date">11/09/2026</span></div>
+            <div class="panel-row"><span>error.php</span><span>1,204</span><span class="date">11/09/2026</span></div>
+            <div class="panel-row"><span>favicon.ico</span><span>15,086</span><span class="date">09/01/2026</span></div>
+            <div class="panel-row"><span>index.php</span><span>4,210</span><span class="date">11/17/2026</span></div>
+            <div class="panel-row"><span>README.txt</span><span>512</span><span class="date">09/01/2026</span></div>
+            <div class="panel-row"><span>robots.txt</span><span>68</span><span class="date">09/01/2026</span></div>
+            <div class="panel-row"><span>sitemap.xml</span><span>6,731</span><span class="date">11/18/2026</span></div>
+            <div class="panel-info">18 items</div>
+          </div>
+        </div>
+        <div class="app-terminal">petr@mac MicroCommander % make run</div>
+        <div class="app-keys">
+          <span><b>F3</b>View</span><span><b>F4</b>Edit</span><span><b>F5</b>Copy</span>
+          <span><b>F6</b>Move</span><span class="wide-only"><b>F7</b>MkDir</span><span class="wide-only"><b>F8</b>Delete</span>
+          <span class="wide-only"><b>F9</b>Terminal</span><span class="wide-only"><b>F10</b>Quit</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Zdarma: tři hlavní sliby projektu -->
+    <section class="wrap">
+      <div class="free">
+        <div class="free-intro">
+          <p class="eyebrow">Totally free</p>
+          <h2>It costs nothing and it never will</h2>
+          <p>No trial period, subscription, ads or sign-up. Use it at home and at work,
+            share it and modify it to suit your needs.</p>
+        </div>
+        <ul class="free-points">
+          <li><b>$0</b><span>forever, no paid editions</span></li>
+          <li><b>GPL</b><span>free license, open code</span></li>
+          <li><b>No tracking</b><span>no accounts, no telemetry</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Přehled hlavních funkcí s ikonami -->
+    <section class="wrap" id="features">
+      <p class="eyebrow">Features</p>
+      <h2>Everything you expect from a dual-pane file manager</h2>
+      <div class="grid">
+        <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></svg>
+          <h3>Two panels, just like Salamander</h3>
+          <p>A cursor separate from the selection, quick search by typing, history, six
+            view modes and an F-key bar that changes with the modifier keys.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          <h3>File operations</h3>
+          <p>Copy, move and delete between any sources with progress and cancel,
+            Trash, duplicate, directory compare, attributes and permissions.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+          <h3>Archives</h3>
+          <p>ZIP, TAR and TAR.GZ open like a folder. Create ZIP files with AES-256 or
+            ZipCrypto encryption and read password-protected archives.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg>
+          <h3>FTP and SFTP</h3>
+          <p>Saved servers with passwords in the Keychain, sign-in with a password, a key
+            (ed25519, ECDSA, RSA) or ssh-agent; keep browsing during transfers.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <h3>Search</h3>
+          <p>Salamander-style masks and content search – text, HEX, whole words,
+            regular expressions – optionally even inside archives.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>
+          <h3>Built-in terminal</h3>
+          <p>A shell below the panels that follows the active panel's folder. ⌘F12
+            expands it to the whole window, and scripts run straight from the panel.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
+          <h3>Make it yours</h3>
+          <p>Custom keyboard shortcuts for every command, color schemes (Open Salamander,
+            Norton Commander, DOS Navigator…) and settings export.</p>
+        </article>
+        <article class="card">
+          <svg viewBox="0 0 24 24"><path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/></svg>
+          <h3>A native Mac app</h3>
+          <p>Drag and drop to and from Finder, Quick Look previews, the Get Info window,
+            multiple windows, light and dark mode.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Architektura: jádro v Rustu a tenké UI -->
+    <section class="wrap">
+      <p class="eyebrow">Under the hood</p>
+      <h2>A fast core, a native look</h2>
+      <div class="arch">
+        <div class="layer">
+          <span class="tag">Swift / AppKit</span>
+          <h3>Thin UI</h3>
+          <p>Panels, commands, dialogs and the terminal. It looks and behaves like a Mac app.</p>
+        </div>
+        <div class="link" aria-hidden="true"><span>C ABI</span></div>
+        <div class="layer core">
+          <span class="tag">Rust</span>
+          <h3>The salcore core</h3>
+          <p>Local disk, ZIP, TAR, FTP and SFTP behind a common interface, plus operations,
+            search and archive packing.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stažení a sestavení přes curl (bez gitu) v očíslovaných krocích -->
+    <section class="wrap" id="download">
+      <p class="eyebrow">Download</p>
+      <h2>Up and running in three steps</h2>
+      <p class="section-lead">The app is built right on your Mac – just open Terminal
+        and paste these commands one at a time.</p>
+      <ol class="steps">
+        <li class="step">
+          <h3>Build tools <small>first time only</small></h3>
+          <p>Xcode Command Line Tools (the Swift compiler) and Rust.</p>
+          <pre><code>xcode-select --install
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y</code></pre>
+        </li>
+        <li class="step">
+          <h3>Download the source code</h3>
+          <p>The latest version as an archive, no git needed.</p>
+          <pre><code>curl -L https://github.com/svopex/MicroCommander/archive/refs/heads/main.tar.gz | tar xz
+cd MicroCommander-main</code></pre>
+        </li>
+        <li class="step">
+          <h3>Build and run</h3>
+          <p>The finished app is in <code>build/MicroCommander.app</code> – drag it
+            to your Applications folder.</p>
+          <pre><code>make run</code></pre>
+        </li>
+      </ol>
+      <p class="note">To get a new version, repeat steps 2 and 3. Other targets
+        (<code>make test</code>, <code>make selftest</code>) are described in the
+        <a href="https://github.com/svopex/MicroCommander#readme" target="_blank" rel="noopener">README</a>.</p>
+    </section>
+
+    <!-- Kontakt: e-mail je v data-email obrácený a v base64, aby ho nenašli roboti;
+         site/site.js ho složí až po kliknutí a rovnou otevře poštovního klienta.
+         Stejný řetězec je v index.html a app/Sources/About.swift (při změně upravit vše). -->
+    <section class="wrap" id="contact">
+      <p class="eyebrow">Contact</p>
+      <h2>Questions and ideas</h2>
+      <p class="section-lead">Bugs and feature requests are best filed as issues on GitHub;
+        for anything else, send an e-mail.</p>
+      <div class="contact-actions">
+        <a class="button primary" href="https://github.com/svopex/MicroCommander/issues" target="_blank" rel="noopener">Report a bug on GitHub ↗</a>
+        <button class="button email-btn" type="button" data-email="dWUueGVwb3ZzQHJlZG5hbW1vY29yY2lt">Send e-mail</button>
+      </div>
+      <noscript><p class="note">The e-mail button requires JavaScript.</p></noscript>
+    </section>
+  </main>
+
+  <!-- Patička: licence, původ projektu a autor -->
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <p>MicroCommander is completely free – free software licensed under
+        <a href="https://github.com/svopex/MicroCommander/blob/main/LICENSE" target="_blank" rel="noopener">GPL-2.0-or-later</a>,
+        based on <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Salamander</a>.</p>
+      <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">github.com/svopex/MicroCommander ↗</a>
+    </div>
+    <!-- Autor projektu úplně na konci stránky -->
+    <div class="wrap footer-author">Author: © 2026 Svopex –
+      <a href="https://svopex.eu" target="_blank" rel="noopener">svopex.eu</a></div>
+  </footer>
+</body>
+</html>

@@ -39,21 +39,21 @@ impl MaskGroup {
         // Rozdělení na inkluzivní a exkluzivní část; víc než jeden oddělovač je chyba.
         let parts: Vec<&str> = masks.split('|').collect();
         if parts.len() > 2 {
-            return Err(SalError::Io(
-                "Oddělovač '|' smí být v masce pouze jednou.".to_string(),
-            ));
+            return Err(SalError::Io(crate::i18n::tr(
+                "Oddělovač '|' smí být v masce pouze jednou.",
+            )));
         }
         let include = parse_mask_list(parts[0]);
         let exclude = parse_mask_list(parts.get(1).copied().unwrap_or(""));
 
         // Za '|' musí být alespoň jedna maska, celkově taky.
         if parts.len() == 2 && exclude.is_empty() {
-            return Err(SalError::Io(
-                "Za oddělovačem '|' chybí maska.".to_string(),
-            ));
+            return Err(SalError::Io(crate::i18n::tr(
+                "Za oddělovačem '|' chybí maska.",
+            )));
         }
         if include.is_empty() && exclude.is_empty() {
-            return Err(SalError::Io("Prázdná maska.".to_string()));
+            return Err(SalError::Io(crate::i18n::tr("Prázdná maska.")));
         }
 
         // `*` případně `*.*` jako jediná inkluzivní maska znamená vše.

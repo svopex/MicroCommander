@@ -84,8 +84,8 @@ impl FtpShared {
         use std::net::ToSocketAddrs;
         let addresses = (self.host.as_str(), self.port)
             .to_socket_addrs()
-            .map_err(|err| SalError::Io(format!("Nepodařilo se přeložit adresu {}: {}", self.host, err)))?;
-        let mut last_error = SalError::Io(format!("Server {}:{} nenalezen.", self.host, self.port));
+            .map_err(|err| SalError::Io(crate::i18n::trf("Nepodařilo se přeložit adresu {}: {}", &[&self.host, &err])))?;
+        let mut last_error = SalError::Io(crate::i18n::trf("Server {}:{} nenalezen.", &[&self.host, &self.port]));
         let mut stream = None;
         for address in addresses {
             match FtpStream::connect_timeout(address, self.timeout) {
@@ -313,7 +313,7 @@ impl Write for FtpWriteStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self.data.as_mut() {
             Some(data) => data.write(buf),
-            None => Err(io::Error::new(io::ErrorKind::NotConnected, "Datové spojení už je uzavřené.")),
+            None => Err(io::Error::new(io::ErrorKind::NotConnected, crate::i18n::tr("Datové spojení už je uzavřené."))),
         }
     }
 

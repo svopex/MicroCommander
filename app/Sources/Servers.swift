@@ -59,7 +59,7 @@ struct ServerProfile: Codable, Equatable {
     var displayName: String {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty { return trimmed }
-        if host.isEmpty { return "Nový server" }
+        if host.isEmpty { return tr("Nový server") }
         return user.isEmpty ? host : "\(user)@\(host)"
     }
 
@@ -127,6 +127,11 @@ enum ServerStore {
 enum ServerKeychain {
     private static let service = "MicroCommander FTP/SFTP"
 
+    /// Automatický běh (self-test, kontrola kláves) Klíčenku nepoužívá: pracuje
+    /// s uloženými servery uživatele a dotaz macOS na přístup ke Klíčence by
+    /// test zablokoval (nově sestavená aplikace ho ještě nemá povolený).
+    private static var isDisabled: Bool { AppDelegate.isAutomatedRun }
+
     // Společná část dotazu pro jeden server.
     private static func baseQuery(_ id: UUID) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
@@ -136,6 +141,7 @@ enum ServerKeychain {
 
     /// Uložené heslo serveru (nil = žádné).
     static func secret(for id: UUID) -> String? {
+        guard !isDisabled else { return nil }
         var query = baseQuery(id)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -147,6 +153,7 @@ enum ServerKeychain {
 
     /// Uloží (přepíše) heslo serveru: aktualizace existující položky, jinak nová.
     static func setSecret(_ secret: String, for id: UUID) {
+        guard !isDisabled else { return }
         let data = Data(secret.utf8)
         let status = SecItemUpdate(baseQuery(id) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         guard status == errSecItemNotFound else { return }
@@ -158,6 +165,7 @@ enum ServerKeychain {
 
     /// Smaže heslo serveru (neexistující položka nevadí).
     static func removeSecret(for id: UUID) {
+        guard !isDisabled else { return }
         SecItemDelete(baseQuery(id) as CFDictionary)
     }
 }
@@ -184,7 +192,7 @@ extension MainWindowController {
         // Zrušit zavře dialog hned; síťové volání doběhne na pozadí (max. timeout)
         // a spojení se zahodí.
         var connected: Vfs?
-        beginProgress(title: "Připojuji k \(server.displayName)…", dismissOnCancel: true, operation: { _ in
+        beginProgress(title: tr("Připojuji k %@…", server.displayName), dismissOnCancel: true, operation: { _ in
             connected = try server.connect(secret: secret)
         }, completion: { [weak self] result in
             guard let self else { return }
@@ -204,18 +212,18 @@ extension MainWindowController {
     private func askSecret(for server: ServerProfile) -> String? {
         let keyFile = server.effectiveAuth == .keyFile
         return askSecretText(
-            title: keyFile ? "Heslo ke klíči" : "Heslo pro \(server.user)@\(server.host)",
+            title: keyFile ? tr("Heslo ke klíči") : tr("Heslo pro %@", "\(server.user)@\(server.host)"),
             text: keyFile
-                ? "Klíč \(server.keyPath) je chráněný heslem (server \(server.displayName))."
-                : "Server \(server.displayName) (\(server.urlString)).",
-            okTitle: "Připojit")
+                ? tr("Klíč %@ je chráněný heslem (server %@).", server.keyPath, server.displayName)
+                : tr("Server %@ (%@).", server.displayName, server.urlString),
+            okTitle: tr("Připojit"))
     }
 
     /// Chyba připojení s možností rovnou upravit nastavení serveru.
     private func showConnectError(_ error: Error, server: ServerProfile, panel: PanelController) {
-        let response = PromptDialog.show(title: "Připojení k \(server.displayName) se nezdařilo",
+        let response = PromptDialog.show(title: tr("Připojení k %@ se nezdařilo", server.displayName),
                                          message: error.localizedDescription,
-                                         buttons: ["OK", "Upravit server…"], over: window)
+                                         buttons: ["OK", tr("Upravit server…")], over: window)
         if response == 1 {
             ConnectWindowController.show(parent: self, panel: panel, selecting: server.id)
         } else {

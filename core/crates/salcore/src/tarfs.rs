@@ -231,14 +231,14 @@ fn read_ext_data(source: &mut dyn TarSource, size: u64) -> io::Result<Vec<u8>> {
     if size > MAX_EXT_HEADER {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "Poškozený TAR archiv (příliš velká rozšířená hlavička).",
+            crate::i18n::tr("Poškozený TAR archiv (příliš velká rozšířená hlavička)."),
         ));
     }
     let mut buffer = vec![0u8; size as usize];
     if read_up_to(source, &mut buffer)? < buffer.len() {
         return Err(io::Error::new(
             io::ErrorKind::UnexpectedEof,
-            "Poškozený TAR archiv (neúplná rozšířená hlavička).",
+            crate::i18n::tr("Poškozený TAR archiv (neúplná rozšířená hlavička)."),
         ));
     }
     source.skip(padded_size(size) - size)?;
@@ -268,7 +268,7 @@ fn scan_tar(source: &mut dyn TarSource) -> io::Result<Vec<TarIndexEntry>> {
         if read < header.len() {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
-                "Poškozená TAR hlavička (neúplný blok).",
+                crate::i18n::tr("Poškozená TAR hlavička (neúplný blok)."),
             ));
         }
         pos += TAR_BLOCK;
@@ -283,7 +283,7 @@ fn scan_tar(source: &mut dyn TarSource) -> io::Result<Vec<TarIndexEntry>> {
             if pos == TAR_BLOCK {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    "Soubor není čitelný TAR archiv.",
+                    crate::i18n::tr("Soubor není čitelný TAR archiv."),
                 ));
             }
             break;
@@ -445,7 +445,7 @@ impl GzCursor {
             if read == 0 {
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
-                    "Archiv skončil dříve, než očekával scanner.",
+                    crate::i18n::tr("Archiv skončil dříve, než očekával scanner."),
                 ));
             }
             bytes -= read as u64;
@@ -475,7 +475,7 @@ impl TarFs {
     /// Otevře archiv, detekuje formát a sestaví index položek.
     pub fn open(archive_path: &Path) -> SalResult<TarFs> {
         let format = probe_tar_format(archive_path)?
-            .ok_or_else(|| SalError::Io("Soubor není čitelný TAR archiv.".to_string()))?;
+            .ok_or_else(|| SalError::Io(crate::i18n::tr("Soubor není čitelný TAR archiv.")))?;
 
         let (index, gz_session) = match format {
             TarFormat::Plain => {
@@ -527,7 +527,7 @@ impl TarFs {
     fn open_read_gzip(&self, entry: &TarIndexEntry) -> SalResult<Box<dyn VfsReadStream>> {
         let session = self.gz_session.as_ref().unwrap().clone();
         let mut guard = session.lock().map_err(|_| {
-            SalError::Io("Uzamčená dekompresní session archivu.".to_string())
+            SalError::Io(crate::i18n::tr("Uzamčená dekompresní session archivu."))
         })?;
 
         let mut cursor = match guard.available.take() {
@@ -647,8 +647,11 @@ impl Drop for TarGzReadStream {
 }
 impl VfsReadStream for TarGzReadStream {}
 
-// Zápis do archivu v této verzi nepodporujeme – konstantní chybová zpráva.
-const READONLY_MSG: &str = "Do otevřeného TAR archivu nelze zapisovat (jen pro čtení).";
+// Zápis do archivu v této verzi nepodporujeme – stálá chybová zpráva
+// (funkce místo konstanty, protože text se překládá do jazyka jádra).
+fn readonly_msg() -> String {
+    crate::i18n::tr("Do otevřeného TAR archivu nelze zapisovat (jen pro čtení).")
+}
 
 impl Vfs for TarFs {
     fn kind(&self) -> VfsKind {
@@ -692,19 +695,19 @@ impl Vfs for TarFs {
     }
 
     fn open_write(&self, _path: &str, _size_hint: Option<u64>) -> SalResult<Box<dyn VfsWriteStream>> {
-        Err(SalError::Io(READONLY_MSG.to_string()))
+        Err(SalError::Io(readonly_msg()))
     }
 
     fn mkdir(&self, _path: &str) -> SalResult<()> {
-        Err(SalError::Io(READONLY_MSG.to_string()))
+        Err(SalError::Io(readonly_msg()))
     }
 
     fn delete(&self, _path: &str, _recursive: bool) -> SalResult<()> {
-        Err(SalError::Io(READONLY_MSG.to_string()))
+        Err(SalError::Io(readonly_msg()))
     }
 
     fn rename(&self, _path: &str, _new_name: &str) -> SalResult<()> {
-        Err(SalError::Io(READONLY_MSG.to_string()))
+        Err(SalError::Io(readonly_msg()))
     }
 
     fn exists(&self, path: &str) -> SalResult<bool> {

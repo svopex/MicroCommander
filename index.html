@@ -5,13 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MicroCommander</title>
   <meta name="description" content="MicroCommander – zdarma dostupný dvoupanelový správce souborů pro macOS, přepis Open Salamanderu s jádrem v Rustu a nativním UI ve Swift/AppKit.">
+  <!-- Jazykové verze pro vyhledávače: česká je výchozí, anglická v en/ -->
+  <link rel="canonical" href="https://svopex.github.io/MicroCommander/">
+  <link rel="alternate" hreflang="cs" href="https://svopex.github.io/MicroCommander/">
+  <link rel="alternate" hreflang="en" href="https://svopex.github.io/MicroCommander/en/">
+  <link rel="alternate" hreflang="x-default" href="https://svopex.github.io/MicroCommander/">
   <link rel="icon" type="image/png" href="site/icon.png">
   <!-- ?v= obchází cache prohlížeče (GitHub Pages: max-age 10 min) – při změně souborů v site/ zvýšit -->
-  <link rel="stylesheet" href="site/style.css?v=2">
-  <script src="site/site.js?v=2" defer></script>
+  <link rel="stylesheet" href="site/style.css?v=3">
+  <script src="site/site.js?v=3" defer></script>
 </head>
 <body>
-  <!-- Horní navigace: logo a odkazy na sekce, GitHub v nové záložce -->
+  <!-- Horní navigace: logo a odkazy na sekce, GitHub v nové záložce, přepínač na anglickou verzi -->
   <nav class="nav">
     <div class="wrap nav-inner">
       <a class="brand" href="#top"><img src="site/icon.png" width="28" height="28" alt="">MicroCommander</a>
@@ -20,6 +25,7 @@
         <a class="wide-only" href="#stahnout">Stáhnout</a>
         <a class="wide-only" href="#kontakt">Kontakt</a>
         <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">GitHub ↗</a>
+        <a class="nav-lang" href="en/" hreflang="en" lang="en" aria-label="English version" title="English version">EN</a>
       </div>
     </div>
   </nav>
@@ -240,7 +246,7 @@ cd MicroCommander-main</code></pre>
 
     <!-- Kontakt: e-mail je v data-email obrácený a v base64, aby ho nenašli roboti;
          site/site.js ho složí až po kliknutí a rovnou otevře poštovního klienta.
-         Stejný řetězec je v app/Sources/About.swift (při změně upravit obojí). -->
+         Stejný řetězec je v en/index.html a app/Sources/About.swift (při změně upravit vše). -->
     <section class="wrap" id="kontakt">
       <p class="eyebrow">Kontakt</p>
       <h2>Dotazy a nápady</h2>

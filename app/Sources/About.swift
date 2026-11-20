@@ -59,9 +59,9 @@ enum AboutInfo {
     /// Silicon i informace o běhu přes Rosettu (sysctl.proc_translated = 1).
     private static var architecture: String {
         #if arch(arm64)
-        return "arm64 (Apple Silicon, nativně)"
+        return tr("arm64 (Apple Silicon, nativně)")
         #else
-        return sysctlInt("sysctl.proc_translated") == 1 ? "x86_64 (přes Rosettu)" : "x86_64 (Intel)"
+        return sysctlInt("sysctl.proc_translated") == 1 ? tr("x86_64 (přes Rosettu)") : "x86_64 (Intel)"
         #endif
     }
 
@@ -71,7 +71,7 @@ enum AboutInfo {
         var text = "macOS \(version.majorVersion).\(version.minorVersion)"
         if version.patchVersion > 0 { text += ".\(version.patchVersion)" }
         // Číslo sestavení systému (kern.osversion), např. 25B78.
-        if let build = sysctlString("kern.osversion") { text += " (sestavení \(build))" }
+        if let build = sysctlString("kern.osversion") { text += tr(" (sestavení %@)", build) }
         return text
     }
 
@@ -80,30 +80,30 @@ enum AboutInfo {
         let info = ProcessInfo.processInfo
         // Verze a číslo sestavení z Info.plist; commit a datum doplňuje Makefile.
         var version = bundleValue("CFBundleShortVersionString") ?? "?"
-        if let build = bundleValue("CFBundleVersion") { version += " (sestavení \(build))" }
-        var application = ["Verze: \(version)"]
+        if let build = bundleValue("CFBundleVersion") { version += tr(" (sestavení %@)", build) }
+        var application = [tr("Verze: %@", version)]
         if let commit = bundleValue("MCBuildCommit") { application.append("Commit: \(commit)") }
-        if let date = bundleValue("MCBuildDate") { application.append("Sestaveno: \(date)") }
+        if let date = bundleValue("MCBuildDate") { application.append(tr("Sestaveno: %@", date)) }
         application += [
-            "Architektura: \(architecture)",
-            "Jádro: salcore \(String(cString: sal_version())) (Rust)",
-            "Terminál: SwiftTerm \(SwiftTermBuildInfo.version)",
-            "Nejstarší podporovaný systém: macOS \(bundleValue("LSMinimumSystemVersion") ?? "?")",
+            tr("Architektura: %@", architecture),
+            tr("Jádro: salcore %@ (Rust)", String(cString: sal_version())),
+            tr("Terminál: SwiftTerm %@", SwiftTermBuildInfo.version),
+            tr("Nejstarší podporovaný systém: macOS %@", bundleValue("LSMinimumSystemVersion") ?? "?"),
         ]
 
         var system = [systemVersion]
         // Model Macu (např. Mac16,1) a procesor (např. Apple M4).
         if let model = sysctlString("hw.model") { system.append("Mac: \(model)") }
-        let cores = "\(info.activeProcessorCount) jader"
-        system.append("Procesor: " + (sysctlString("machdep.cpu.brand_string").map { "\($0), \(cores)" } ?? cores))
-        system.append("Paměť: \(formatSize(info.physicalMemory))")
-        system.append("Jazyk: \(Locale.current.identifier)")
-        system.append("Spuštěno: \(Bundle.main.bundlePath)")
+        let cores = tr("%@ jader", String(info.activeProcessorCount))
+        system.append(tr("Procesor: %@", sysctlString("machdep.cpu.brand_string").map { "\($0), \(cores)" } ?? cores))
+        system.append(tr("Paměť: %@", formatSize(info.physicalMemory)))
+        system.append(tr("Jazyk: %@", Locale.current.identifier))
+        system.append(tr("Spuštěno: %@", Bundle.main.bundlePath))
 
-        return "Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů).\n"
-            + "Autor: © 2026 Svopex – \(authorURL.absoluteString)\n\n"
-            + "Aplikace\n" + application.map { "  " + $0 }.joined(separator: "\n")
-            + "\n\nSystém\n" + system.map { "  " + $0 }.joined(separator: "\n")
+        return tr("Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů).") + "\n"
+            + tr("Autor: © 2026 Svopex – %@", authorURL.absoluteString) + "\n\n"
+            + tr("Aplikace") + "\n" + application.map { "  " + $0 }.joined(separator: "\n")
+            + "\n\n" + tr("Systém") + "\n" + system.map { "  " + $0 }.joined(separator: "\n")
     }
 
     /// Zobrazí okno O aplikaci uprostřed obrazovky (nezávisle na hlavním okně);
@@ -114,14 +114,14 @@ enum AboutInfo {
         let text = self.text
         let copyButton = 1
         let links = [
-            DialogLink(title: "Webová stránka", symbol: "globe", url: websiteURL),
-            DialogLink(title: "Zdrojový kód na GitHubu", symbol: "chevron.left.forwardslash.chevron.right", url: sourceURL),
-            DialogLink(title: "Nahlásit chybu na GitHubu", symbol: "ladybug", url: issuesURL),
-            DialogLink(title: "Web autora", symbol: "person.crop.circle", url: authorURL),
-            DialogLink(title: "Poslat e-mail", symbol: "envelope", url: contactURL),
+            DialogLink(title: tr("Webová stránka"), symbol: "globe", url: websiteURL),
+            DialogLink(title: tr("Zdrojový kód na GitHubu"), symbol: "chevron.left.forwardslash.chevron.right", url: sourceURL),
+            DialogLink(title: tr("Nahlásit chybu na GitHubu"), symbol: "ladybug", url: issuesURL),
+            DialogLink(title: tr("Web autora"), symbol: "person.crop.circle", url: authorURL),
+            DialogLink(title: tr("Poslat e-mail"), symbol: "envelope", url: contactURL),
         ]
         if PromptDialog.show(title: "MicroCommander", message: text, icon: NSApp.applicationIconImage,
-                             buttons: ["OK", "Kopírovat informace"], links: links, over: nil) == copyButton {
+                             buttons: ["OK", tr("Kopírovat informace")], links: links, over: nil) == copyButton {
             copyTextToPasteboard("MicroCommander\n" + text)
         }
     }

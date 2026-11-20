@@ -13,7 +13,7 @@ final class ProgressDialog: NSWindowController {
     /// Stav pro C callback (cancel + čísla).
     let state = ProgressState()
     private let bar = NSProgressIndicator()
-    private let label = NSTextField(labelWithString: "Zahajuji…")
+    private let label = NSTextField(labelWithString: tr("Zahajuji…"))
     private let parent: NSWindow?
     /// Jednotka hlášeného průběhu (bajty / položky) pro text pod ukazatelem.
     private let unit: ProgressUnit
@@ -63,7 +63,7 @@ final class ProgressDialog: NSWindowController {
         content.place(bar, NSRect(x: 20, y: y + 6, width: width - 40, height: 18))
         label.lineBreakMode = .byTruncatingTail
         content.place(label, NSRect(x: 20, y: y + 32, width: width - 40, height: 17))
-        let cancel = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
+        let cancel = NSButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:)))
         cancel.keyEquivalent = "\u{1b}"
         content.place(cancel, NSRect(x: width - 120, y: height - 42, width: 100, height: 28))
         window.contentView = content
@@ -77,7 +77,7 @@ final class ProgressDialog: NSWindowController {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     private var timer: Timer?
@@ -118,14 +118,14 @@ final class ProgressDialog: NSWindowController {
             bar.doubleValue = percent
             switch unit {
             case .bytes:
-                label.stringValue = "\(formatSize(snapshot.done)) z \(formatSize(snapshot.total)) (\(Int(percent)) %)"
+                label.stringValue = tr("%@ z %@ (%@ %%)", formatSize(snapshot.done), formatSize(snapshot.total), String(Int(percent)))
             case .items:
-                label.stringValue = "Položka \(min(snapshot.done + 1, snapshot.total)) z \(snapshot.total)"
+                label.stringValue = tr("Položka %@ z %@", String(min(snapshot.done + 1, snapshot.total)), String(snapshot.total))
             }
         } else if snapshot.done > 0 {
             switch unit {
-            case .bytes: label.stringValue = "Přeneseno \(formatSize(snapshot.done))"
-            case .items: label.stringValue = "Zpracováno položek: \(formatExactSize(snapshot.done))"
+            case .bytes: label.stringValue = tr("Přeneseno %@", formatSize(snapshot.done))
+            case .items: label.stringValue = tr("Zpracováno položek: %@", formatExactSize(snapshot.done))
             }
         }
     }
@@ -151,11 +151,11 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
     private let authPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let passField = NSSecureTextField()
     private let keyField = NSTextField()
-    private let keyButton = NSButton(title: "Vybrat…", target: nil, action: nil)
+    private let keyButton = NSButton(title: tr("Vybrat…"), target: nil, action: nil)
     private let passphraseField = NSSecureTextField()
-    private let saveSecretCheckbox = NSButton(checkboxWithTitle: "Uložit heslo do Klíčenky", target: nil, action: nil)
+    private let saveSecretCheckbox = NSButton(checkboxWithTitle: tr("Uložit heslo do Klíčenky"), target: nil, action: nil)
     private let noteLabel = NSTextField(wrappingLabelWithString: "")
-    private let connectButton = NSButton(title: "Připojit", target: nil, action: nil)
+    private let connectButton = NSButton(title: tr("Připojit"), target: nil, action: nil)
     private let removeButton = NSButton()
     private let duplicateButton = NSButton()
     private let tableView = NSTableView()
@@ -194,7 +194,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         self.targetPanel = panel
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 380),
                               styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "FTP/SFTP servery"
+        window.title = tr("FTP/SFTP servery")
         super.init(window: window)
         buildLayout()
         servers = ServerStore.load()
@@ -210,7 +210,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     // MARK: - Rozvržení
@@ -222,16 +222,16 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
             button.target = self
             button.action = #selector(kindChanged(_:))
         }
-        authPopup.addItems(withTitles: ["Heslo", "Soubor s klíčem", "Klíče ze ssh-agenta"])
+        authPopup.addItems(withTitles: [tr("Heslo"), tr("Soubor s klíčem"), tr("Klíče ze ssh-agenta")])
         authPopup.target = self
         authPopup.action = #selector(authChanged(_:))
         keyButton.target = self
         keyButton.action = #selector(chooseKey(_:))
         keyButton.bezelStyle = .rounded
-        nameField.placeholderString = "uživatel@server"
+        nameField.placeholderString = tr("uživatel@server")
         keyField.placeholderString = "~/.ssh/id_ed25519"
         keyField.lineBreakMode = .byTruncatingHead
-        passphraseField.placeholderString = "jen u klíče chráněného heslem"
+        passphraseField.placeholderString = tr("jen u klíče chráněného heslem")
         noteLabel.font = NSFont.systemFont(ofSize: 11)
         noteLabel.textColor = .secondaryLabelColor
         for field in [nameField, hostField, portField, userField, passField, keyField, passphraseField] {
@@ -249,15 +249,15 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         keyStack.spacing = 6
         keyField.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
         grid = NSGridView(views: [
-            [NSTextField(labelWithString: "Název:"), nameField],
-            [NSTextField(labelWithString: "Protokol:"), kindRow],
-            [NSTextField(labelWithString: "Server:"), hostField],
-            [NSTextField(labelWithString: "Port:"), portField],
-            [NSTextField(labelWithString: "Uživatel:"), userField],
-            [NSTextField(labelWithString: "Ověření:"), authPopup],
-            [NSTextField(labelWithString: "Heslo:"), passField],
-            [NSTextField(labelWithString: "Soubor s klíčem:"), keyStack],
-            [NSTextField(labelWithString: "Heslo ke klíči:"), passphraseField],
+            [NSTextField(labelWithString: tr("Název:")), nameField],
+            [NSTextField(labelWithString: tr("Protokol:")), kindRow],
+            [NSTextField(labelWithString: tr("Server:")), hostField],
+            [NSTextField(labelWithString: tr("Port:")), portField],
+            [NSTextField(labelWithString: tr("Uživatel:")), userField],
+            [NSTextField(labelWithString: tr("Ověření:")), authPopup],
+            [NSTextField(labelWithString: tr("Heslo:")), passField],
+            [NSTextField(labelWithString: tr("Soubor s klíčem:")), keyStack],
+            [NSTextField(labelWithString: tr("Heslo ke klíči:")), passphraseField],
             [NSGridCell.emptyContentView, saveSecretCheckbox],
         ])
         grid.column(at: 0).xPlacement = .trailing
@@ -290,25 +290,25 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         scroll.borderType = .bezelBorder
         column.width = 200
 
-        let addButton = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: "Přidat")!,
+        let addButton = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: tr("Přidat"))!,
                                  target: self, action: #selector(addClicked(_:)))
-        removeButton.image = NSImage(systemSymbolName: "minus", accessibilityDescription: "Odebrat")
+        removeButton.image = NSImage(systemSymbolName: "minus", accessibilityDescription: tr("Odebrat"))
         removeButton.target = self
         removeButton.action = #selector(removeClicked(_:))
-        duplicateButton.image = NSImage(systemSymbolName: "plus.square.on.square", accessibilityDescription: "Duplikovat")
+        duplicateButton.image = NSImage(systemSymbolName: "plus.square.on.square", accessibilityDescription: tr("Duplikovat"))
         duplicateButton.target = self
         duplicateButton.action = #selector(duplicateClicked(_:))
         for button in [addButton, removeButton, duplicateButton] {
             button.bezelStyle = .smallSquare
             button.widthAnchor.constraint(equalToConstant: 26).isActive = true
         }
-        addButton.toolTip = "Přidat server"
-        removeButton.toolTip = "Odebrat vybraný server"
-        duplicateButton.toolTip = "Duplikovat vybraný server (kopie se všemi nastaveními)"
+        addButton.toolTip = tr("Přidat server")
+        removeButton.toolTip = tr("Odebrat vybraný server")
+        duplicateButton.toolTip = tr("Duplikovat vybraný server (kopie se všemi nastaveními)")
         let listButtons = NSStackView(views: [addButton, removeButton, duplicateButton])
         listButtons.spacing = 0
 
-        let closeButton = NSButton(title: "Zavřít", target: self, action: #selector(closeClicked(_:)))
+        let closeButton = NSButton(title: tr("Zavřít"), target: self, action: #selector(closeClicked(_:)))
         closeButton.keyEquivalent = "\u{1b}"
         connectButton.target = self
         connectButton.action = #selector(connectClicked(_:))
@@ -495,22 +495,22 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         keyRow.isHidden = method != .keyFile
         passphraseRow.isHidden = method != .keyFile
         saveSecretRow.isHidden = method == .agent
-        saveSecretCheckbox.title = method == .keyFile ? "Uložit heslo ke klíči do Klíčenky" : "Uložit heslo do Klíčenky"
+        saveSecretCheckbox.title = method == .keyFile ? tr("Uložit heslo ke klíči do Klíčenky") : tr("Uložit heslo do Klíčenky")
         if editingIndex == nil {
             noteLabel.stringValue = servers.isEmpty
-                ? "Seznam serverů je prázdný – server přidáte tlačítkem +."
-                : "Vyberte server v seznamu."
+                ? tr("Seznam serverů je prázdný – server přidáte tlačítkem +.")
+                : tr("Vyberte server v seznamu.")
             return
         }
         switch (sftp, method) {
         case (true, .keyFile):
-            noteLabel.stringValue = "Soukromý klíč OpenSSH/PEM (ed25519, ECDSA, RSA). Veřejný klíč musí být na serveru v ~/.ssh/authorized_keys."
+            noteLabel.stringValue = tr("Soukromý klíč OpenSSH/PEM (ed25519, ECDSA, RSA). Veřejný klíč musí být na serveru v ~/.ssh/authorized_keys.")
         case (true, .agent):
-            noteLabel.stringValue = "Použijí se klíče načtené v ssh-agentovi (ssh-add); zkoušejí se postupně všechny."
+            noteLabel.stringValue = tr("Použijí se klíče načtené v ssh-agentovi (ssh-add); zkoušejí se postupně všechny.")
         case (true, .password):
-            noteLabel.stringValue = "Přihlášení heslem uživatele na serveru."
+            noteLabel.stringValue = tr("Přihlášení heslem uživatele na serveru.")
         default:
-            noteLabel.stringValue = "FTP bez šifrování – heslo se posílá nezašifrovaně."
+            noteLabel.stringValue = tr("FTP bez šifrování – heslo se posílá nezašifrovaně.")
         }
     }
 
@@ -536,8 +536,8 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
     @objc private func chooseKey(_ sender: Any?) {
         guard let window else { return }
         let panel = NSOpenPanel()
-        panel.title = "Soubor se soukromým klíčem"
-        panel.prompt = "Vybrat"
+        panel.title = tr("Soubor se soukromým klíčem")
+        panel.prompt = tr("Vybrat")
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -556,7 +556,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
     private func updatePassphraseHint() {
         let path = (keyField.stringValue as NSString).expandingTildeInPath
         if sshKeyEncrypted(path: path) == true {
-            noteLabel.stringValue = "Klíč je chráněný heslem – zadejte heslo ke klíči."
+            noteLabel.stringValue = tr("Klíč je chráněný heslem – zadejte heslo ke klíči.")
             window?.makeFirstResponder(passphraseField)
         } else {
             updateVisibility()
@@ -585,7 +585,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         let original = servers[index]
         var copy = original
         copy.id = UUID()
-        copy.name = original.displayName + " (kopie)"
+        copy.name = tr("%@ (kopie)", original.displayName)
         if original.savePassword, let secret = ServerKeychain.secret(for: original.id) {
             ServerKeychain.setSecret(secret, for: copy.id)
         }
@@ -601,9 +601,9 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
     @objc private func removeClicked(_ sender: Any?) {
         guard let index = editingIndex, let window else { return }
         let server = servers[index]
-        let response = PromptDialog.show(title: "Odebrat server „\(server.displayName)“?",
-                                         message: "Server zmizí ze seznamu i z nabídky disků; uložené heslo se smaže z Klíčenky.",
-                                         buttons: ["Odebrat"], showsCancel: true, over: window)
+        let response = PromptDialog.show(title: tr("Odebrat server „%@“?", server.displayName),
+                                         message: tr("Server zmizí ze seznamu i z nabídky disků; uložené heslo se smaže z Klíčenky."),
+                                         buttons: [tr("Odebrat")], showsCancel: true, over: window)
         guard response == 0 else { return }
         ServerKeychain.removeSecret(for: server.id)
         servers.remove(at: index)
@@ -637,10 +637,10 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
         if server.effectiveAuth == .keyFile {
             switch sshKeyEncrypted(path: server.expandedKeyPath) {
             case nil:
-                showError("Soubor s klíčem „\(server.keyPath)“ nelze přečíst.")
+                showError(tr("Soubor s klíčem „%@“ nelze přečíst.", server.keyPath))
                 return
             case true? where formSecret.isEmpty:
-                noteLabel.stringValue = "Klíč je chráněný heslem – zadejte heslo ke klíči."
+                noteLabel.stringValue = tr("Klíč je chráněný heslem – zadejte heslo ke klíči.")
                 window?.makeFirstResponder(passphraseField)
                 NSSound.beep()
                 return
@@ -668,7 +668,7 @@ final class ConnectWindowController: NSWindowController, NSTableViewDataSource, 
 
     /// Chyba jako sheet nad dialogem (dialog zůstane otevřený k opravě).
     private func showError(_ text: String) {
-        PromptDialog.show(title: "Připojení se nezdařilo", message: text, over: window)
+        PromptDialog.show(title: tr("Připojení se nezdařilo"), message: text, over: window)
     }
 }
 
@@ -698,7 +698,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
         }
         guard let handle = FileHandle(forReadingAtPath: path) else {
             // Prohlížeč se otevírá z hlavního okna i z okna hledání – hlášení nad aktivním oknem.
-            PromptDialog.show(title: "Zobrazit", message: "Soubor \(path) nelze otevřít.", over: NSApp.keyWindow)
+            PromptDialog.show(title: tr("Zobrazit"), message: tr("Soubor %@ nelze otevřít.", path), over: NSApp.keyWindow)
             return
         }
         let data = (try? handle.read(upToCount: maxBytes)) ?? Data()
@@ -728,7 +728,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
             text = String(decoding: data, as: UTF8.self)
         }
         if truncated {
-            text += "\n\n[… zobrazena jen část souboru]"
+            text += "\n\n" + tr("[… zobrazena jen část souboru]")
         }
         return text
     }
@@ -776,7 +776,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     private static func makeWindow(title: String) -> NSWindow {
@@ -834,19 +834,19 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 460, height: 132))
-        methodPopup.addItems(withTitles: ["Bez šifrování", "AES-256 (doporučeno)", "ZipCrypto (slabé, kompatibilní)"])
+        methodPopup.addItems(withTitles: [tr("Bez šifrování"), tr("AES-256 (doporučeno)"), tr("ZipCrypto (slabé, kompatibilní)")])
         methodPopup.target = self
         methodPopup.action = #selector(methodChanged(_:))
-        passwordField.placeholderString = "heslo"
-        confirmField.placeholderString = "heslo znovu"
+        passwordField.placeholderString = tr("heslo")
+        confirmField.placeholderString = tr("heslo znovu")
         noteLabel.font = NSFont.systemFont(ofSize: 11)
         noteLabel.textColor = .secondaryLabelColor
 
         // Mřížka popisek + ovládací prvek, pod ní poznámka k režimu.
         let grid = NSGridView(views: [
-            [NSTextField(labelWithString: "Šifrování:"), methodPopup],
-            [NSTextField(labelWithString: "Heslo:"), passwordField],
-            [NSTextField(labelWithString: "Potvrzení:"), confirmField],
+            [NSTextField(labelWithString: tr("Šifrování:")), methodPopup],
+            [NSTextField(labelWithString: tr("Heslo:")), passwordField],
+            [NSTextField(labelWithString: tr("Potvrzení:")), confirmField],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.rowSpacing = 6
@@ -868,7 +868,7 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Hesla jsou aktivní jen se šifrováním; poznámka popisuje kompatibilitu režimu.
@@ -878,11 +878,11 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
         confirmField.isEnabled = index != 0
         switch index {
         case 1:
-            noteLabel.stringValue = "WinZip AES-256: otevře 7-Zip, WinZip, Salamander, Keka. Vestavěná Archivační utilita macOS AES neumí."
+            noteLabel.stringValue = tr("WinZip AES-256: otevře 7-Zip, WinZip, Salamander, Keka. Vestavěná Archivační utilita macOS AES neumí.")
         case 2:
-            noteLabel.stringValue = "ZipCrypto je snadno prolomitelné – použijte jen kvůli starým programům."
+            noteLabel.stringValue = tr("ZipCrypto je snadno prolomitelné – použijte jen kvůli starým programům.")
         default:
-            noteLabel.stringValue = "Archiv nebude chráněn heslem."
+            noteLabel.stringValue = tr("Archiv nebude chráněn heslem.")
         }
     }
 
@@ -891,9 +891,9 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
         guard methodPopup.indexOfSelectedItem != 0 else { return }
         let message: String?
         if passwordField.stringValue.isEmpty {
-            message = "Zadejte heslo pro šifrovaný archiv."
+            message = tr("Zadejte heslo pro šifrovaný archiv.")
         } else if passwordField.stringValue != confirmField.stringValue {
-            message = "Heslo a jeho potvrzení se neshodují."
+            message = tr("Heslo a jeho potvrzení se neshodují.")
         } else {
             message = nil
         }
@@ -1006,7 +1006,7 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Vybraný řádek.
@@ -1150,8 +1150,8 @@ final class DriveChooser: NSWindowController, NSWindowDelegate, NSTableViewDataS
         arrows.spacing = 0
         if canMove(row, to: row) {
             let arrowSpecs: [(String, Int, Selector, String)] = [
-                ("chevron.up", -1, #selector(moveUpClicked(_:)), "Posunout nahoru (⌥↑)"),
-                ("chevron.down", 1, #selector(moveDownClicked(_:)), "Posunout dolů (⌥↓)"),
+                ("chevron.up", -1, #selector(moveUpClicked(_:)), tr("Posunout nahoru (⌥↑)")),
+                ("chevron.down", 1, #selector(moveDownClicked(_:)), tr("Posunout dolů (⌥↓)")),
             ]
             for (symbol, delta, action, tip) in arrowSpecs {
                 let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip) ?? NSImage(),
@@ -1302,7 +1302,7 @@ final class PromptDialog: NSWindowController {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Rozvržení: ikona a text dotazu, pod ním vstupní pole, čára a tlačítka
@@ -1388,7 +1388,7 @@ final class PromptDialog: NSWindowController {
         }
         // Escape (i ⌘.) obsluhuje okno (DialogWindow.onCancel), tlačítko zkratku nepotřebuje.
         if showsCancel {
-            views.append(NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:))))
+            views.append(NSButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:))))
         }
         // Šířka podle titulku, nejméně 110 (jako tlačítko Zavřít u Informací o jednotce).
         let gap: CGFloat = 10

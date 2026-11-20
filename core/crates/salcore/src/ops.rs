@@ -178,9 +178,9 @@ impl Transfer<'_> {
     fn transfer_link_target(&mut self, item: &VfsItem, src_path: &str, dst_path: &str, dst_exists: bool) -> SalResult<bool> {
         let is_dir = self.src.is_dir(src_path)?;
         if is_dir && self.followed_links >= MAX_FOLLOWED_LINKS {
-            return Err(SalError::Io(format!(
+            return Err(SalError::Io(crate::i18n::trf(
                 "Odkaz {} vede do sebe sama (odkaz na nadřazený adresář?).",
-                src_path
+                &[&src_path],
             )));
         }
         let remove_source = std::mem::replace(&mut self.remove_source, false);
@@ -345,13 +345,13 @@ fn check_destination(src: &dyn Vfs, src_dir: &str, names: &[&str], dst: &dyn Vfs
         _ => return Ok(()),
     };
     if source_dir == target_dir {
-        return Err(SalError::Io("Zdrojový a cílový adresář jsou stejné.".to_string()));
+        return Err(SalError::Io(crate::i18n::tr("Zdrojový a cílový adresář jsou stejné.")));
     }
     for name in names {
         // Cíl leží uvnitř přenášené položky (nebo je to ona sama).
         let source_item = join_path(&source_dir, name);
         if target_dir == source_item || target_dir.starts_with(&format!("{}/", source_item)) {
-            return Err(SalError::Io(format!("Položku „{}“ nelze přenést do sebe sama.", name)));
+            return Err(SalError::Io(crate::i18n::trf("Položku „{}“ nelze přenést do sebe sama.", &[&name])));
         }
     }
     Ok(())

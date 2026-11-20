@@ -199,7 +199,7 @@ pub trait Vfs: Send + Sync {
 
     /// Vytvoří symbolický odkaz `path` ukazující na `target`.
     fn create_symlink(&self, _path: &str, _target: &str) -> SalResult<()> {
-        Err(SalError::Io("Souborový systém nepodporuje symbolické odkazy.".to_string()))
+        Err(SalError::Io(crate::i18n::tr("Souborový systém nepodporuje symbolické odkazy.")))
     }
 
     /// Údaje o jedné položce zjištěné bez výpisu nadřazeného adresáře.

@@ -93,11 +93,11 @@ enum SettingsFileError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notSettings:
-            return "Soubor neobsahuje nastavení MicroCommanderu."
+            return tr("Soubor neobsahuje nastavení MicroCommanderu.")
         case .newerVersion(let version):
-            return "Soubor je z novější verze MicroCommanderu (formát \(version)) a tato verze ho neumí načíst."
+            return tr("Soubor je z novější verze MicroCommanderu (formát %@) a tato verze ho neumí načíst.", String(version))
         case .corrupted:
-            return "Soubor není platné nastavení MicroCommanderu (poškozený nebo ručně upravený JSON)."
+            return tr("Soubor není platné nastavení MicroCommanderu (poškozený nebo ručně upravený JSON).")
         }
     }
 }
@@ -243,11 +243,11 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
         var title: String {
             switch self {
-            case .general: return "Obecné"
-            case .panels: return "Panely"
-            case .colors: return "Barvy"
-            case .mainWindow: return "Hlavní okno"
-            case .keyboard: return "Klávesnice"
+            case .general: return tr("Obecné")
+            case .panels: return tr("Panely")
+            case .colors: return tr("Barvy")
+            case .mainWindow: return tr("Hlavní okno")
+            case .keyboard: return tr("Klávesnice")
             }
         }
     }
@@ -259,15 +259,17 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     private var pageViews: [Page: NSView] = [:]
 
     // Volby stránek (hodnoty se zapíšou až tlačítkem OK).
-    private let savePathsBox = NSButton(checkboxWithTitle: "Před ukončením uložit adresáře panelů",
+    private let savePathsBox = NSButton(checkboxWithTitle: tr("Před ukončením uložit adresáře panelů"),
                                         target: nil, action: nil)
-    private let showHiddenBox = NSButton(checkboxWithTitle: "Zobrazovat skryté soubory a adresáře",
+    private let showHiddenBox = NSButton(checkboxWithTitle: tr("Zobrazovat skryté soubory a adresáře"),
                                          target: nil, action: nil)
-    private let markDirsBox = NSButton(checkboxWithTitle: "Označit vše (⌘A) a Invertovat označení i s adresáři",
+    private let markDirsBox = NSButton(checkboxWithTitle: tr("Označit vše (⌘A) a Invertovat označení i s adresáři"),
                                        target: nil, action: nil)
-    private let middleBarBox = NSButton(checkboxWithTitle: "Zobrazovat lištu příkazů mezi panely",
+    private let middleBarBox = NSButton(checkboxWithTitle: tr("Zobrazovat lištu příkazů mezi panely"),
                                         target: nil, action: nil)
     private let schemePopup = NSPopUpButton()
+    /// Jazyk rozhraní (stránka Obecné); ukládá se zvlášť do UserDefaults a platí po restartu.
+    private let languagePopup = NSPopUpButton()
 
     // Stránka Klávesnice: rozpracované zkratky (všechny příkazy) a jejich tabulka.
     private var draftBindings: [Command: [Shortcut]] = [:]
@@ -283,6 +285,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         shared = controller
         // Vždy aktuální uložené nastavení (rozpracované změny z minula se zahodí).
         controller.draft = .current
+        controller.selectSavedLanguage()
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
     }
@@ -290,7 +293,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 540),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        window.title = "Nastavení"
+        window.title = tr("Nastavení")
         window.minSize = NSSize(width: 700, height: 440)
         window.isReleasedWhenClosed = false
         // Na střed jen při vytvoření (posunuté okno zůstává, kde ho uživatel nechal).
@@ -301,7 +304,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     // MARK: Kostra
@@ -340,17 +343,17 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         separator.boxType = .separator
         let okButton = NSButton(title: "OK", target: self, action: #selector(okClicked(_:)))
         okButton.keyEquivalent = "\r"
-        let cancelButton = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
+        let cancelButton = NSButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:)))
         cancelButton.keyEquivalent = "\u{1b}"
 
         // Vlevo dole: výchozí hodnoty a nastavení v souboru. Všechna tři tlačítka
         // pracují s hodnotami v dialogu – platit začnou až tlačítkem OK.
-        let resetAllButton = NSButton(title: "Obnovit vše", target: self, action: #selector(resetAllSettingsClicked(_:)))
-        resetAllButton.toolTip = "Nastaví všechny volby i klávesové zkratky na výchozí hodnoty (uloží se až tlačítkem OK)."
-        let importButton = NSButton(title: "Načíst ze souboru…", target: self, action: #selector(importClicked(_:)))
-        importButton.toolTip = "Načte do dialogu nastavení uložené v souboru (uloží se až tlačítkem OK)."
-        let exportButton = NSButton(title: "Uložit do souboru…", target: self, action: #selector(exportClicked(_:)))
-        exportButton.toolTip = "Uloží nastavení zobrazené v dialogu do souboru JSON."
+        let resetAllButton = NSButton(title: tr("Obnovit vše"), target: self, action: #selector(resetAllSettingsClicked(_:)))
+        resetAllButton.toolTip = tr("Nastaví všechny volby i klávesové zkratky na výchozí hodnoty (uloží se až tlačítkem OK).")
+        let importButton = NSButton(title: tr("Načíst ze souboru…"), target: self, action: #selector(importClicked(_:)))
+        importButton.toolTip = tr("Načte do dialogu nastavení uložené v souboru (uloží se až tlačítkem OK).")
+        let exportButton = NSButton(title: tr("Uložit do souboru…"), target: self, action: #selector(exportClicked(_:)))
+        exportButton.toolTip = tr("Uloží nastavení zobrazené v dialogu do souboru JSON.")
         let fileButtons = NSStackView(views: [resetAllButton, importButton, exportButton])
         fileButtons.orientation = .horizontal
         fileButtons.spacing = 10
@@ -395,17 +398,55 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         window?.contentView = content
 
         pageViews = [
-            .general: optionsPage([(savePathsBox, "Adresáře levého a pravého panelu se po dalším spuštění "
-                                    + "otevřou znovu (z archivu či FTP nejbližší lokální adresář).")]),
-            .panels: optionsPage([(showHiddenBox, "Jména s úvodní tečkou a položky skryté ve Finderu (⌃H)."),
-                                  (markDirsBox, "Bez zaškrtnutí ⌘A označí a Invertovat (Num *) invertuje jen soubory. "
-                                    + "Opakovaný stisk ⌘A zruší celé označení (vždy i adresáře).")]),
+            .general: generalPage(),
+            .panels: optionsPage([(showHiddenBox, tr("Jména s úvodní tečkou a položky skryté ve Finderu (⌃H).")),
+                                  (markDirsBox, tr("Bez zaškrtnutí ⌘A označí a Invertovat (Num *) invertuje jen soubory. "
+                                    + "Opakovaný stisk ⌘A zruší celé označení (vždy i adresáře)."))]),
             .colors: colorsPage(),
-            .mainWindow: optionsPage([(middleBarBox, "Svislá lišta s ikonami operací mezi levým a pravým panelem. "
-                                       + "Vypnutá lišta zůstane jen jako úzký dělicí pruh.")]),
+            .mainWindow: optionsPage([(middleBarBox, tr("Svislá lišta s ikonami operací mezi levým a pravým panelem. "
+                                       + "Vypnutá lišta zůstane jen jako úzký dělicí pruh."))]),
             .keyboard: keyboardPage(),
         ]
         categoryTable.reloadData()
+    }
+
+    /// Stránka Obecné: jazyk rozhraní a volba ukládání adresářů panelů.
+    private func generalPage() -> NSView {
+        languagePopup.removeAllItems()
+        for choice in Localization.choices {
+            // „Podle systému“ se překládá, názvy jazyků zůstávají v jejich jazyce
+            languagePopup.addItem(withTitle: choice.code == "auto" ? tr(choice.title) : choice.title)
+        }
+        let languageLabel = NSTextField(labelWithString: tr("Jazyk / Language:"))
+        let languageRow = NSStackView(views: [languageLabel, languagePopup])
+        languageRow.orientation = .horizontal
+        languageRow.spacing = 8
+        let languageNote = noteLabel(tr("Změna jazyka se projeví po restartu aplikace."))
+        let options = optionsPage([(savePathsBox, tr("Adresáře levého a pravého panelu se po dalším spuštění "
+                                    + "otevřou znovu (z archivu či FTP nejbližší lokální adresář)."))])
+        let page = NSView()
+        for view in [languageRow, languageNote, options] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            page.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            languageRow.topAnchor.constraint(equalTo: page.topAnchor),
+            languageRow.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 4),
+            languageNote.topAnchor.constraint(equalTo: languageRow.bottomAnchor, constant: 4),
+            languageNote.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 24),
+            languageNote.trailingAnchor.constraint(lessThanOrEqualTo: page.trailingAnchor, constant: -4),
+            options.topAnchor.constraint(equalTo: languageNote.bottomAnchor, constant: 18),
+            options.leadingAnchor.constraint(equalTo: page.leadingAnchor),
+            options.trailingAnchor.constraint(equalTo: page.trailingAnchor),
+            options.bottomAnchor.constraint(equalTo: page.bottomAnchor),
+        ])
+        return page
+    }
+
+    /// Nastaví nabídku jazyka podle uložené volby.
+    private func selectSavedLanguage() {
+        let index = Localization.choices.firstIndex { $0.code == Localization.savedChoice } ?? 0
+        languagePopup.selectItem(at: index)
     }
 
     /// Šedá zalamovaná vysvětlivka pod volbou (společný styl všech stránek).
@@ -448,15 +489,16 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         for scheme in PanelColorScheme.allCases {
             schemePopup.addItem(withTitle: scheme.title)
         }
-        let label = NSTextField(labelWithString: "Schéma:")
+        let label = NSTextField(labelWithString: tr("Schéma:"))
         let row = NSStackView(views: [label, schemePopup])
         row.orientation = .horizontal
         row.spacing = 8
-        let note = noteLabel(
-            "„\(PanelColorScheme.macSystem.title)“ používá systémové barvy a přepíná světlý a tmavý režim "
-            + "s macOS, „\(PanelColorScheme.macDark.title)“ je vždy v tmavém režimu. "
-            + "Výchozí je „\(PanelColorScheme.defaultScheme.title)“. Ostatní schémata odpovídají Open Salamanderu "
-            + "a mají světlé okolí panelů.")
+        let note = noteLabel(tr(
+            "„%@“ používá systémové barvy a přepíná světlý a tmavý režim "
+            + "s macOS, „%@“ je vždy v tmavém režimu. "
+            + "Výchozí je „%@“. Ostatní schémata odpovídají Open Salamanderu "
+            + "a mají světlé okolí panelů.",
+            PanelColorScheme.macSystem.title, PanelColorScheme.macDark.title, PanelColorScheme.defaultScheme.title))
         let page = NSView()
         for view in [row, note] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -520,7 +562,19 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     /// OK: uloží všechny volby a zkratky a zavře okno.
     @objc private func okClicked(_ sender: Any?) {
         draft.apply()
+        // Jazyk: uloží se jen při změně; platí až po restartu, proto upozornění
+        let choice = Localization.choices[max(0, languagePopup.indexOfSelectedItem)].code
+        let languageChanged = choice != Localization.savedChoice
+        if languageChanged {
+            UserDefaults.standard.set(choice, forKey: Localization.languageKey)
+        }
         window?.close()
+        if languageChanged {
+            _ = PromptDialog.show(title: "MicroCommander",
+                              message: tr("Jazyk rozhraní se změní po restartu aplikace.\n"
+                                          + "The interface language will change after restarting the app."),
+                              icon: NSApp.applicationIconImage, buttons: ["OK"], over: nil)
+        }
     }
 
     /// Zrušit: zavře okno bez uložení (při dalším otevření se načte uložený stav).
@@ -548,7 +602,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             do {
                 try snapshot.write(to: url)
             } catch {
-                self?.showFileError("Nastavení se nepodařilo uložit.", error, after: panel)
+                self?.showFileError(tr("Nastavení se nepodařilo uložit."), error, after: panel)
             }
         }
     }
@@ -566,7 +620,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             do {
                 self?.draft = try SettingsSnapshot.read(from: url)
             } catch {
-                self?.showFileError("Nastavení se nepodařilo načíst.", error, after: panel)
+                self?.showFileError(tr("Nastavení se nepodařilo načíst."), error, after: panel)
             }
         }
     }
@@ -589,11 +643,11 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     /// Stránka Klávesnice: hledání, tabulka Příkaz / Zkratky a tlačítka úprav.
     private func keyboardPage() -> NSView {
-        filterField.placeholderString = "Hledat příkaz nebo zkratku"
+        filterField.placeholderString = tr("Hledat příkaz nebo zkratku")
         filterField.target = self
         filterField.action = #selector(filterChanged(_:))
 
-        for (identifier, title, width) in [("command", "Příkaz", 260.0), ("shortcuts", "Klávesové zkratky", 300.0)] {
+        for (identifier, title, width) in [("command", tr("Příkaz"), 260.0), ("shortcuts", tr("Klávesové zkratky"), 300.0)] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
             column.title = title
             column.width = width
@@ -609,18 +663,18 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
 
-        let addButton = NSButton(title: "Přidat zkratku…", target: self, action: #selector(addShortcutClicked(_:)))
-        removeButton = NSButton(title: "Odebrat zkratku…", target: self, action: #selector(removeShortcutClicked(_:)))
-        resetButton = NSButton(title: "Výchozí", target: self, action: #selector(resetCommandClicked(_:)))
-        let resetAllButton = NSButton(title: "Obnovit zkratky", target: self, action: #selector(resetAllClicked(_:)))
-        resetAllButton.toolTip = "Nastaví zkratky všech příkazů na výchozí (ostatní volby nemění)."
+        let addButton = NSButton(title: tr("Přidat zkratku…"), target: self, action: #selector(addShortcutClicked(_:)))
+        removeButton = NSButton(title: tr("Odebrat zkratku…"), target: self, action: #selector(removeShortcutClicked(_:)))
+        resetButton = NSButton(title: tr("Výchozí"), target: self, action: #selector(resetCommandClicked(_:)))
+        let resetAllButton = NSButton(title: tr("Obnovit zkratky"), target: self, action: #selector(resetAllClicked(_:)))
+        resetAllButton.toolTip = tr("Nastaví zkratky všech příkazů na výchozí (ostatní volby nemění).")
         let buttons = NSStackView(views: [addButton, removeButton, resetButton, NSView(), resetAllButton])
         buttons.orientation = .horizontal
         buttons.spacing = 8
 
-        let note = noteLabel(
+        let note = noteLabel(tr(
             "Dvojklik nebo Přidat zkratku… přiřadí příkazu další klávesovou zkratku. Navigační klávesy "
-            + "(šipky, Enter, Tab, mezerník, psaní) a ⌘0–⌘9 míst z nabídky disků se nemění.")
+            + "(šipky, Enter, Tab, mezerník, psaní) a ⌘0–⌘9 míst z nabídky disků se nemění."))
 
         let page = NSView()
         for view in [filterField, scroll, buttons, note] as [NSView] {
@@ -697,9 +751,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         if let other = KeyBindings.commands.first(where: { other in
             other != command && (draftBindings[other] ?? []).contains { $0.display == shortcut.display }
         }) {
-            let response = PromptDialog.show(title: "Zkratka \(shortcut.display) už patří příkazu „\(other.title)“.",
-                                             message: "Přeřadit ji příkazu „\(command.title)“?",
-                                             buttons: ["Přeřadit"], showsCancel: true, over: window)
+            let response = PromptDialog.show(title: tr("Zkratka %@ už patří příkazu „%@“.", shortcut.display, other.title),
+                                             message: tr("Přeřadit ji příkazu „%@“?", command.title),
+                                             buttons: [tr("Přeřadit")], showsCancel: true, over: window)
             guard response == 0 else { return }
             draftBindings[other]?.removeAll { $0.display == shortcut.display }
         }
@@ -816,10 +870,10 @@ final class ShortcutRecorder: NSWindowController {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 130),
                               styleMask: [.titled], backing: .buffered, defer: false)
         super.init(window: window)
-        let heading = NSTextField(labelWithString: "Stiskněte klávesovou zkratku")
+        let heading = NSTextField(labelWithString: tr("Stiskněte klávesovou zkratku"))
         heading.font = NSFont.boldSystemFont(ofSize: 13)
-        messageLabel.stringValue = "pro příkaz „\(title)“ (Escape = zrušit)."
-        let cancel = NSButton(title: "Zrušit", target: self, action: #selector(cancelClicked(_:)))
+        messageLabel.stringValue = tr("pro příkaz „%@“ (Escape = zrušit).", title)
+        let cancel = NSButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:)))
         let content = NSView()
         for view in [heading, messageLabel, cancel] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -838,7 +892,7 @@ final class ShortcutRecorder: NSWindowController {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("Není podporováno")
+        fatalError(tr("Není podporováno"))
     }
 
     /// Zachytává klávesy dřív než menu (i ⌘ zkratky aplikace).
@@ -853,13 +907,13 @@ final class ShortcutRecorder: NSWindowController {
             guard let shortcut = Shortcut(event: event) else { return nil }
             // Písmeno nebo číslice bez modifikátoru by v panelu zablokovalo rychlé hledání.
             if shortcut.blocksQuickSearch {
-                self.reject("Zkratka \(shortcut.display) by blokovala rychlé hledání – "
-                            + "použijte modifikátor (⌘ ⌃ ⌥) nebo F-klávesu.")
+                self.reject(tr("Zkratka %@ by blokovala rychlé hledání – "
+                            + "použijte modifikátor (⌘ ⌃ ⌥) nebo F-klávesu.", shortcut.display))
                 return nil
             }
             // Pevné klávesy (navigace, ⌘↩, ⌃↩, ⌘Tab, ⌘0–⌘9) přiřadit nejdou.
             if shortcut.isReserved {
-                self.reject("Klávesa \(shortcut.display) je vyhrazená pro pevné ovládání – zvolte jinou.")
+                self.reject(tr("Klávesa %@ je vyhrazená pro pevné ovládání – zvolte jinou.", shortcut.display))
                 return nil
             }
             self.finish(shortcut)
