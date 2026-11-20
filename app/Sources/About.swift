@@ -15,6 +15,16 @@ enum AboutInfo {
     static let websiteURL = URL(string: "https://svopex.github.io/MicroCommander/")!
     /// Zdrojové kódy na GitHubu.
     static let sourceURL = URL(string: "https://github.com/svopex/MicroCommander")!
+    /// Web autora.
+    static let authorURL = URL(string: "https://svopex.eu")!
+    /// Kontaktní e-mail jako odkaz mailto:. Adresa je ve zdrojovém kódu obrácená
+    /// a v base64, aby ji v repozitáři na GitHubu nenašli roboti; stejný řetězec
+    /// je v data-email tlačítka Poslat e-mail v index.html (při změně upravit obojí).
+    static let contactURL: URL = {
+        let decoded = Data(base64Encoded: "dWUueGVwb3ZzQHJlZG5hbW1vY29yY2lt")
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        return URL(string: "mailto:" + String(decoded.reversed()))!
+    }()
 
     /// Hodnota z Info.plist aplikace (prázdné hodnoty = nil).
     /// - Parameter key: klíč v Info.plist
@@ -89,20 +99,23 @@ enum AboutInfo {
         system.append("Spuštěno: \(Bundle.main.bundlePath)")
 
         return "Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů).\n"
-            + "Autor: © 2026 Svopex\n\n"
+            + "Autor: © 2026 Svopex – \(authorURL.absoluteString)\n\n"
             + "Aplikace\n" + application.map { "  " + $0 }.joined(separator: "\n")
             + "\n\nSystém\n" + system.map { "  " + $0 }.joined(separator: "\n")
     }
 
     /// Zobrazí okno O aplikaci uprostřed obrazovky (nezávisle na hlavním okně);
     /// tlačítko Kopírovat informace dá text do schránky, tlačítka s odkazy
-    /// otevřou web projektu a zdrojový kód na GitHubu.
+    /// otevřou web projektu, zdrojový kód na GitHubu, web autora a poštovního
+    /// klienta s kontaktním e-mailem (adresa se v okně nezobrazuje).
     static func show() {
         let text = self.text
         let copyButton = 1
         let links = [
             DialogLink(title: "Webová stránka", symbol: "globe", url: websiteURL),
             DialogLink(title: "Zdrojový kód na GitHubu", symbol: "chevron.left.forwardslash.chevron.right", url: sourceURL),
+            DialogLink(title: "Web autora", symbol: "person.crop.circle", url: authorURL),
+            DialogLink(title: "Poslat e-mail", symbol: "envelope", url: contactURL),
         ]
         if PromptDialog.show(title: "MicroCommander", message: text, icon: NSApp.applicationIconImage,
                              buttons: ["OK", "Kopírovat informace"], links: links, over: nil) == copyButton {

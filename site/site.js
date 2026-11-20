@@ -1,5 +1,18 @@
-// Skripty webové stránky projektu: tlačítko Kopírovat u bloků s příkazy.
-// Načítá se s atributem defer, takže běží až po načtení celého HTML.
+// Skripty webové stránky projektu: tlačítko Kopírovat u bloků s příkazy
+// a tlačítko Poslat e-mail. Načítá se s atributem defer, takže běží až po
+// načtení celého HTML.
+
+// Tlačítka „Poslat e-mail“: adresa je v data-email obrácená a v base64, aby ji
+// nenašli roboti. Složí se až po kliknutí a otevře poštovního klienta; na stránce
+// se nezobrazí.
+document.querySelectorAll(".email-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    const email = atob(button.dataset.email || "").split("").reverse().join("");
+    if (email.includes("@")) {
+      window.location.href = `mailto:${email}`;
+    }
+  });
+});
 
 // Ke každému bloku <pre><code> přidá tlačítko, které zkopíruje text příkazů
 // do schránky a na chvíli ukáže potvrzení. Bez přístupu ke schránce (starý

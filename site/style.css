@@ -198,6 +198,16 @@ main > section { margin-block: 64px; }
   box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+/* Tlačítko <button> vzhledově stejné jako odkazy .button (písmo, kurzor) */
+button.button {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Kontakt: tlačítko pro e-mail a odkaz na issues vedle sebe, zarovnané vlevo */
+.contact-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
 /* Krátká fakta pod tlačítky oddělená tečkou */
 .facts {
   display: flex;

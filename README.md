@@ -4,7 +4,10 @@ Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez plug
 s jádrem v Rustu a tenkým UI ve Swift/AppKit. Licence GPL-2.0-or-later.
 
 Webová stránka projektu: <https://svopex.github.io/MicroCommander/>
-(GitHub Pages z `index.html` v kořeni větve `main`).
+(GitHub Pages z `index.html` v kořeni větve `main`). Sekce Kontakt má tlačítko
+„Poslat e-mail“ – adresa je v `data-email` obrácená a v base64 a `site/site.js`
+ji složí až po kliknutí a otevře poštovního klienta (na stránce se nezobrazí,
+roboti ji nenajdou); patička odkazuje na web autora <https://svopex.eu>.
 
 ## Prvotni zadani
 
@@ -171,7 +174,7 @@ tests/sftp_test.sh          # SFTP end-to-end proti dočasnému sshd (make sftp-
 Makefile                    # build celé aplikace jedním příkazem
 index.html                  # webová stránka projektu (GitHub Pages z kořene
                             #   větve main, https://svopex.github.io/MicroCommander/)
-site/                       # styly, skript (tlačítko Kopírovat u příkazů)
+site/                       # styly, skript (tlačítka Kopírovat a Poslat e-mail)
                             #   a ikona webové stránky
 .nojekyll                   # GitHub Pages servíruje soubory bez Jekyllu
 fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)
@@ -601,8 +604,12 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   znovu a operaci zopakuje. ⌥F5 (Zabalit do ZIP) má v dialogu uložení volbu
   šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
   (prázdné nebo neshodné heslo dialog nepustí dál).
-- **O aplikaci** (aplikační menu): tlačítka **Webová stránka** a **Zdrojový kód
-  na GitHubu** (otevřou prohlížeč, okno zůstane otevřené); autor (© 2026 Svopex); verze a číslo sestavení, git commit a datum
+- **O aplikaci** (aplikační menu): tlačítka **Webová stránka**, **Zdrojový kód
+  na GitHubu**, **Web autora** (https://svopex.eu) a **Poslat e-mail** (otevře
+  poštovního klienta s kontaktní adresou, která se v okně nezobrazuje; ve zdrojovém
+  kódu je obrácená a v base64, aby ji roboti nenašli). Tlačítka otevřou prohlížeč
+  nebo poštu, okno zůstane otevřené, a když se nevejdou do řádku, zalomí se.
+  Autor (© 2026 Svopex – https://svopex.eu); verze a číslo sestavení, git commit a datum
   sestavení (doplňuje je Makefile do `Info.plist`), architektura (nativně /
   přes Rosettu), verze jádra salcore a SwiftTerm, nejstarší podporovaný macOS;
   o systému verze macOS s číslem sestavení, model Macu, procesor a počet jader,

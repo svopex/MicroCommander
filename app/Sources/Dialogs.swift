@@ -1339,9 +1339,11 @@ final class PromptDialog: NSWindowController {
         content.place(label, NSRect(x: textX, y: y, width: textWidth, height: labelHeight))
         y += labelHeight + 8
 
-        // Tlačítka s odkazy v řadě pod textem, zarovnaná s textem vlevo.
+        // Tlačítka s odkazy v řadě pod textem, zarovnaná s textem vlevo; tlačítko,
+        // které se do šířky textu nevejde, přejde na další řádek.
         if !links.isEmpty {
             linkURLs = links.map(\.url)
+            let linkHeight: CGFloat = 28
             var linkX = textX
             for (index, link) in links.enumerated() {
                 let image = NSImage(systemSymbolName: link.symbol, accessibilityDescription: nil) ?? NSImage()
@@ -1349,10 +1351,14 @@ final class PromptDialog: NSWindowController {
                 button.imagePosition = .imageLeading
                 button.tag = index
                 let buttonWidth = ceil(button.fittingSize.width) + 12
-                content.place(button, NSRect(x: linkX, y: y, width: buttonWidth, height: 28))
+                if linkX > textX && linkX + buttonWidth > textX + textWidth {
+                    linkX = textX
+                    y += linkHeight + 6
+                }
+                content.place(button, NSRect(x: linkX, y: y, width: buttonWidth, height: linkHeight))
                 linkX += buttonWidth + 8
             }
-            y += 28 + 8
+            y += linkHeight + 8
         }
 
         if let value {
