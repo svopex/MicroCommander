@@ -15,6 +15,8 @@ enum AboutInfo {
     static let websiteURL = URL(string: "https://svopex.github.io/MicroCommander/")!
     /// Zdrojové kódy na GitHubu.
     static let sourceURL = URL(string: "https://github.com/svopex/MicroCommander")!
+    /// Hlášení chyb a návrhů (issues na GitHubu).
+    static let issuesURL = sourceURL.appendingPathComponent("issues")
     /// Web autora.
     static let authorURL = URL(string: "https://svopex.eu")!
     /// Kontaktní e-mail jako odkaz mailto:. Adresa je ve zdrojovém kódu obrácená
@@ -106,14 +108,15 @@ enum AboutInfo {
 
     /// Zobrazí okno O aplikaci uprostřed obrazovky (nezávisle na hlavním okně);
     /// tlačítko Kopírovat informace dá text do schránky, tlačítka s odkazy
-    /// otevřou web projektu, zdrojový kód na GitHubu, web autora a poštovního
-    /// klienta s kontaktním e-mailem (adresa se v okně nezobrazuje).
+    /// otevřou web projektu, zdrojový kód a hlášení chyb na GitHubu, web autora
+    /// a poštovního klienta s kontaktním e-mailem (adresa se v okně nezobrazuje).
     static func show() {
         let text = self.text
         let copyButton = 1
         let links = [
             DialogLink(title: "Webová stránka", symbol: "globe", url: websiteURL),
             DialogLink(title: "Zdrojový kód na GitHubu", symbol: "chevron.left.forwardslash.chevron.right", url: sourceURL),
+            DialogLink(title: "Nahlásit chybu na GitHubu", symbol: "ladybug", url: issuesURL),
             DialogLink(title: "Web autora", symbol: "person.crop.circle", url: authorURL),
             DialogLink(title: "Poslat e-mail", symbol: "envelope", url: contactURL),
         ]

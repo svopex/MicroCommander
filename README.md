@@ -4,8 +4,8 @@ Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez plug
 s jádrem v Rustu a tenkým UI ve Swift/AppKit. Licence GPL-2.0-or-later.
 
 Webová stránka projektu: <https://svopex.github.io/MicroCommander/>
-(GitHub Pages z `index.html` v kořeni větve `main`). Sekce Kontakt má tlačítko
-„Poslat e-mail“ – adresa je v `data-email` obrácená a v base64 a `site/site.js`
+(GitHub Pages z `index.html` v kořeni větve `main`). Sekce Kontakt má zvýrazněná
+tlačítka „Poslat e-mail“ a „Nahlásit chybu na GitHubu“ – e-mailová adresa je v `data-email` obrácená a v base64 a `site/site.js`
 ji složí až po kliknutí a otevře poštovního klienta (na stránce se nezobrazí,
 roboti ji nenajdou); patička odkazuje na web autora <https://svopex.eu>.
 Při změně souborů v `site/` zvýšit v `index.html` číslo `?v=` u odkazů na CSS
@@ -607,7 +607,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
   (prázdné nebo neshodné heslo dialog nepustí dál).
 - **O aplikaci** (aplikační menu): tlačítka **Webová stránka**, **Zdrojový kód
-  na GitHubu**, **Web autora** (https://svopex.eu) a **Poslat e-mail** (otevře
+  na GitHubu**, **Nahlásit chybu na GitHubu** (issues), **Web autora** (https://svopex.eu) a **Poslat e-mail** (otevře
   poštovního klienta s kontaktní adresou, která se v okně nezobrazuje; ve zdrojovém
   kódu je obrácená a v base64, aby ji roboti nenašli). Tlačítka otevřou prohlížeč
   nebo poštu, okno zůstane otevřené, a když se nevejdou do řádku, zalomí se.
