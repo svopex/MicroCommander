@@ -4,8 +4,8 @@ Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez plug
 s jádrem v Rustu a tenkým UI ve Swift/AppKit. Licence GPL-2.0-or-later.
 
 Webová stránka projektu: <https://svopex.github.io/MicroCommander/>
-(GitHub Pages z `index.html` v kořeni větve `main`). Sekce Kontakt má zvýrazněná
-tlačítka „Poslat e-mail“ a „Nahlásit chybu na GitHubu“ – e-mailová adresa je v `data-email` obrácená a v base64 a `site/site.js`
+(GitHub Pages z `index.html` v kořeni větve `main`). Sekce Kontakt má jako první
+zvýrazněné tlačítko „Nahlásit chybu na GitHubu“ a za ním „Poslat e-mail“ – e-mailová adresa je v `data-email` obrácená a v base64 a `site/site.js`
 ji složí až po kliknutí a otevře poštovního klienta (na stránce se nezobrazí,
 roboti ji nenajdou); patička odkazuje na web autora <https://svopex.eu>.
 Při změně souborů v `site/` zvýšit v `index.html` číslo `?v=` u odkazů na CSS
