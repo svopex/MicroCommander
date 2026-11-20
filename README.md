@@ -246,7 +246,7 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   i v archivu a na FTP/SFTP – panel převezme i zanoření, „..“ vede ven); ⇧F7 / ⌘G / dvojklik na řádek adresáře – zadat cestu
   (v archivu a na serveru cestu uvnitř něj); historie ⌥← / ⌥→ si pamatuje i zanoření do archivu
   či serveru, po jeho zavření (F12, „..“ na kořeni) se kroky do něj zahodí a spojení se uzavře;
-  pravé tlačítko na řádku adresáře – Kopírovat cestu do schránky / Změnit adresář…;
+  pravé tlačítko na řádku adresáře – Změnit adresář… / Kopírovat cestu do schránky;
   ⌥⌘C (Úpravy › Kopírovat cestu adresáře, ⌃⌥Insert) – cesta aktuálního adresáře
   aktivního panelu do schránky (u archivu/FTP tak, jak ji ukazuje řádek adresáře)
 - **Označování:** Space / Insert – označit a posunout; ⇧↑↓, ⇧PgUp/PgDn,

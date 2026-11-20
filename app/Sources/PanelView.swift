@@ -1265,17 +1265,17 @@ final class DirectoryLineView: NSView, NSTextFieldDelegate {
         }
     }
 
-    /// Pravé tlačítko na řádku adresáře: kopírovat cestu do schránky nebo ji
-    /// upravit (jako kontextové menu cesty v Salamanderu).
+    /// Pravé tlačítko na řádku adresáře: upravit cestu nebo ji kopírovat do
+    /// schránky (jako kontextové menu cesty v Salamanderu).
     override func menu(for event: NSEvent) -> NSMenu? {
         onActivate?()
         let menu = NSMenu()
-        let copy = NSMenuItem(title: "Kopírovat cestu do schránky", action: #selector(copyPathClicked(_:)), keyEquivalent: "")
-        copy.target = self
-        menu.addItem(copy)
         let change = NSMenuItem(title: "Změnit adresář…", action: #selector(changePathClicked(_:)), keyEquivalent: "")
         change.target = self
         menu.addItem(change)
+        let copy = NSMenuItem(title: "Kopírovat cestu do schránky", action: #selector(copyPathClicked(_:)), keyEquivalent: "")
+        copy.target = self
+        menu.addItem(copy)
         return menu
     }
 
