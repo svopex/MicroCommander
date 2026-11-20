@@ -35,8 +35,8 @@ a **Časté otázky** (`#faq`, 7 otázek). V `<head>` je JSON-LD `SoftwareApplic
 (+ `SoftwareSourceCode`, autor s odkazem na <https://svopex.eu>) a `FAQPage` – texty
 FAQPage musí odpovídat viditelným odpovědím v `#faq`; dále Open Graph a Twitter Card
 (`og:locale` cs_CZ / en_US s `og:locale:alternate`), odkaz na `llms.txt`, ověřovací
-značka Google Search Console a zakomentovaná místa pro Seznam Webmaster a Bing
-(návod v komentáři; kódy jen v `index.html`, `en/` patří do stejné služby). Patička
+značky Google Search Console a Seznam Webmasteru (jen v `index.html`, `en/` patří
+do stejné služby; Bing je ověřený importem z Google Search Console). Patička
 obsahuje poznámku o ochranné známce Altap. Obrázky v obsahu mají `width`/`height`
 a kromě ikon nahoře `loading="lazy"`.
 
