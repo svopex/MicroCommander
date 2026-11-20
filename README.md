@@ -1,10 +1,18 @@
 # MicroCommander
 
-Dvoupanelový správce souborů pro macOS – přepis Open Salamanderu (bez pluginů)
-s jádrem v Rustu a tenkým UI ve Swift/AppKit. Licence GPL-2.0-or-later.
+**MicroCommander je Salamander pro Mac / for macOS** – zdarma a open source
+dvoupanelový správce souborů ovládaný jako Altap Salamander na Windows, přepis
+[Open Salamanderu](https://github.com/OpenSalamander/salamander) (bez pluginů)
+s jádrem v Rustu a tenkým UI ve Swift/AppKit. Web: <https://svopex.github.io/MicroCommander/>
+(English: <https://svopex.github.io/MicroCommander/en/>). Licence GPL-2.0-or-later.
+Altap Salamander je ochranná známka svého vlastníka; MicroCommander není s firmou
+Altap spojen.
 
-Webová stránka projektu: <https://svopex.github.io/MicroCommander/>
-(GitHub Pages z `index.html` v kořeni větve `main`). Sekce Kontakt má jako první
+*A free, open-source Salamander for Mac: a dual-pane file manager for macOS that
+works like Altap Salamander, a port of Open Salamander with a Rust core and a native
+Swift/AppKit UI.*
+
+Web běží na GitHub Pages z `index.html` v kořeni větve `main`. Sekce Kontakt má jako první
 zvýrazněné tlačítko „Nahlásit chybu na GitHubu“ a za ním „Poslat e-mail“ – e-mailová adresa je v `data-email` obrácená a v base64 a `site/site.js`
 ji složí až po kliknutí a otevře poštovního klienta (na stránce se nezobrazí,
 roboti ji nenajdou); patička odkazuje na web autora <https://svopex.eu>.
@@ -17,6 +25,35 @@ před vykreslením; volba v `localStorage`). Barvy jsou v `site/style.css` jako
 `light-dark()` a ruční volba přepne `color-scheme` atributem `data-theme`.
 Při změně souborů v `site/` zvýšit v `index.html` i `en/index.html` číslo `?v=`
 u odkazů na CSS a JS, jinak prohlížeče až 10 minut (cache GitHub Pages) drží starou verzi.
+
+SEO webu (cílové dotazy „Salamander pro Mac“, „Altap Salamander alternativa“,
+„Salamander for Mac“ apod.): title, description a H1 obou stránek míří na
+„Salamander pro Mac / for Mac“, úvod vysvětluje vztah Altap Salamander → Open
+Salamander → MicroCommander. Stránky mají sekci **Pro uživatele Salamanderu**
+(`#salamander`: zkratky, panely, barvy, co zatím chybí, skutečný screenshot okna)
+a **Časté otázky** (`#faq`, 7 otázek). V `<head>` je JSON-LD `SoftwareApplication`
+(+ `SoftwareSourceCode`, autor s odkazem na <https://svopex.eu>) a `FAQPage` – texty
+FAQPage musí odpovídat viditelným odpovědím v `#faq`; dále Open Graph a Twitter Card
+(`og:locale` cs_CZ / en_US s `og:locale:alternate`), odkaz na `llms.txt` a zakomentovaná
+místa pro ověřovací meta tagy Google Search Console, Seznam Webmaster a Bing
+(návod v komentáři; po získání kódu řádek odkomentovat jen v `index.html`, `en/` patří do stejné služby). Patička
+obsahuje poznámku o ochranné známce Altap. Obrázky v obsahu mají `width`/`height`
+a kromě ikon nahoře `loading="lazy"`.
+
+- `site/og-image.png`, `site/og-image-en.png` – náhledy pro sdílení 1200×630
+  (cs / en) a `site/screenshot-cs.webp`, `site/screenshot-en.webp` – screenshot do
+  sekce Pro uživatele Salamanderu. Vznikly ze skutečného snímku okna
+  (`SAL_SNAPSHOT=… SAL_LANG=cs|en`, panely spuštěné na ukázkových adresářích přes
+  argumenty `-leftPanelPath … -rightPanelPath … -viewModeLeft 2 -viewModeRight 2`)
+  oříznutého a složeného v Pillow; WebP přes `cwebp`.
+- `sitemap.xml` – obě jazykové verze s `lastmod` a `xhtml:link` alternates; při
+  změně obsahu stránek aktualizovat `lastmod`.
+- `llms.txt` – stručný popis projektu pro jazykové modely (formát llmstxt.org).
+- `632709df962ce1f96f4daba2fbbb760d.txt` – klíč IndexNow (Bing, Seznam, Yandex);
+  obsah souboru je přesně klíč, nemazat ani neměnit.
+- `robots.txt` na projektových GitHub Pages nefunguje (musí být v kořeni
+  `svopex.github.io`), sitemapa se proto odesílá ručně v Google Search Console
+  a Seznam Webmaster.
 
 ## Prvotni zadani
 
@@ -192,8 +229,11 @@ index.html                  # webová stránka projektu (GitHub Pages z kořene
                             #   větve main, https://svopex.github.io/MicroCommander/)
 en/index.html               # anglická verze webové stránky
 site/                       # styly, skripty (tlačítka Kopírovat a Poslat e-mail,
-                            #   přepínač motivu theme.js)
-                            #   a ikona webové stránky
+                            #   přepínač motivu theme.js), ikona webové stránky,
+                            #   náhledy og-image*.png a screenshoty screenshot-*.webp
+sitemap.xml                 # mapa webu (cs + en) pro vyhledávače
+llms.txt                    # popis projektu pro jazykové modely (llmstxt.org)
+632709df962ce1f96f4daba2fbbb760d.txt  # klíč IndexNow
 .nojekyll                   # GitHub Pages servíruje soubory bez Jekyllu
 fetch-samandarin.sh         # stáhne původní zdrojáky do samandarin/ (bez .git)
 fetch-swiftterm.sh          # stáhne SwiftTerm v připnuté verzi do vendor/

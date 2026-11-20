@@ -1,0 +1,27 @@
+# MicroCommander
+
+> MicroCommander is "Salamander for Mac" (Czech: "Salamander pro Mac"): a free, open-source dual-pane file manager for macOS 13+ that works like Altap Salamander on Windows. It is an independent rewrite (port) of Open Salamander, the GPL-licensed open-source version of Altap Salamander, with a Rust core and a native Swift/AppKit UI. It is not an official Altap product and is not affiliated with Altap.
+
+Key facts:
+
+- Two panels with Salamander-style controls: F3 view, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete; Ctrl shortcuts also work with ⌘; every shortcut can be remapped.
+- FTP and SFTP (password, ed25519/ECDSA/RSA key, ssh-agent; passwords in the macOS Keychain).
+- ZIP, TAR and TAR.GZ open like folders (read-only); ZIP creation with AES-256 or ZipCrypto encryption.
+- Search with Salamander-style masks and content search (text, HEX, regular expressions), optionally inside archives.
+- Built-in terminal, Quick Look, drag and drop with Finder, Czech and English UI, color schemes (Open Salamander, Norton Commander, DOS Navigator…).
+- Not supported yet: plugins, 7z, RAR, FTPS. No prebuilt binary yet: it is built from source with `make run` (needs Xcode Command Line Tools and Rust).
+- License: GPL-2.0-or-later. Price: free, no ads, no telemetry.
+
+## Website
+
+- [MicroCommander – Salamander pro Mac (Czech)](https://svopex.github.io/MicroCommander/): main page in Czech, with FAQ for Salamander users
+- [MicroCommander – Salamander for Mac (English)](https://svopex.github.io/MicroCommander/en/): the same page in English
+
+## Source code
+
+- [GitHub repository svopex/MicroCommander](https://github.com/svopex/MicroCommander): source code, issues and the full README with all keyboard shortcuts and limitations
+- [Open Salamander](https://github.com/OpenSalamander/salamander): the open-source Windows file manager MicroCommander is based on
+
+## Author
+
+- [Svopex](https://svopex.eu): author of MicroCommander

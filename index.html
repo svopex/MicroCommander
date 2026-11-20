@@ -3,19 +3,157 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MicroCommander</title>
-  <meta name="description" content="MicroCommander – zdarma dostupný dvoupanelový správce souborů pro macOS, přepis Open Salamanderu s jádrem v Rustu a nativním UI ve Swift/AppKit.">
+  <title>MicroCommander – Salamander pro Mac (Open Salamander pro macOS)</title>
+  <meta name="description" content="Salamander pro Mac zdarma: dvoupanelový správce souborů pro macOS, port Open Salamanderu a alternativa k Altap Salamanderu. FTP, SFTP, ZIP, F-klávesy.">
+  <meta name="author" content="Svopex">
   <!-- Jazykové verze pro vyhledávače: česká je výchozí, anglická v en/ -->
   <link rel="canonical" href="https://svopex.github.io/MicroCommander/">
   <link rel="alternate" hreflang="cs" href="https://svopex.github.io/MicroCommander/">
   <link rel="alternate" hreflang="en" href="https://svopex.github.io/MicroCommander/en/">
   <link rel="alternate" hreflang="x-default" href="https://svopex.github.io/MicroCommander/">
+  <!-- Stručný popis projektu pro jazykové modely (formát llmstxt.org) -->
+  <link rel="help" type="text/markdown" href="https://svopex.github.io/MicroCommander/llms.txt" title="llms.txt">
   <link rel="icon" type="image/png" href="site/icon.png">
+  <!-- Ověření vlastnictví webu pro nástroje vyhledávačů. Po získání kódu odkomentovat
+       příslušný řádek a místo KOD vložit hodnotu content z daného nástroje
+       (stačí tady – en/ patří do stejné služby):
+       Google Search Console › Přidat službu › Předpona adresy URL › Značka HTML:
+         <meta name="google-site-verification" content="KOD">
+       Seznam Webmaster (search.seznam.cz/webmaster) › Přidat web › Ověření meta značkou:
+         <meta name="seznam-wmt" content="KOD">
+       Bing Webmaster Tools › Přidat web › Značka HTML Meta:
+         <meta name="msvalidate.01" content="KOD">
+  -->
+  <!-- Náhled při sdílení (Open Graph pro Facebook, LinkedIn, Slack…; Twitter/X karta) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MicroCommander">
+  <meta property="og:title" content="MicroCommander – Salamander pro Mac (Open Salamander pro macOS)">
+  <meta property="og:description" content="Dvoupanelový správce souborů pro macOS ovládaný jako Salamander. Port Open Salamanderu, alternativa k Altap Salamanderu – zdarma a open source.">
+  <meta property="og:url" content="https://svopex.github.io/MicroCommander/">
+  <meta property="og:image" content="https://svopex.github.io/MicroCommander/site/og-image.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="MicroCommander – Salamander pro macOS, dvoupanelové okno s lištou F-kláves">
+  <meta property="og:locale" content="cs_CZ">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MicroCommander – Salamander pro Mac (Open Salamander pro macOS)">
+  <meta name="twitter:description" content="Dvoupanelový správce souborů pro macOS ovládaný jako Salamander. Port Open Salamanderu, alternativa k Altap Salamanderu – zdarma a open source.">
+  <meta name="twitter:image" content="https://svopex.github.io/MicroCommander/site/og-image.png">
+  <meta name="twitter:image:alt" content="MicroCommander – Salamander pro macOS, dvoupanelové okno s lištou F-kláves">
   <!-- ?v= obchází cache prohlížeče (GitHub Pages: max-age 10 min) – při změně souborů v site/ zvýšit -->
   <!-- theme.js bez defer: uložený motiv se nastaví ještě před vykreslením stránky -->
-  <script src="site/theme.js?v=4"></script>
-  <link rel="stylesheet" href="site/style.css?v=4">
-  <script src="site/site.js?v=4" defer></script>
+  <script src="site/theme.js?v=5"></script>
+  <link rel="stylesheet" href="site/style.css?v=5">
+  <script src="site/site.js?v=5" defer></script>
+  <!-- Strukturovaná data pro vyhledávače (schema.org, JSON-LD – data, ne skript):
+       aplikace a její zdrojový kód. Údaje drží shodně s en/index.html. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": ["SoftwareApplication", "SoftwareSourceCode"],
+    "@id": "https://svopex.github.io/MicroCommander/#app",
+    "name": "MicroCommander",
+    "alternateName": ["Salamander pro Mac", "Open Salamander for macOS"],
+    "description": "Dvoupanelový správce souborů pro macOS ovládaný jako Salamander: port Open Salamanderu s jádrem v Rustu a nativním rozhraním ve Swift/AppKit. Alternativa k Altap Salamanderu pro Mac, zdarma a open source.",
+    "inLanguage": "cs",
+    "url": "https://svopex.github.io/MicroCommander/",
+    "image": "https://svopex.github.io/MicroCommander/site/og-image.png",
+    "screenshot": "https://svopex.github.io/MicroCommander/site/screenshot-cs.webp",
+    "operatingSystem": "macOS 13+",
+    "applicationCategory": "UtilitiesApplication",
+    "applicationSubCategory": "Správce souborů",
+    "softwareVersion": "0.1.0",
+    "isAccessibleForFree": true,
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "CZK"
+    },
+    "license": "https://spdx.org/licenses/GPL-2.0-or-later.html",
+    "downloadUrl": "https://github.com/svopex/MicroCommander/archive/refs/heads/main.tar.gz",
+    "installUrl": "https://svopex.github.io/MicroCommander/#stahnout",
+    "codeRepository": "https://github.com/svopex/MicroCommander",
+    "programmingLanguage": ["Rust", "Swift"],
+    "isBasedOn": {
+      "@type": "SoftwareSourceCode",
+      "name": "Open Salamander",
+      "codeRepository": "https://github.com/OpenSalamander/salamander"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Svopex",
+      "url": "https://svopex.eu"
+    }
+  }
+  </script>
+  <!-- Strukturovaná data sekce Časté otázky: texty musí odpovídat viditelným
+       odpovědím v sekci #faq (při úpravě změnit obojí) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Existuje Altap Salamander pro Mac?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Altap Salamander je správce souborů pro Windows a oficiální verze pro macOS neexistuje. MicroCommander je nezávislý dvoupanelový správce souborů pro macOS, který přebírá ovládání Salamanderu. Je to port Open Salamanderu, ne oficiální produkt firmy Altap."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Jaký je rozdíl mezi Altap Salamanderem, Open Salamanderem a MicroCommanderem?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Altap Salamander je původní dvoupanelový správce souborů pro Windows od firmy Altap. Open Salamander je jeho open-source verze uvolněná pod licencí GPL. MicroCommander je nový přepis pro macOS s jádrem v Rustu a rozhraním ve Swift/AppKit; jako referenci chování používá zdrojový kód Open Samandarinu, komunitní větve Open Salamanderu. S firmou Altap není spojen."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Fungují stejné klávesové zkratky jako v Salamanderu?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Ano, ovládání odpovídá Salamanderu: F2 přejmenovat, F3 zobrazit, F4 upravit, F5 kopírovat, F6 přesunout, F7 nový adresář, F8 smazat, Alt+F5 zabalit do ZIP a Ctrl+F3 až Ctrl+F6 řazení. Zkratky s Ctrl mají na Macu i variantu s ⌘. F-klávesy na klávesnici Macu vyžadují Fn, nebo zapnutí volby „Používat F1, F2 atd. jako standardní funkční klávesy“. Každou zkratku lze v Nastavení změnit, přehled zobrazí F1."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Podporuje FTP, SFTP a archivy jako Salamander?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Ano. FTP a SFTP s uloženými servery a hesly v Klíčence; SFTP s přihlášením heslem, klíčem (ed25519, ECDSA, RSA) i přes ssh-agent. ZIP, TAR a TAR.GZ se otevírají jako adresář a ZIP lze vytvářet i se šifrováním AES-256 nebo ZipCrypto. Archivy jsou zatím jen pro čtení, 7z, RAR a FTPS podporované nejsou."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Je MicroCommander zdarma?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Ano, zcela zdarma, bez reklam, účtů a telemetrie. Je to svobodný software pod licencí GPL-2.0-or-later se zdrojovým kódem na GitHubu."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Běží na Apple Silicon i na Macu s Intelem?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MicroCommander vyžaduje macOS 13 nebo novější a sestavuje se přímo na vašem Macu pro jeho procesor. Vyvíjí se a testuje na Apple Silicon; sestavení na Macu s Intelem zatím ověřené není."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Jak MicroCommander nainstaluji?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Hotová aplikace ke stažení zatím není. MicroCommander se sestaví ze zdrojového kódu třemi příkazy v Terminálu; potřebujete Xcode Command Line Tools a Rust. Výsledná aplikace build/MicroCommander.app se pak přetáhne do složky Aplikace."
+        }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <!-- Horní navigace: logo a odkazy na sekce, GitHub v nové záložce, přepínač na anglickou verzi -->
@@ -24,6 +162,7 @@
       <a class="brand" href="#top"><img src="site/icon.png" width="28" height="28" alt="">MicroCommander</a>
       <div class="nav-links">
         <a class="wide-only" href="#funkce">Funkce</a>
+        <a class="wide-only" href="#faq">Otázky</a>
         <a class="wide-only" href="#stahnout">Stáhnout</a>
         <a class="wide-only" href="#kontakt">Kontakt</a>
         <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">GitHub ↗</a>
@@ -42,11 +181,14 @@
   <header class="hero" id="top">
     <div class="wrap">
       <div class="hero-text">
-        <img class="hero-icon" src="site/icon.png" width="96" height="96" alt="Ikona MicroCommanderu">
+        <img class="hero-icon" src="site/icon.png" width="96" height="96" alt="MicroCommander – ikona správce souborů pro Mac">
         <p class="badge">Zcela zdarma · open source</p>
-        <h1>Dvoupanelový správce souborů <span class="accent">pro Mac</span></h1>
-        <p class="lead">MicroCommander přenáší ovládání Open Salamanderu na macOS – rychlé
-          jádro v Rustu a nativní aplikace ve Swift/AppKit. Klávesnicí, bez kompromisů.</p>
+        <!-- H1 odpovídá hlavnímu dotazu „Salamander pro Mac“; druhý řádek je menší (.h1-sub) -->
+        <h1>Salamander <span class="accent">pro Mac</span> <span class="h1-sub">Dvoupanelový správce souborů pro macOS</span></h1>
+        <p class="lead">Používali jste na Windows Altap Salamander? MicroCommander je jeho
+          alternativa pro Mac: přepis Open Salamanderu, tedy open-source verze Altap Salamanderu
+          uvolněné pod licencí GPL. Stejné ovládání klávesnicí, rychlé jádro v Rustu a nativní
+          aplikace ve Swift/AppKit.</p>
         <div class="actions">
           <a class="button primary" href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">Zdrojový kód na GitHubu ↗</a>
           <a class="button" href="#stahnout">Stáhnout a spustit</a>
@@ -148,7 +290,7 @@
     <!-- Přehled hlavních funkcí s ikonami -->
     <section class="wrap" id="funkce">
       <p class="eyebrow">Funkce</p>
-      <h2>Všechno, co od dvoupanelového správce čekáte</h2>
+      <h2>Funkce, které znáte ze Salamanderu</h2>
       <div class="grid">
         <article class="card">
           <svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></svg>
@@ -176,7 +318,7 @@
         </article>
         <article class="card">
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <h3>Hledání</h3>
+          <h3>Hledání jako v Salamanderu</h3>
           <p>Masky ve stylu Salamandera, hledání v obsahu – text, HEX, celá slova,
             regulární výrazy – a volitelně i uvnitř archivů.</p>
         </article>
@@ -197,6 +339,106 @@
           <h3>Nativní Mac aplikace</h3>
           <p>Přetahování z a do Finderu, náhledy Quick Look, okno Informace, více oken,
             světlý i tmavý režim.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Pro uživatele Salamanderu: co si z Windows přenesou, skutečný screenshot
+         a poctivý přehled toho, co zatím chybí (podle README, sekce Ovládání a omezení) -->
+    <section class="wrap" id="salamander">
+      <p class="eyebrow">Pro uživatele Salamanderu</p>
+      <h2>Přecházíte z Altap Salamanderu na Mac?</h2>
+      <p class="section-lead">MicroCommander se ovládá jako Salamander na Windows, takže
+        většinu zvyků si přenesete beze změny.</p>
+      <div class="switch-grid">
+        <article class="switch-item">
+          <h3>Klávesové zkratky jako v Altap Salamanderu</h3>
+          <p><kbd>F3</kbd> zobrazit, <kbd>F4</kbd> upravit, <kbd>F5</kbd> kopírovat,
+            <kbd>F6</kbd> přesunout, <kbd>F7</kbd> nový adresář, <kbd>F8</kbd> smazat,
+            <kbd>⌥F5</kbd> zabalit do ZIP. Zkratky s Ctrl mají na Macu i variantu s ⌘
+            a každou lze v Nastavení přenastavit.</p>
+        </article>
+        <article class="switch-item">
+          <h3>Panely a označování jako v Salamanderu</h3>
+          <p>Kurzor oddělený od označení, označené položky červeně, <kbd>Space</kbd>
+            a <kbd>Insert</kbd> označují, <kbd>Num +</kbd> / <kbd>Num −</kbd> podle masky,
+            <kbd>⌃H</kbd> skryté soubory a rychlé hledání psaním.</p>
+        </article>
+        <article class="switch-item">
+          <h3>Barvy z Open Salamanderu</h3>
+          <p>Kromě vzhledu macOS (světlý i tmavý) nabízí barevná schémata Open Salamander,
+            Windows Explorer, Norton Commander a DOS Navigator.</p>
+        </article>
+        <article class="switch-item">
+          <h3>Co zatím chybí</h3>
+          <p>Pluginy, formáty 7z a RAR a FTPS. Archivy jsou jen pro čtení – nové ZIP
+            však vytvoříte. F-klávesy na klávesnici Macu vyžadují <kbd>Fn</kbd>.</p>
+        </article>
+      </div>
+      <!-- Skutečný snímek okna aplikace (SAL_SNAPSHOT); lazy – je až pod úvodem -->
+      <figure class="shot">
+        <img src="site/screenshot-cs.webp" width="1400" height="400" loading="lazy" decoding="async"
+          alt="MicroCommander – Salamander pro macOS, dvoupanelové okno se seznamy souborů a lištou F-kláves">
+        <figcaption>Skutečné okno MicroCommanderu v macOS: dva panely v podrobném zobrazení
+          a lišta F-kláves jako v Salamanderu.</figcaption>
+      </figure>
+    </section>
+
+    <!-- Časté otázky: viditelné odpovědi; shodné texty jsou ve FAQPage JSON-LD v <head> -->
+    <section class="wrap" id="faq">
+      <p class="eyebrow">Časté otázky</p>
+      <h2>Salamander pro Mac – otázky a odpovědi</h2>
+      <div class="faq">
+        <article class="faq-item">
+          <h3>Existuje Altap Salamander pro Mac?</h3>
+          <p>Altap Salamander je správce souborů pro Windows a oficiální verze pro macOS
+            neexistuje. MicroCommander je nezávislý dvoupanelový správce souborů pro macOS,
+            který přebírá ovládání Salamanderu. Je to port Open Salamanderu, ne oficiální
+            produkt firmy Altap.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Jaký je rozdíl mezi Altap Salamanderem, Open Salamanderem a MicroCommanderem?</h3>
+          <p>Altap Salamander je původní dvoupanelový správce souborů pro Windows od firmy
+            Altap. <a href="https://github.com/OpenSalamander/salamander" target="_blank" rel="noopener">Open Salamander</a>
+            je jeho open-source verze uvolněná pod licencí GPL. MicroCommander je nový přepis
+            pro macOS s jádrem v Rustu a rozhraním ve Swift/AppKit; jako referenci chování
+            používá zdrojový kód <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Samandarinu</a>,
+            komunitní větve Open Salamanderu. S firmou Altap není spojen.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Fungují stejné klávesové zkratky jako v Salamanderu?</h3>
+          <p>Ano, ovládání odpovídá Salamanderu: F2 přejmenovat, F3 zobrazit, F4 upravit,
+            F5 kopírovat, F6 přesunout, F7 nový adresář, F8 smazat, Alt+F5 zabalit do ZIP
+            a Ctrl+F3 až Ctrl+F6 řazení. Zkratky s Ctrl mají na Macu i variantu s ⌘. F-klávesy
+            na klávesnici Macu vyžadují Fn, nebo zapnutí volby „Používat F1, F2 atd. jako
+            standardní funkční klávesy“. Každou zkratku lze v Nastavení změnit, přehled
+            zobrazí F1.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Podporuje FTP, SFTP a archivy jako Salamander?</h3>
+          <p>Ano. FTP a SFTP s uloženými servery a hesly v Klíčence; SFTP s přihlášením heslem,
+            klíčem (ed25519, ECDSA, RSA) i přes ssh-agent. ZIP, TAR a TAR.GZ se otevírají jako
+            adresář a ZIP lze vytvářet i se šifrováním AES-256 nebo ZipCrypto. Archivy jsou
+            zatím jen pro čtení, 7z, RAR a FTPS podporované nejsou.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Je MicroCommander zdarma?</h3>
+          <p>Ano, zcela zdarma, bez reklam, účtů a telemetrie. Je to svobodný software pod
+            licencí GPL-2.0-or-later se zdrojovým kódem na
+            <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">GitHubu</a>.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Běží na Apple Silicon i na Macu s Intelem?</h3>
+          <p>MicroCommander vyžaduje macOS 13 nebo novější a sestavuje se přímo na vašem Macu
+            pro jeho procesor. Vyvíjí se a testuje na Apple Silicon; sestavení na Macu
+            s Intelem zatím ověřené není.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Jak MicroCommander nainstaluji?</h3>
+          <p>Hotová aplikace ke stažení zatím není. MicroCommander se sestaví ze zdrojového
+            kódu <a href="#stahnout">třemi příkazy v Terminálu</a>; potřebujete Xcode Command
+            Line Tools a Rust. Výsledná aplikace <code>build/MicroCommander.app</code> se pak
+            přetáhne do složky Aplikace.</p>
         </article>
       </div>
     </section>
@@ -268,14 +510,17 @@ cd MicroCommander-main</code></pre>
     </section>
   </main>
 
-  <!-- Patička: licence, původ projektu a autor -->
+  <!-- Patička: licence, původ projektu, poznámka o ochranné známce a autor -->
   <footer class="footer">
     <div class="wrap footer-inner">
       <p>MicroCommander je zcela zdarma – svobodný software pod licencí
         <a href="https://github.com/svopex/MicroCommander/blob/main/LICENSE" target="_blank" rel="noopener">GPL-2.0-or-later</a>,
-        vychází z <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Salamanderu</a>.</p>
+        vychází z <a href="https://github.com/OpenSalamander/salamander" target="_blank" rel="noopener">Open Salamanderu</a>
+        (komunitní větev <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Samandarin</a>).</p>
       <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">github.com/svopex/MicroCommander ↗</a>
     </div>
+    <div class="wrap footer-legal">Altap Salamander je ochranná známka svého vlastníka.
+      MicroCommander není s firmou Altap spojen.</div>
     <!-- Autor projektu úplně na konci stránky -->
     <div class="wrap footer-author">Autor: © 2026 Svopex –
       <a href="https://svopex.eu" target="_blank" rel="noopener">svopex.eu</a></div>

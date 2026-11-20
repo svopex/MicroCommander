@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mapa webu pro vyhledávače: česká a anglická stránka s vzájemnými jazykovými
+     verzemi (hreflang). Při změně obsahu stránek aktualizovat lastmod. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://svopex.github.io/MicroCommander/</loc>
+    <lastmod>2026-11-20</lastmod>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://svopex.github.io/MicroCommander/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://svopex.github.io/MicroCommander/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://svopex.github.io/MicroCommander/"/>
+  </url>
+  <url>
+    <loc>https://svopex.github.io/MicroCommander/en/</loc>
+    <lastmod>2026-11-20</lastmod>
+    <xhtml:link rel="alternate" hreflang="cs" href="https://svopex.github.io/MicroCommander/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://svopex.github.io/MicroCommander/en/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://svopex.github.io/MicroCommander/"/>
+  </url>
+</urlset>

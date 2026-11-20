@@ -3,19 +3,147 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MicroCommander – Salamander for Mac, a free dual-pane file manager</title>
-  <meta name="description" content="MicroCommander – Salamander for Mac: a free dual-pane file manager for macOS. A rewrite of Open Salamander and an Altap Salamander alternative with a Rust core and a native Swift/AppKit UI.">
+  <title>MicroCommander – Salamander for Mac (Open Salamander port)</title>
+  <meta name="description" content="Salamander for Mac, free: a dual-pane file manager for macOS, an Open Salamander port and Altap Salamander alternative. FTP, SFTP, ZIP and F-keys.">
+  <meta name="author" content="Svopex">
   <!-- Jazykové verze pro vyhledávače: česká je výchozí, anglická v en/ -->
   <link rel="canonical" href="https://svopex.github.io/MicroCommander/en/">
   <link rel="alternate" hreflang="cs" href="https://svopex.github.io/MicroCommander/">
   <link rel="alternate" hreflang="en" href="https://svopex.github.io/MicroCommander/en/">
   <link rel="alternate" hreflang="x-default" href="https://svopex.github.io/MicroCommander/">
+  <!-- Stručný popis projektu pro jazykové modely (formát llmstxt.org) -->
+  <link rel="help" type="text/markdown" href="https://svopex.github.io/MicroCommander/llms.txt" title="llms.txt">
   <link rel="icon" type="image/png" href="../site/icon.png">
+  <!-- Náhled při sdílení (Open Graph pro Facebook, LinkedIn, Slack…; Twitter/X karta) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MicroCommander">
+  <meta property="og:title" content="MicroCommander – Salamander for Mac (Open Salamander port)">
+  <meta property="og:description" content="A dual-pane file manager for macOS that works like Salamander. An Open Salamander port and Altap Salamander alternative – free and open source.">
+  <meta property="og:url" content="https://svopex.github.io/MicroCommander/en/">
+  <meta property="og:image" content="https://svopex.github.io/MicroCommander/site/og-image-en.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="MicroCommander – Salamander for macOS, dual-pane window with the F-key bar">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="cs_CZ">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MicroCommander – Salamander for Mac (Open Salamander port)">
+  <meta name="twitter:description" content="A dual-pane file manager for macOS that works like Salamander. An Open Salamander port and Altap Salamander alternative – free and open source.">
+  <meta name="twitter:image" content="https://svopex.github.io/MicroCommander/site/og-image-en.png">
+  <meta name="twitter:image:alt" content="MicroCommander – Salamander for macOS, dual-pane window with the F-key bar">
   <!-- ?v= obchází cache prohlížeče (GitHub Pages: max-age 10 min) – při změně souborů v site/ zvýšit -->
   <!-- theme.js bez defer: uložený motiv se nastaví ještě před vykreslením stránky -->
-  <script src="../site/theme.js?v=4"></script>
-  <link rel="stylesheet" href="../site/style.css?v=4">
-  <script src="../site/site.js?v=4" defer></script>
+  <script src="../site/theme.js?v=5"></script>
+  <link rel="stylesheet" href="../site/style.css?v=5">
+  <script src="../site/site.js?v=5" defer></script>
+  <!-- Strukturovaná data pro vyhledávače (schema.org, JSON-LD – data, ne skript):
+       aplikace a její zdrojový kód. Údaje drží shodně s index.html. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": ["SoftwareApplication", "SoftwareSourceCode"],
+    "@id": "https://svopex.github.io/MicroCommander/#app",
+    "name": "MicroCommander",
+    "alternateName": ["Salamander pro Mac", "Open Salamander for macOS"],
+    "description": "A dual-pane file manager for macOS that works like Salamander: an Open Salamander port with a Rust core and a native Swift/AppKit interface. A free, open-source Altap Salamander alternative for Mac.",
+    "inLanguage": "en",
+    "url": "https://svopex.github.io/MicroCommander/en/",
+    "image": "https://svopex.github.io/MicroCommander/site/og-image-en.png",
+    "screenshot": "https://svopex.github.io/MicroCommander/site/screenshot-en.webp",
+    "operatingSystem": "macOS 13+",
+    "applicationCategory": "UtilitiesApplication",
+    "applicationSubCategory": "File manager",
+    "softwareVersion": "0.1.0",
+    "isAccessibleForFree": true,
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "license": "https://spdx.org/licenses/GPL-2.0-or-later.html",
+    "downloadUrl": "https://github.com/svopex/MicroCommander/archive/refs/heads/main.tar.gz",
+    "installUrl": "https://svopex.github.io/MicroCommander/en/#download",
+    "codeRepository": "https://github.com/svopex/MicroCommander",
+    "programmingLanguage": ["Rust", "Swift"],
+    "isBasedOn": {
+      "@type": "SoftwareSourceCode",
+      "name": "Open Salamander",
+      "codeRepository": "https://github.com/OpenSalamander/salamander"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Svopex",
+      "url": "https://svopex.eu"
+    }
+  }
+  </script>
+  <!-- Strukturovaná data sekce FAQ: texty musí odpovídat viditelným odpovědím
+       v sekci #faq (při úpravě změnit obojí) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is there an Altap Salamander for Mac?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Altap Salamander is a file manager for Windows and there is no official macOS version. MicroCommander is an independent dual-pane file manager for macOS that adopts Salamander's controls. It is a port of Open Salamander, not an official Altap product."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is the difference between Altap Salamander, Open Salamander and MicroCommander?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Altap Salamander is the original dual-pane file manager for Windows made by Altap. Open Salamander is its open-source version, released under the GPL. MicroCommander is a new rewrite for macOS with a Rust core and a Swift/AppKit interface; it uses the source code of Open Samandarin, a community fork of Open Salamander, as its behavior reference. It is not affiliated with Altap."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it use the same keyboard shortcuts as Salamander?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, the controls follow Salamander: F2 rename, F3 view, F4 edit, F5 copy, F6 move, F7 new folder, F8 delete, Alt+F5 pack into ZIP and Ctrl+F3 to Ctrl+F6 to sort. Ctrl shortcuts also have a ⌘ variant on the Mac. On a Mac keyboard the F-keys need Fn, or turn on “Use F1, F2, etc. keys as standard function keys”. Every shortcut can be changed in Settings, and F1 shows an overview."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it support FTP, SFTP and archives like Salamander?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. FTP and SFTP with saved servers and passwords in the Keychain; SFTP sign-in with a password, a key (ed25519, ECDSA, RSA) or ssh-agent. ZIP, TAR and TAR.GZ open like a folder, and you can create ZIP files, including AES-256 or ZipCrypto encryption. Archives are read-only for now; 7z, RAR and FTPS are not supported."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is MicroCommander free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, completely free, with no ads, accounts or telemetry. It is free software licensed under GPL-2.0-or-later, with its source code on GitHub."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it run on Apple Silicon and Intel Macs?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MicroCommander requires macOS 13 or later and is built right on your Mac for its processor. It is developed and tested on Apple Silicon; building on an Intel Mac has not been verified yet."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I install MicroCommander?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "There is no prebuilt app to download yet. MicroCommander is built from source with three commands in Terminal; you need the Xcode Command Line Tools and Rust. Then drag the resulting build/MicroCommander.app to your Applications folder."
+        }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <!-- Horní navigace: logo a odkazy na sekce, GitHub v nové záložce, přepínač na českou verzi -->
@@ -24,6 +152,7 @@
       <a class="brand" href="#top"><img src="../site/icon.png" width="28" height="28" alt="">MicroCommander</a>
       <div class="nav-links">
         <a class="wide-only" href="#features">Features</a>
+        <a class="wide-only" href="#faq">FAQ</a>
         <a class="wide-only" href="#download">Download</a>
         <a class="wide-only" href="#contact">Contact</a>
         <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">GitHub ↗</a>
@@ -42,11 +171,14 @@
   <header class="hero" id="top">
     <div class="wrap">
       <div class="hero-text">
-        <img class="hero-icon" src="../site/icon.png" width="96" height="96" alt="MicroCommander icon">
+        <img class="hero-icon" src="../site/icon.png" width="96" height="96" alt="MicroCommander icon – Salamander-style file manager for Mac">
         <p class="badge">Completely free · open source</p>
-        <h1>Salamander-style dual-pane file manager <span class="accent">for Mac</span></h1>
-        <p class="lead">MicroCommander brings Open Salamander to macOS – a free Altap Salamander
-          alternative with a fast Rust core and a native Swift/AppKit app. Keyboard-driven, no compromises.</p>
+        <!-- H1 odpovídá hlavnímu dotazu „Salamander for Mac“; druhý řádek je menší (.h1-sub) -->
+        <h1>Salamander <span class="accent">for Mac</span> <span class="h1-sub">Dual-pane file manager for macOS</span></h1>
+        <p class="lead">Used Altap Salamander on Windows? MicroCommander is an alternative for
+          the Mac: a rewrite of Open Salamander, the open-source version of Altap Salamander
+          released under the GPL. The same keyboard-driven controls, a fast Rust core and
+          a native Swift/AppKit app.</p>
         <div class="actions">
           <a class="button primary" href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">Source code on GitHub ↗</a>
           <a class="button" href="#download">Download and run</a>
@@ -148,7 +280,7 @@
     <!-- Přehled hlavních funkcí s ikonami -->
     <section class="wrap" id="features">
       <p class="eyebrow">Features</p>
-      <h2>Everything you expect from a dual-pane file manager</h2>
+      <h2>Features you know from Salamander</h2>
       <div class="grid">
         <article class="card">
           <svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></svg>
@@ -176,7 +308,7 @@
         </article>
         <article class="card">
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <h3>Search</h3>
+          <h3>Search like in Salamander</h3>
           <p>Salamander-style masks and content search – text, HEX, whole words,
             regular expressions – optionally even inside archives.</p>
         </article>
@@ -197,6 +329,106 @@
           <h3>A native Mac app</h3>
           <p>Drag and drop to and from Finder, Quick Look previews, the Get Info window,
             multiple windows, light and dark mode.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Pro uživatele Salamanderu: co si z Windows přenesou, skutečný screenshot
+         a poctivý přehled toho, co zatím chybí (podle README, sekce Ovládání a omezení) -->
+    <section class="wrap" id="salamander">
+      <p class="eyebrow">For Salamander users</p>
+      <h2>Switching from Altap Salamander to a Mac?</h2>
+      <p class="section-lead">MicroCommander works like Salamander on Windows, so most of
+        your habits carry over unchanged.</p>
+      <div class="switch-grid">
+        <article class="switch-item">
+          <h3>Keyboard shortcuts like in Altap Salamander</h3>
+          <p><kbd>F3</kbd> view, <kbd>F4</kbd> edit, <kbd>F5</kbd> copy, <kbd>F6</kbd> move,
+            <kbd>F7</kbd> new folder, <kbd>F8</kbd> delete, <kbd>⌥F5</kbd> pack into ZIP.
+            Ctrl shortcuts also have a ⌘ variant on the Mac, and every one can be
+            remapped in Settings.</p>
+        </article>
+        <article class="switch-item">
+          <h3>Panels and selection like in Salamander</h3>
+          <p>A cursor separate from the selection, selected items in red, <kbd>Space</kbd>
+            and <kbd>Insert</kbd> to select, <kbd>Num +</kbd> / <kbd>Num −</kbd> by mask,
+            <kbd>⌃H</kbd> for hidden files and quick search by typing.</p>
+        </article>
+        <article class="switch-item">
+          <h3>Colors from Open Salamander</h3>
+          <p>Besides the macOS look (light and dark), it offers the Open Salamander,
+            Windows Explorer, Norton Commander and DOS Navigator color schemes.</p>
+        </article>
+        <article class="switch-item">
+          <h3>What is still missing</h3>
+          <p>Plugins, 7z and RAR formats, and FTPS. Archives are read-only – but you can
+            create new ZIP files. On a Mac keyboard the F-keys need <kbd>Fn</kbd>.</p>
+        </article>
+      </div>
+      <!-- Skutečný snímek okna aplikace (SAL_SNAPSHOT); lazy – je až pod úvodem -->
+      <figure class="shot">
+        <img src="../site/screenshot-en.webp" width="1400" height="400" loading="lazy" decoding="async"
+          alt="MicroCommander – Salamander for macOS, dual-pane window with file lists and the F-key bar">
+        <figcaption>The real MicroCommander window on macOS: two panels in the detailed view
+          and an F-key bar just like in Salamander.</figcaption>
+      </figure>
+    </section>
+
+    <!-- Časté otázky: viditelné odpovědi; shodné texty jsou ve FAQPage JSON-LD v <head> -->
+    <section class="wrap" id="faq">
+      <p class="eyebrow">FAQ</p>
+      <h2>Salamander for Mac – questions and answers</h2>
+      <div class="faq">
+        <article class="faq-item">
+          <h3>Is there an Altap Salamander for Mac?</h3>
+          <p>Altap Salamander is a file manager for Windows and there is no official macOS
+            version. MicroCommander is an independent dual-pane file manager for macOS that
+            adopts Salamander's controls. It is a port of Open Salamander, not an official
+            Altap product.</p>
+        </article>
+        <article class="faq-item">
+          <h3>What is the difference between Altap Salamander, Open Salamander and MicroCommander?</h3>
+          <p>Altap Salamander is the original dual-pane file manager for Windows made by Altap.
+            <a href="https://github.com/OpenSalamander/salamander" target="_blank" rel="noopener">Open Salamander</a>
+            is its open-source version, released under the GPL. MicroCommander is a new rewrite
+            for macOS with a Rust core and a Swift/AppKit interface; it uses the source code of
+            <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Samandarin</a>,
+            a community fork of Open Salamander, as its behavior reference. It is not affiliated
+            with Altap.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Does it use the same keyboard shortcuts as Salamander?</h3>
+          <p>Yes, the controls follow Salamander: F2 rename, F3 view, F4 edit, F5 copy, F6 move,
+            F7 new folder, F8 delete, Alt+F5 pack into ZIP and Ctrl+F3 to Ctrl+F6 to sort.
+            Ctrl shortcuts also have a ⌘ variant on the Mac. On a Mac keyboard the F-keys need
+            Fn, or turn on “Use F1, F2, etc. keys as standard function keys”. Every shortcut
+            can be changed in Settings, and F1 shows an overview.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Does it support FTP, SFTP and archives like Salamander?</h3>
+          <p>Yes. FTP and SFTP with saved servers and passwords in the Keychain; SFTP sign-in
+            with a password, a key (ed25519, ECDSA, RSA) or ssh-agent. ZIP, TAR and TAR.GZ open
+            like a folder, and you can create ZIP files, including AES-256 or ZipCrypto
+            encryption. Archives are read-only for now; 7z, RAR and FTPS are not supported.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Is MicroCommander free?</h3>
+          <p>Yes, completely free, with no ads, accounts or telemetry. It is free software
+            licensed under GPL-2.0-or-later, with its source code on
+            <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">GitHub</a>.</p>
+        </article>
+        <article class="faq-item">
+          <h3>Does it run on Apple Silicon and Intel Macs?</h3>
+          <p>MicroCommander requires macOS 13 or later and is built right on your Mac for its
+            processor. It is developed and tested on Apple Silicon; building on an Intel Mac
+            has not been verified yet.</p>
+        </article>
+        <article class="faq-item">
+          <h3>How do I install MicroCommander?</h3>
+          <p>There is no prebuilt app to download yet. MicroCommander is built from source with
+            <a href="#download">three commands in Terminal</a>; you need the Xcode Command Line
+            Tools and Rust. Then drag the resulting <code>build/MicroCommander.app</code> to your
+            Applications folder.</p>
         </article>
       </div>
     </section>
@@ -268,14 +500,17 @@ cd MicroCommander-main</code></pre>
     </section>
   </main>
 
-  <!-- Patička: licence, původ projektu a autor -->
+  <!-- Patička: licence, původ projektu, poznámka o ochranné známce a autor -->
   <footer class="footer">
     <div class="wrap footer-inner">
       <p>MicroCommander is completely free – free software licensed under
         <a href="https://github.com/svopex/MicroCommander/blob/main/LICENSE" target="_blank" rel="noopener">GPL-2.0-or-later</a>,
-        based on <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Salamander</a>.</p>
+        based on <a href="https://github.com/OpenSalamander/salamander" target="_blank" rel="noopener">Open Salamander</a>
+        (the <a href="https://github.com/KRtkovo-eu-AI/salamander" target="_blank" rel="noopener">Open Samandarin</a> community fork).</p>
       <a href="https://github.com/svopex/MicroCommander" target="_blank" rel="noopener">github.com/svopex/MicroCommander ↗</a>
     </div>
+    <div class="wrap footer-legal">Altap Salamander is a trademark of its respective owner.
+      MicroCommander is not affiliated with Altap.</div>
     <!-- Autor projektu úplně na konci stránky -->
     <div class="wrap footer-author">Author: © 2026 Svopex –
       <a href="https://svopex.eu" target="_blank" rel="noopener">svopex.eu</a></div>
