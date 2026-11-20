@@ -8,6 +8,8 @@ Webová stránka projektu: <https://svopex.github.io/MicroCommander/>
 „Poslat e-mail“ – adresa je v `data-email` obrácená a v base64 a `site/site.js`
 ji složí až po kliknutí a otevře poštovního klienta (na stránce se nezobrazí,
 roboti ji nenajdou); patička odkazuje na web autora <https://svopex.eu>.
+Při změně souborů v `site/` zvýšit v `index.html` číslo `?v=` u odkazů na CSS
+a JS, jinak prohlížeče až 10 minut (cache GitHub Pages) drží starou verzi.
 
 ## Prvotni zadani
 
