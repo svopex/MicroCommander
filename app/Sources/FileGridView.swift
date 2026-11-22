@@ -64,16 +64,23 @@ final class FileGridView: NSView {
         didSet { relayout() }
     }
 
-    /// Rozměry buňky a počet řádků/sloupců (počítá relayout()).
-    private var cellSize = NSSize(width: 160, height: 17)
+    /// Výška řádku buněk a počet řádků ve sloupci (počítá relayout()).
+    private var rowHeight: CGFloat = 17
     private var rowsPerColumn = 1
-    private var columns = 1
+    /// Levé okraje sloupců mřížky, poslední prvek je pravý okraj posledního
+    /// sloupce (počet = columns + 1). Ve Stručném režimu má každý sloupec vlastní
+    /// šířku, v ostatních režimech jsou okraje rovnoměrné.
+    private var columnEdges: [CGFloat] = [0, 0]
+    private var columns: Int { columnEdges.count - 1 }
     /// Řádek, od kterého se počítá Shift+klik.
     private var anchorRow = 0
-    /// Šířka nejdelšího jména (Stručný režim) a generace řádků, pro kterou platí –
+    /// Šířky jmen všech položek (Stručný režim) a generace řádků, pro kterou platí –
     /// měření textu je drahé, opakuje se jen při novém seznamu, ne při označení.
-    private var longestNameWidth: CGFloat = 80
+    private var nameWidths: [CGFloat] = []
     private var measuredGeneration = -1
+    /// Stručný režim: celkový vodorovný okraj buňky kolem jména (ikona vlevo,
+    /// mezera vpravo) – relayout i nameRect musí počítat se stejnou hodnotou.
+    private static let briefNameMargin: CGFloat = 28
     /// Miniatury podle cesty (načítané asynchronně přes Quick Look).
     private var thumbnails: [String: NSImage] = [:]
     private var pendingThumbnails: Set<String> = []
@@ -105,29 +112,47 @@ final class FileGridView: NSView {
             scrollerStyle: scroll.scrollerStyle)
         switch mode {
         case .brief:
-            // Sloupce jmen tekoucí shora dolů (šířka podle nejdelšího jména, s limitem).
+            // Sloupce jmen tekoucí shora dolů, každý široký podle nejdelšího jména
+            // v něm (jako Salamander – jména se nezkracují). Měří se tučným písmem,
+            // aby se jméno nezkrátilo ani po označení.
             if measuredGeneration != owner.panel.rowsGeneration {
                 measuredGeneration = owner.panel.rowsGeneration
-                longestNameWidth = rows.map { ($0.item.name as NSString).size(withAttributes: [.font: listFont]).width }.max() ?? 80
+                let attributes: [NSAttributedString.Key: Any] = [.font: boldListFont]
+                nameWidths = rows.map { ceil(($0.item.name as NSString).size(withAttributes: attributes).width) }
             }
-            cellSize = NSSize(width: min(max(longestNameWidth + 30, 110), 320), height: 17)
+            rowHeight = 17
             // Překryvný vodorovný posuvník leží přes spodek obsahu – místo pro něj
             // vyhradíme, aby nezakrýval poslední řádek sloupců.
             let overlayReserve: CGFloat = scroll.scrollerStyle == .overlay
                 ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .overlay) + 2 : 0
-            rowsPerColumn = max(1, Int((visible.height - overlayReserve) / cellSize.height))
-            columns = max(1, (rows.count + rowsPerColumn - 1) / rowsPerColumn)
-            setFrameSize(NSSize(width: max(visible.width, CGFloat(columns) * cellSize.width), height: visible.height))
+            rowsPerColumn = max(1, Int((visible.height - overlayReserve) / rowHeight))
+            let columnCount = max(1, (rows.count + rowsPerColumn - 1) / rowsPerColumn)
+            // Šířka sloupce = nejdelší jméno ve sloupci + okraje + 2 pt rezervy,
+            // nejvýš šířka panelu (delší jméno se zkrátí), nejméně 110 pt
+            // (i pro prázdný seznam). Okraje sloupců se sčítají zleva.
+            var edges: [CGFloat] = [0]
+            edges.reserveCapacity(columnCount + 1)
+            for column in 0..<columnCount {
+                let start = column * rowsPerColumn
+                let longest = nameWidths[start..<min(start + rowsPerColumn, nameWidths.count)].max() ?? 0
+                edges.append(edges[column] + max(min(longest + Self.briefNameMargin + 2, visible.width), 110))
+            }
+            columnEdges = edges
+            setFrameSize(NSSize(width: max(visible.width, edges[columnCount]), height: visible.height))
         case .icons, .thumbnails, .tiles:
             // Řádkově uspořádaná mřížka (počet sloupců podle šířky).
+            let cellSize: NSSize
             switch mode {
             case .icons: cellSize = NSSize(width: 92, height: 70)
             case .thumbnails: cellSize = NSSize(width: 124, height: 126)
             default: cellSize = NSSize(width: 250, height: 52)
             }
-            columns = max(1, Int(visible.width / cellSize.width))
-            rowsPerColumn = max(1, (rows.count + columns - 1) / columns)
-            setFrameSize(NSSize(width: visible.width, height: max(visible.height, CGFloat(rowsPerColumn) * cellSize.height)))
+            rowHeight = cellSize.height
+            // Rovnoměrné okraje sloupců (stejně široké buňky).
+            let columnCount = max(1, Int(visible.width / cellSize.width))
+            columnEdges = (0...columnCount).map { CGFloat($0) * cellSize.width }
+            rowsPerColumn = max(1, (rows.count + columnCount - 1) / columnCount)
+            setFrameSize(NSSize(width: visible.width, height: max(visible.height, CGFloat(rowsPerColumn) * rowHeight)))
         default:
             break
         }
@@ -145,8 +170,24 @@ final class FileGridView: NSView {
             column = index % columns
             row = index / columns
         }
-        return NSRect(x: CGFloat(column) * cellSize.width, y: CGFloat(row) * cellSize.height,
-                      width: cellSize.width, height: cellSize.height)
+        // Vodorovná poloha a šířka podle okrajů sloupců (omezeno na existující
+        // sloupce – index ze starého seznamu před relayoutem nesmí spadnout).
+        let edge = max(0, min(column, columns - 1))
+        return NSRect(x: columnEdges[edge], y: CGFloat(row) * rowHeight,
+                      width: columnEdges[edge + 1] - columnEdges[edge], height: rowHeight)
+    }
+
+    /// Sloupec pod vodorovnou souřadnicí x (může být za posledním sloupcem).
+    private func column(atX x: CGFloat) -> Int {
+        // Binární hledání posledního levého okraje ≤ x (sloupců mohou být stovky);
+        // za pravým okrajem posledního sloupce vrací columns (tj. mimo položky).
+        var low = 0
+        var high = columns
+        while low < high {
+            let middle = (low + high + 1) / 2
+            if columnEdges[middle] <= x { low = middle } else { high = middle - 1 }
+        }
+        return low
     }
 
     /// Obdélník jména položky v buňce podle režimu (kreslení i přejmenování v panelu).
@@ -159,15 +200,16 @@ final class FileGridView: NSView {
         case .tiles:
             return NSRect(x: cell.minX + 52, y: cell.minY + 4, width: cell.width - 58, height: 16)
         default:
-            return NSRect(x: cell.minX + 24, y: cell.minY + 1, width: cell.width - 28, height: 15)
+            return NSRect(x: cell.minX + 24, y: cell.minY + 1,
+                          width: cell.width - Self.briefNameMargin, height: 15)
         }
     }
 
     /// Index položky pod bodem (nil = prázdné místo).
     func index(at point: NSPoint) -> Int? {
         guard let owner, point.x >= 0, point.y >= 0 else { return nil }
-        let column = Int(point.x / cellSize.width)
-        let row = Int(point.y / cellSize.height)
+        let column = column(atX: point.x)
+        let row = Int(point.y / rowHeight)
         let index: Int
         if mode == .brief {
             guard row < rowsPerColumn else { return nil }
@@ -181,10 +223,13 @@ final class FileGridView: NSView {
 
     /// Cílový index pro směrovou klávesu (Stručný: sloupce, ostatní: řádky mřížky).
     func target(from cursor: Int, key: NavigationKey) -> Int {
-        let visible = owner?.scrollView.contentView.bounds.size ?? bounds.size
+        let visibleRect = owner?.scrollView.contentView.bounds ?? bounds
         if mode == .brief {
-            // Ve Stručném režimu ←/→ přeskakují sloupec, PgUp/PgDn viditelnou stránku sloupců.
-            let visibleColumns = max(1, Int(visible.width / cellSize.width))
+            // Ve Stručném režimu ←/→ přeskakují sloupec, PgUp/PgDn viditelnou stránku
+            // sloupců (počet sloupců celých v zobrazené oblasti, sloupce mají různé šířky).
+            let visibleColumns = max(1, zip(columnEdges, columnEdges.dropFirst()).count {
+                $0.0 >= visibleRect.minX - 0.5 && $0.1 <= visibleRect.maxX + 0.5
+            })
             switch key {
             case .up: return cursor - 1
             case .down: return cursor + 1
@@ -194,7 +239,7 @@ final class FileGridView: NSView {
             case .pageDown: return cursor + rowsPerColumn * visibleColumns
             }
         }
-        let visibleRows = max(1, Int(visible.height / cellSize.height))
+        let visibleRows = max(1, Int(visibleRect.height / rowHeight))
         switch key {
         case .up: return cursor - columns
         case .down: return cursor + columns
@@ -234,11 +279,11 @@ final class FileGridView: NSView {
 
     /// Indexy položek, jejichž buňky zasahují do obdélníku.
     private func indexes(in area: NSRect) -> [Int] {
-        guard let count = owner?.panel.rows.count, count > 0, cellSize.width > 0, cellSize.height > 0 else { return [] }
-        let firstColumn = max(0, Int(area.minX / cellSize.width))
-        let lastColumn = Int(area.maxX / cellSize.width)
-        let firstRow = max(0, Int(area.minY / cellSize.height))
-        let lastRow = Int(area.maxY / cellSize.height)
+        guard let count = owner?.panel.rows.count, count > 0 else { return [] }
+        let firstColumn = max(0, column(atX: area.minX))
+        let lastColumn = column(atX: area.maxX)
+        let firstRow = max(0, Int(area.minY / rowHeight))
+        let lastRow = Int(area.maxY / rowHeight)
         var result: [Int] = []
         for column in firstColumn...max(firstColumn, lastColumn) {
             for row in firstRow...max(firstRow, lastRow) {

@@ -341,7 +341,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   vyloučení za `|`); Num * – invertovat (adresáře podle Nastavení). Operace pracují s označenými položkami,
   bez označení s položkou pod kurzorem.
 - **Režimy zobrazení** (⌥1–⌥6, menu Zobrazení, tlačítko na liště, kontextové
-  menu): Stručný (sloupce jmen, ←/→ přeskakují sloupec), Podrobný (výchozí),
+  menu): Stručný (sloupce jmen, každý široký podle nejdelšího jména v něm,
+  bez zkracování, nejvýš na šířku panelu; ←/→ přeskakují sloupec), Podrobný (výchozí),
   Ikony, Miniatury (náhledy Quick Look u lokálních souborů), Dlaždice (ikona +
   typ, velikost, datum), Typy (Podrobný se sloupcem Typ). Režim se pamatuje
   zvlášť pro levou a pravou stranu.
