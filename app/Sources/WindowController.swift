@@ -1837,13 +1837,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         guard !items.isEmpty, let window else { return }
         let save = NSSavePanel()
         save.allowedContentTypes = [.zip]
+        save.prompt = tr("Zabalit")
         let baseName = items.count == 1 ? splitExtension(items[0].name).base : lastComponent(panel.location.path)
         save.nameFieldStringValue = (baseName.isEmpty || baseName == "/" ? tr("archiv") : baseName) + ".zip"
         if let targetDir = inactivePanel.location.vfs.realPath(inactivePanel.location.path) {
             save.directoryURL = URL(fileURLWithPath: targetDir)
         }
-        // Volby šifrování (AES-256 / ZipCrypto + heslo) přímo v dialogu uložení.
-        let options = PackOptionsView()
+        // Volby šifrování (AES-256 / ZipCrypto + heslo) a přesunu do archivu
+        // přímo v dialogu uložení; přesun jen ze zapisovatelného zdroje.
+        let canMove = panel.location.vfs.writable
+        let sourcePaths = canMove ? items.compactMap { panel.localPath(of: $0.name) }
+            .map { URL(fileURLWithPath: $0).standardizedFileURL.path } : []
+        let options = PackOptionsView(canMove: canMove, sourcePaths: sourcePaths, savePanel: save)
         save.accessoryView = options
         save.isExtensionHidden = false
         save.delegate = options
@@ -1855,21 +1860,35 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
             let dir = panel.location.path
             let names = items.map(\.name)
             let encryption = options.encryption
+            let move = options.moveToArchive
             // Sheet uložení se musí zavřít dřív, než se otevře progress sheet.
             func pack() {
-                self.beginProgress(title: tr("Zabalování %@ do „%@“", self.describeItems(items), url.lastPathComponent),
+                // Archiv je hotový (chyba pak nastala až při mazání originálů
+                // a archiv se nesmí smazat – originály už mohou chybět).
+                var packed = false
+                let title = move ? tr("Přesun %@ do archivu „%@“", self.describeItems(items), url.lastPathComponent)
+                                 : tr("Zabalování %@ do „%@“", self.describeItems(items), url.lastPathComponent)
+                self.beginProgress(title: title,
                                    details: [tr("Z: %@", panel.displayPath), tr("Do: %@", url.path)]) { state in
                     try corePackZip(src: src, srcDir: dir, names: names, dest: url.path,
                                     encryption: encryption, state: state)
+                    // Přesun: originály se mažou trvale a až po úspěšném zabalení.
+                    if move {
+                        packed = true
+                        try coreDelete(vfs: src, dir: dir, names: names, state: state)
+                    }
                 } completion: { result in
                     self.endProgress()
-                    if case .failure(let error) = result, self.askPasswordAfterError(error, vfs: src) {
+                    if case .failure(let error) = result, !packed, self.askPasswordAfterError(error, vfs: src) {
                         pack()
                         return
                     }
                     if case .failure(let error) = result {
-                        // Nedokončený archiv po chybě/zrušení nenecháváme na disku.
-                        try? FileManager.default.removeItem(at: url)
+                        // Nedokončený archiv po chybě/zrušení nenecháváme na disku;
+                        // hotový archiv (chyba při mazání originálů) zůstává.
+                        if !packed {
+                            try? FileManager.default.removeItem(at: url)
+                        }
                         self.showErrorUnlessCancelled(title: tr("Zabalování"), error)
                     } else {
                         panel.markAll(false)

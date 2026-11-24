@@ -814,14 +814,38 @@ private final class ViewerWindow: NSWindow {
     }
 }
 
-/// Volby šifrování v dialogu „Zabalit do ZIP“ (accessory view NSSavePanelu):
-/// šifrování (žádné / AES-256 / ZipCrypto), heslo a jeho potvrzení.
-/// Jako delegát panelu ověří hesla před uložením (shoda, neprázdné).
-final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
-    private let methodPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+/// Popup, na který se dá dostat Tabem i při vypnuté „Navigaci klávesnicí“
+/// v systému (jinak by Tab skákal jen po textových polích).
+final class KeyLoopPopUpButton: NSPopUpButton {
+    override var canBecomeKeyView: Bool { isEnabled }
+}
+
+/// Tlačítko (checkbox), na které se dá dostat Tabem i při vypnuté
+/// „Navigaci klávesnicí“ v systému.
+final class KeyLoopButton: NSButton {
+    override var canBecomeKeyView: Bool { isEnabled }
+}
+
+/// Volby v dialogu „Zabalit do ZIP“ (accessory view NSSavePanelu):
+/// šifrování (žádné / AES-256 / ZipCrypto), heslo a jeho potvrzení a přesun
+/// do archivu (po zabalení smazat originály).
+/// Jako delegát panelu ověří volby před uložením (hesla, cíl přesunu).
+final class PackOptionsView: NSView, NSOpenSavePanelDelegate, NSTextFieldDelegate {
+    // Popup a checkbox jsou v pořadí Tabu vždy (Šifrování → Heslo →
+    // Potvrzení → Přesunout do archivu, Shift+Tab obráceně).
+    private let methodPopup = KeyLoopPopUpButton(frame: .zero, pullsDown: false)
     private let passwordField = NSSecureTextField()
     private let confirmField = NSSecureTextField()
+    private let moveCheckbox = KeyLoopButton(checkboxWithTitle: tr("Přesunout do archivu (originály smazat)"), target: nil, action: nil)
     private let noteLabel = NSTextField(wrappingLabelWithString: "")
+    /// Skutečné cesty balených položek – archiv při přesunu nesmí ležet uvnitř
+    /// některé z nich (smazal by se spolu s originály).
+    private let sourcePaths: [String]
+    /// Dialog uložení, ve kterém je pohled vložený (pro odeslání Enterem).
+    private weak var savePanel: NSSavePanel?
+
+    /// Po zabalení smazat originály (čte se po potvrzení dialogu).
+    var moveToArchive: Bool { moveCheckbox.state == .on }
 
     /// Zvolené šifrování (čte se po potvrzení dialogu).
     var encryption: ZipEncryption {
@@ -832,13 +856,24 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
         }
     }
 
-    init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: 460, height: 132))
+    /// - Parameters:
+    ///   - canMove: zdroj je zapisovatelný, takže jde originály po zabalení smazat
+    ///   - sourcePaths: skutečné (lokální) cesty balených položek pro kontrolu cíle
+    ///   - savePanel: dialog uložení, do kterého se pohled vkládá
+    init(canMove: Bool, sourcePaths: [String], savePanel: NSSavePanel) {
+        self.sourcePaths = sourcePaths
+        self.savePanel = savePanel
+        super.init(frame: NSRect(x: 0, y: 0, width: 460, height: 160))
         methodPopup.addItems(withTitles: [tr("Bez šifrování"), tr("AES-256 (doporučeno)"), tr("ZipCrypto (slabé, kompatibilní)")])
         methodPopup.target = self
         methodPopup.action = #selector(methodChanged(_:))
         passwordField.placeholderString = tr("heslo")
         confirmField.placeholderString = tr("heslo znovu")
+        // Enter v polích hesla odešle dialog stejně jako v poli se jménem
+        // (zachytává se v delegátovi jako příkaz insertNewline:).
+        passwordField.delegate = self
+        confirmField.delegate = self
+        moveCheckbox.isEnabled = canMove
         noteLabel.font = NSFont.systemFont(ofSize: 11)
         noteLabel.textColor = .secondaryLabelColor
 
@@ -847,6 +882,7 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
             [NSTextField(labelWithString: tr("Šifrování:")), methodPopup],
             [NSTextField(labelWithString: tr("Heslo:")), passwordField],
             [NSTextField(labelWithString: tr("Potvrzení:")), confirmField],
+            [NSGridCell.emptyContentView, moveCheckbox],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.rowSpacing = 6
@@ -871,6 +907,35 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
         fatalError(tr("Není podporováno"))
     }
 
+    /// Enter v polích hesla potvrdí dialog jako tlačítko Zabalit.
+    /// NSSavePanel běží mimo proces aplikace: pohled leží v pomocném okně
+    /// (NSAccessoryViewWindow), Enter se k panelu nedostane a `ok(_:)` panel
+    /// neimplementuje. Sheet se proto ukončí přímo s .OK – kontroly, které
+    /// by jinak udělal panel (`validate`, dotaz na přepsání), proběhnou tady.
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard commandSelector == #selector(NSResponder.insertNewline(_:)),
+              let panel = savePanel, let parent = panel.sheetParent, let url = panel.url else { return false }
+        // Hlášení jako samostatné modální okno (over: nil) – nad vzdálený
+        // panel nejde připojit sheet; modální okno leží ve vrstvě nad ním.
+        if let message = validationMessage(for: url) {
+            PromptDialog.show(title: tr("Zabalit"), message: message, over: nil)
+            return true
+        }
+        // Existující cíl: adresář nejde přepsat, soubor jen po potvrzení
+        // (jádro existující soubor bez ptaní přepíše).
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) {
+            if isDir.boolValue {
+                PromptDialog.show(title: tr("Zabalit"), message: tr("„%@“ je adresář.", url.lastPathComponent), over: nil)
+                return true
+            }
+            guard PromptDialog.show(title: tr("Zabalit"), message: tr("„%@“ už existuje. Chcete ho nahradit?", url.lastPathComponent),
+                                    buttons: [tr("Nahradit")], showsCancel: true, over: nil) == 0 else { return true }
+        }
+        parent.endSheet(panel, returnCode: .OK)
+        return true
+    }
+
     /// Hesla jsou aktivní jen se šifrováním; poznámka popisuje kompatibilitu režimu.
     @objc private func methodChanged(_ sender: Any?) {
         let index = methodPopup.indexOfSelectedItem
@@ -886,20 +951,29 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate {
         }
     }
 
-    /// Ověření před uložením: se šifrováním musí být heslo neprázdné a obě pole stejná.
+    /// Ověření před uložením: se šifrováním musí být heslo neprázdné a obě pole
+    /// stejná; při přesunu nesmí archiv ležet v přesouvaném adresáři.
     func panel(_ sender: Any, validate url: URL) throws {
-        guard methodPopup.indexOfSelectedItem != 0 else { return }
-        let message: String?
-        if passwordField.stringValue.isEmpty {
-            message = tr("Zadejte heslo pro šifrovaný archiv.")
-        } else if passwordField.stringValue != confirmField.stringValue {
-            message = tr("Heslo a jeho potvrzení se neshodují.")
-        } else {
-            message = nil
-        }
-        if let message {
+        if let message = validationMessage(for: url) {
             throw NSError(domain: "MicroCommander", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
         }
+    }
+
+    /// Text chyby voleb pro cílový archiv `url`; nil = volby jsou v pořádku.
+    private func validationMessage(for url: URL) -> String? {
+        let target = url.standardizedFileURL.path
+        if moveToArchive, sourcePaths.contains(where: { target == $0 || target.hasPrefix($0 + "/") }) {
+            return tr("Při přesunu nelze archiv uložit do přesouvaného adresáře.")
+        }
+        // Bez šifrování se hesla nekontrolují.
+        guard methodPopup.indexOfSelectedItem != 0 else { return nil }
+        if passwordField.stringValue.isEmpty {
+            return tr("Zadejte heslo pro šifrovaný archiv.")
+        }
+        if passwordField.stringValue != confirmField.stringValue {
+            return tr("Heslo a jeho potvrzení se neshodují.")
+        }
+        return nil
     }
 }
 

@@ -129,5 +129,10 @@
   "[Shell skončil hned po spuštění – další klávesa ho spustí znovu.]": "[The shell exited right after starting – the next key will start it again.]",
   "Terminál %@: %@": "Terminal %@: %@",
   "Nová záložka terminálu": "New Terminal Tab",
-  "show|Zobrazit": "Show"
+  "show|Zobrazit": "Show",
+  "Přesunout do archivu (originály smazat)": "Move to archive (delete originals)",
+  "Při přesunu nelze archiv uložit do přesouvaného adresáře.": "When moving, the archive cannot be saved inside a folder being moved.",
+  "„%@“ je adresář.": "“%@” is a folder.",
+  "„%@“ už existuje. Chcete ho nahradit?": "“%@” already exists. Do you want to replace it?",
+  "Nahradit": "Replace"
 }

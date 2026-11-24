@@ -686,7 +686,13 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   zeptá na heslo (jednou pro otevřený archiv); při chybném hesle se zeptá
   znovu a operaci zopakuje. ⌥F5 (Zabalit do ZIP) má v dialogu uložení volbu
   šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
-  (prázdné nebo neshodné heslo dialog nepustí dál).
+  (prázdné nebo neshodné heslo dialog nepustí dál). Volba **Přesunout do archivu
+  (originály smazat)** po úspěšném zabalení originály trvale smaže (jen ze
+  zapisovatelného zdroje; archiv nejde uložit do přesouvaného adresáře, a když
+  selže až mazání, hotový archiv zůstane). Potvrzovací tlačítko se jmenuje
+  **Zabalit** a Enter dialog odešle i z polí hesla (existující archiv se před
+  přepsáním potvrdí). Tab / Shift+Tab prochází Šifrování → Heslo → Potvrzení →
+  Přesunout do archivu i při vypnuté Navigaci klávesnicí v systému.
 - **O aplikaci** (aplikační menu): tlačítka **Webová stránka**, **Zdrojový kód
   na GitHubu**, **Nahlásit chybu na GitHubu** (issues), **Web autora** (https://svopex.eu) a **Poslat e-mail** (otevře
   poštovního klienta s kontaktní adresou, která se v okně nezobrazuje; ve zdrojovém

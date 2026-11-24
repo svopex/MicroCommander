@@ -177,5 +177,6 @@
   "column|Přípona": "Ext",
   "označenou položku": "selected item",
   "označené položky": "selected items",
-  "označených položek": "selected items"
+  "označených položek": "selected items",
+  "Přesun %@ do archivu „%@“": "Moving %@ into archive “%@”"
 }
