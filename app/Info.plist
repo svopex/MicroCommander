@@ -10,6 +10,13 @@
 	<string>com.github.svopex.microcommander</string>
 	<key>CFBundleExecutable</key>
 	<string>MicroCommander</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>cs</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>cs</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>

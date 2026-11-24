@@ -56,6 +56,20 @@ final class UISelfTest {
         return findSubview(of: content, type: NSSecureTextField.self)
     }
 
+    /// Volby otevřeného dialogu Zabalit do ZIP (nil = dialog není otevřený).
+    private func modalPackOptions() -> PackOptionsView? {
+        guard let content = NSApp.modalWindow?.contentView else { return nil }
+        return findSubview(of: content, type: PackOptionsView.self)
+    }
+
+    /// Vstupní pole otevřeného dialogu (první upravitelné pole, které není
+    /// heslo ani uvnitř doplňkových voleb).
+    private func modalPathField() -> NSTextField? {
+        guard let content = NSApp.modalWindow?.contentView else { return nil }
+        return content.subviews.lazy.compactMap { $0 as? NSTextField }
+            .first { $0.isEditable && !($0 is NSSecureTextField) }
+    }
+
     /// Obsahuje otevřený modální dialog popisek s daným textem?
     private func modalHasText(_ text: String) -> Bool {
         guard let content = NSApp.modalWindow?.contentView else { return false }
@@ -507,6 +521,99 @@ final class UISelfTest {
         }, action: {
             let text = try? String(contentsOfFile: self.root + "/dst/b.txt", encoding: .utf8)
             self.check(text == "obsah b.txt\n", "soubor z AES archivu rozbalen se správným obsahem")
+        }))
+        // 13) ⌥F5 Zabalit do ZIP: vlastní dialog – pořadí Tabu přes všechny volby
+        //     a tlačítka, přesun do archivu (originály zmizí), odmítnutí přepsání
+        //     Tabem na Zrušit + Enterem.
+        let packDir = root + "/pk"
+        let packArchive = root + "/dst/pk.zip"
+        var packArchiveSize = 0
+        let overwritePrompt = tr("„%@“ už existuje. Chcete ho nahradit?", "pk.zip")
+        steps.append((ready: { self.windowFree }, action: {
+            let fm = FileManager.default
+            try? fm.createDirectory(atPath: packDir, withIntermediateDirectories: true)
+            for name in ["x.txt", "y.txt"] {
+                fm.createFile(atPath: packDir + "/" + name, contents: Data("obsah \(name)\n".utf8))
+            }
+            // Levý panel je po kroku 12 v archivu – nejdřív zpět na disk.
+            self.controller.activate(self.controller.leftPanel)
+            self.controller.leftPanel.closeNested()
+        }))
+        steps.append((ready: { self.controller.leftPanel.location.vfs.kind != SAL_VFS_ZIP }, action: {
+            self.controller.leftPanel.changePath(packDir)
+            self.controller.rightPanel.changePath(self.root + "/dst")
+        }))
+        steps.append((ready: {
+            self.controller.leftPanel.location.path == packDir && self.controller.leftPanel.items.count == 2
+                && !self.controller.leftPanel.isLoading
+        }, action: {
+            self.controller.leftPanel.markAll(true)
+            self.key(KeyCode.functionKeys[4], KeyCode.functionKeyString(5), .option)
+        }))
+        steps.append((ready: { self.modalPackOptions() != nil }, action: {
+            guard let window = NSApp.modalWindow, let options = self.modalPackOptions(),
+                  let field = self.modalPathField() else {
+                self.check(false, "⌥F5 otevře dialog Zabalit do ZIP")
+                return
+            }
+            self.check(field.stringValue == packArchive, "⌥F5: výchozí cíl je protější panel (\(field.stringValue))")
+            // Pořadí Tabu: pole cesty → Procházet… → Šifrování → (hesla jsou bez
+            // šifrování vypnutá) → Přesunout → Zabalit → Zrušit → zpět na pole.
+            window.recalculateKeyViewLoop()
+            var chain: [String] = []
+            var view: NSView? = field
+            repeat {
+                switch view {
+                case let button as DialogButton: chain.append(button.title)
+                case is KeyLoopPopUpButton: chain.append("popup")
+                case is KeyLoopButton: chain.append("checkbox")
+                case is NSTextField: chain.append("pole")
+                default: chain.append(view.map { String(describing: type(of: $0)) } ?? "nil")
+                }
+                view = view?.nextValidKeyView
+            } while view != nil && view !== field && chain.count < 12
+            self.check(chain == ["pole", "Procházet…", "popup", "checkbox", "Zabalit", "Zrušit"],
+                       "⌥F5: Tab prochází všechny volby i tlačítka (\(chain))")
+            // Checkbox přesunu (DialogButton je také KeyLoopButton – vynechat).
+            self.allSubviews(of: options).first { $0 is KeyLoopButton && !($0 is DialogButton) }
+                .flatMap { $0 as? NSButton }?.state = .on
+            field.stringValue = self.root + "/dst/pk"
+            self.key(KeyCode.returnKey, "\r")
+        }))
+        steps.append((ready: {
+            self.windowFree && FileManager.default.fileExists(atPath: packArchive)
+                && !FileManager.default.fileExists(atPath: packDir + "/x.txt")
+        }, action: {
+            let fm = FileManager.default
+            self.check(fm.fileExists(atPath: packArchive), "⌥F5: Enter zabalí, cesta bez přípony dostane .zip")
+            self.check(!fm.fileExists(atPath: packDir + "/x.txt") && !fm.fileExists(atPath: packDir + "/y.txt"),
+                       "⌥F5: přesun do archivu smazal originály")
+            packArchiveSize = (try? fm.attributesOfItem(atPath: packArchive)[.size] as? Int) ?? 0
+            fm.createFile(atPath: packDir + "/z.txt", contents: Data("obsah z.txt\n".utf8))
+            self.controller.leftPanel.changePath(packDir, focus: "z.txt")
+        }))
+        steps.append((ready: { self.controller.leftPanel.currentItem?.name == "z.txt" }, action: {
+            self.key(KeyCode.functionKeys[4], KeyCode.functionKeyString(5), .option)
+        }))
+        steps.append((ready: { self.modalPackOptions() != nil }, action: {
+            self.modalPathField()?.stringValue = packArchive
+            self.key(KeyCode.returnKey, "\r")
+        }))
+        steps.append((ready: { self.modalHasText(overwritePrompt) }, action: {
+            self.check(true, "⌥F5: existující archiv → dotaz na přepsání")
+            // Fokus je na Nahradit; Tab → Zrušit, Enter stiskne tlačítko s fokusem.
+            self.key(KeyCode.tab, "\t")
+            self.key(KeyCode.returnKey, "\r")
+        }))
+        steps.append((ready: { self.modalPackOptions() != nil && !self.modalHasText(overwritePrompt) }, action: {
+            self.check(self.modalPackOptions() != nil, "⌥F5: Tab + Enter na Zrušit vrátí do dialogu Zabalit")
+            self.key(KeyCode.escape, "\u{1b}")
+        }))
+        steps.append((ready: { self.windowFree }, action: {
+            let fm = FileManager.default
+            let size = (try? fm.attributesOfItem(atPath: packArchive)[.size] as? Int) ?? -1
+            self.check(size == packArchiveSize && fm.fileExists(atPath: packDir + "/z.txt"),
+                       "⌥F5: zamítnuté přepsání archiv ani originál nezměnilo")
         }))
         steps.append((ready: { self.windowFree }, action: {
             self.check(self.windowFree, "okno na konci testu volné")

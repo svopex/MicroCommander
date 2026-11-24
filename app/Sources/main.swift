@@ -351,6 +351,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 }
 
+// Jazyk rozhraní pro AppKit a systémové dialogy – před vytvořením NSApplication.
+Localization.applyToProcess()
+
 // Vytvoření a spuštění aplikace (bez Main.storyboard).
 let app = NSApplication.shared
 let delegate = AppDelegate()

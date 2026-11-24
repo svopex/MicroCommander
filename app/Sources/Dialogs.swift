@@ -821,18 +821,25 @@ final class KeyLoopPopUpButton: NSPopUpButton {
 }
 
 /// Tlačítko (checkbox), na které se dá dostat Tabem i při vypnuté
-/// „Navigaci klávesnicí“ v systému.
-final class KeyLoopButton: NSButton {
+/// „Navigaci klávesnicí“ v systému. Enter na něm stiskne výchozí tlačítko
+/// dialogu (checkbox nepřepíná) – na rozdíl od DialogButton.
+class KeyLoopButton: NSButton {
     override var canBecomeKeyView: Bool { isEnabled }
 }
 
-/// Volby v dialogu „Zabalit do ZIP“ (accessory view NSSavePanelu):
-/// šifrování (žádné / AES-256 / ZipCrypto), heslo a jeho potvrzení a přesun
-/// do archivu (po zabalení smazat originály).
-/// Jako delegát panelu ověří volby před uložením (hesla, cíl přesunu).
-final class PackOptionsView: NSView, NSOpenSavePanelDelegate, NSTextFieldDelegate {
-    // Popup a checkbox jsou v pořadí Tabu vždy (Šifrování → Heslo →
-    // Potvrzení → Přesunout do archivu, Shift+Tab obráceně).
+/// Akční tlačítko dialogu: dosažitelné Tabem jako KeyLoopButton a navíc ho
+/// Enter stiskne, když má fokus (rozlišuje DialogWindow podle typu);
+/// mezerník ho stiskne jako každé tlačítko.
+final class DialogButton: KeyLoopButton {}
+
+/// Volby v dialogu „Zabalit do ZIP“ (pod polem s cílovou cestou):
+/// tlačítko Procházet…, šifrování (žádné / AES-256 / ZipCrypto), heslo a jeho
+/// potvrzení a přesun do archivu (po zabalení smazat originály).
+/// Všechny prvky jsou dosažitelné Tabem (KeyLoop*/DialogButton).
+final class PackOptionsView: NSView {
+    // Popup a checkbox jsou v pořadí Tabu vždy (Procházet… → Šifrování →
+    // Heslo → Potvrzení → Přesunout do archivu, Shift+Tab obráceně).
+    private let browseButton = DialogButton(title: tr("Procházet…"), target: nil, action: nil)
     private let methodPopup = KeyLoopPopUpButton(frame: .zero, pullsDown: false)
     private let passwordField = NSSecureTextField()
     private let confirmField = NSSecureTextField()
@@ -841,8 +848,9 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate, NSTextFieldDelegat
     /// Skutečné cesty balených položek – archiv při přesunu nesmí ležet uvnitř
     /// některé z nich (smazal by se spolu s originály).
     private let sourcePaths: [String]
-    /// Dialog uložení, ve kterém je pohled vložený (pro odeslání Enterem).
-    private weak var savePanel: NSSavePanel?
+
+    /// Tlačítko Procházet… (volající vybere adresář a doplní cestu do dialogu).
+    var onBrowse: (() -> Void)?
 
     /// Po zabalení smazat originály (čte se po potvrzení dialogu).
     var moveToArchive: Bool { moveCheckbox.state == .on }
@@ -859,26 +867,24 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate, NSTextFieldDelegat
     /// - Parameters:
     ///   - canMove: zdroj je zapisovatelný, takže jde originály po zabalení smazat
     ///   - sourcePaths: skutečné (lokální) cesty balených položek pro kontrolu cíle
-    ///   - savePanel: dialog uložení, do kterého se pohled vkládá
-    init(canMove: Bool, sourcePaths: [String], savePanel: NSSavePanel) {
+    init(canMove: Bool, sourcePaths: [String]) {
         self.sourcePaths = sourcePaths
-        self.savePanel = savePanel
-        super.init(frame: NSRect(x: 0, y: 0, width: 460, height: 160))
+        // Šířku určí dialog při umístění, rozhoduje jen výška.
+        super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 168))
+        browseButton.target = self
+        browseButton.action = #selector(browseClicked(_:))
         methodPopup.addItems(withTitles: [tr("Bez šifrování"), tr("AES-256 (doporučeno)"), tr("ZipCrypto (slabé, kompatibilní)")])
         methodPopup.target = self
         methodPopup.action = #selector(methodChanged(_:))
         passwordField.placeholderString = tr("heslo")
         confirmField.placeholderString = tr("heslo znovu")
-        // Enter v polích hesla odešle dialog stejně jako v poli se jménem
-        // (zachytává se v delegátovi jako příkaz insertNewline:).
-        passwordField.delegate = self
-        confirmField.delegate = self
         moveCheckbox.isEnabled = canMove
         noteLabel.font = NSFont.systemFont(ofSize: 11)
         noteLabel.textColor = .secondaryLabelColor
 
         // Mřížka popisek + ovládací prvek, pod ní poznámka k režimu.
         let grid = NSGridView(views: [
+            [NSGridCell.emptyContentView, browseButton],
             [NSTextField(labelWithString: tr("Šifrování:")), methodPopup],
             [NSTextField(labelWithString: tr("Heslo:")), passwordField],
             [NSTextField(labelWithString: tr("Potvrzení:")), confirmField],
@@ -891,14 +897,14 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate, NSTextFieldDelegat
         addSubview(grid)
         addSubview(noteLabel)
         NSLayoutConstraint.activate([
-            grid.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            grid.centerXAnchor.constraint(equalTo: centerXAnchor),
+            grid.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            grid.leadingAnchor.constraint(equalTo: leadingAnchor),
             passwordField.widthAnchor.constraint(equalToConstant: 240),
             confirmField.widthAnchor.constraint(equalToConstant: 240),
             noteLabel.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 6),
-            noteLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            noteLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
-            noteLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -6),
+            noteLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+            noteLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
+            noteLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
         ])
         methodChanged(nil)
     }
@@ -907,33 +913,12 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate, NSTextFieldDelegat
         fatalError(tr("Není podporováno"))
     }
 
-    /// Enter v polích hesla potvrdí dialog jako tlačítko Zabalit.
-    /// NSSavePanel běží mimo proces aplikace: pohled leží v pomocném okně
-    /// (NSAccessoryViewWindow), Enter se k panelu nedostane a `ok(_:)` panel
-    /// neimplementuje. Sheet se proto ukončí přímo s .OK – kontroly, které
-    /// by jinak udělal panel (`validate`, dotaz na přepsání), proběhnou tady.
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        guard commandSelector == #selector(NSResponder.insertNewline(_:)),
-              let panel = savePanel, let parent = panel.sheetParent, let url = panel.url else { return false }
-        // Hlášení jako samostatné modální okno (over: nil) – nad vzdálený
-        // panel nejde připojit sheet; modální okno leží ve vrstvě nad ním.
-        if let message = validationMessage(for: url) {
-            PromptDialog.show(title: tr("Zabalit"), message: message, over: nil)
-            return true
-        }
-        // Existující cíl: adresář nejde přepsat, soubor jen po potvrzení
-        // (jádro existující soubor bez ptaní přepíše).
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) {
-            if isDir.boolValue {
-                PromptDialog.show(title: tr("Zabalit"), message: tr("„%@“ je adresář.", url.lastPathComponent), over: nil)
-                return true
-            }
-            guard PromptDialog.show(title: tr("Zabalit"), message: tr("„%@“ už existuje. Chcete ho nahradit?", url.lastPathComponent),
-                                    buttons: [tr("Nahradit")], showsCancel: true, over: nil) == 0 else { return true }
-        }
-        parent.endSheet(panel, returnCode: .OK)
-        return true
+    // Souřadnice shora dolů – pořadí Tabu (přepočítané podle polohy) jde
+    // shora dolů stejně jako v ostatním obsahu dialogu (FlippedView).
+    override var isFlipped: Bool { true }
+
+    @objc private func browseClicked(_ sender: Any?) {
+        onBrowse?()
     }
 
     /// Hesla jsou aktivní jen se šifrováním; poznámka popisuje kompatibilitu režimu.
@@ -951,16 +936,10 @@ final class PackOptionsView: NSView, NSOpenSavePanelDelegate, NSTextFieldDelegat
         }
     }
 
-    /// Ověření před uložením: se šifrováním musí být heslo neprázdné a obě pole
-    /// stejná; při přesunu nesmí archiv ležet v přesouvaném adresáři.
-    func panel(_ sender: Any, validate url: URL) throws {
-        if let message = validationMessage(for: url) {
-            throw NSError(domain: "MicroCommander", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
-        }
-    }
-
     /// Text chyby voleb pro cílový archiv `url`; nil = volby jsou v pořádku.
-    private func validationMessage(for url: URL) -> String? {
+    /// Se šifrováním musí být heslo neprázdné a obě pole stejná; při přesunu
+    /// nesmí archiv ležet v přesouvaném adresáři.
+    func validationMessage(for url: URL) -> String? {
         let target = url.standardizedFileURL.path
         if moveToArchive, sourcePaths.contains(where: { target == $0 || target.hasPrefix($0 + "/") }) {
             return tr("Při přesunu nelze archiv uložit do přesouvaného adresáře.")
@@ -1324,8 +1303,15 @@ final class PromptDialog: NSWindowController {
     /// Adresy tlačítek s odkazy (index = tag tlačítka).
     private var linkURLs: [URL] = []
 
-    /// Text vstupního pole (prázdný, když dialog pole nemá).
-    var text: String { input?.stringValue ?? "" }
+    /// Text vstupního pole (prázdný, když dialog pole nemá); zápis ho nahradí.
+    var text: String {
+        get { input?.stringValue ?? "" }
+        set { input?.stringValue = newValue }
+    }
+
+    /// Kontrola před zavřením akčním tlačítkem (index tlačítka); false = dialog
+    /// zůstane otevřený (např. po hlášení chyby nebo zamítnutém dotazu).
+    var shouldFinish: ((Int) -> Bool)?
 
     /// - Parameters:
     ///   - title: titulek okna (u sheetu není vidět)
@@ -1338,9 +1324,12 @@ final class PromptDialog: NSWindowController {
     ///   - buttons: titulky tlačítek zleva; první je výchozí (Enter)
     ///   - showsCancel: přidat na konec tlačítko Zrušit (Escape zavře dialog vždy)
     ///   - links: tlačítka s odkazy pod textem dotazu (otevřou prohlížeč, dialog nezavřou)
+    ///   - accessory: další ovládací prvky pod vstupním polem (výška podle jejich
+    ///     rámu, šířka podle dialogu); má mít `isFlipped` = true, jinak by
+    ///     pořadí Tabu v něm šlo zdola nahoru
     init(title: String, showsHeading: Bool = false, message: String, icon: NSImage? = nil, value: String? = nil,
          secure: Bool = false, selectsBaseName: Bool = false, buttons: [String], showsCancel: Bool = true,
-         links: [DialogLink] = []) {
+         links: [DialogLink] = [], accessory: NSView? = nil) {
         self.selectsBaseName = selectsBaseName
         // Výška je jen výchozí – buildContent ji dopočítá podle obsahu.
         let window = DialogWindow(contentRect: NSRect(x: 0, y: 0, width: PromptDialog.width, height: 0),
@@ -1349,7 +1338,7 @@ final class PromptDialog: NSWindowController {
         super.init(window: window)
         window.onCancel = { [weak self] in self?.finish(nil) }
         buildContent(heading: showsHeading ? title : nil, message: message, icon: icon, value: value, secure: secure,
-                     buttons: buttons, showsCancel: showsCancel, links: links)
+                     buttons: buttons, showsCancel: showsCancel, links: links, accessory: accessory)
     }
 
     /// Ikona výstrahy (chyby, upozornění, dotazy na nevratné akce).
@@ -1382,7 +1371,7 @@ final class PromptDialog: NSWindowController {
     /// Rozvržení: ikona a text dotazu, pod ním vstupní pole, čára a tlačítka
     /// uprostřed. Výška dialogu se dopočítá podle textu dotazu.
     private func buildContent(heading: String?, message: String, icon: NSImage?, value: String?, secure: Bool,
-                              buttons: [String], showsCancel: Bool, links: [DialogLink]) {
+                              buttons: [String], showsCancel: Bool, links: [DialogLink], accessory: NSView?) {
         let width = PromptDialog.width
         let margin: CGFloat = 16
         let content = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 0))
@@ -1421,7 +1410,7 @@ final class PromptDialog: NSWindowController {
             var linkX = textX
             for (index, link) in links.enumerated() {
                 let image = NSImage(systemSymbolName: link.symbol, accessibilityDescription: nil) ?? NSImage()
-                let button = NSButton(title: link.title, image: image, target: self, action: #selector(linkClicked(_:)))
+                let button = DialogButton(title: link.title, image: image, target: self, action: #selector(linkClicked(_:)))
                 button.imagePosition = .imageLeading
                 button.tag = index
                 let buttonWidth = ceil(button.fittingSize.width) + 12
@@ -1447,22 +1436,27 @@ final class PromptDialog: NSWindowController {
             input = field
             y += 24 + 8
         }
+        if let accessory {
+            content.place(accessory, NSRect(x: textX, y: y, width: textWidth, height: accessory.frame.height))
+            y += accessory.frame.height + 8
+        }
         // Bez pole musí text pokrýt aspoň výšku ikony.
         if icon != nil { y = max(y, margin + 36 + 8) }
 
         y = content.addSeparator(y: y)
 
         // Tlačítka: akční zleva (tag = index), nakonec případně Zrušit; řada je uprostřed.
+        // Tlačítka jsou dosažitelná Tabem a Enter stiskne to s fokusem (DialogButton).
         var views: [NSButton] = []
         for (index, title) in buttons.enumerated() {
-            let button = NSButton(title: title, target: self, action: #selector(buttonClicked(_:)))
+            let button = DialogButton(title: title, target: self, action: #selector(buttonClicked(_:)))
             button.tag = index
             if index == 0 { button.keyEquivalent = "\r" }
             views.append(button)
         }
         // Escape (i ⌘.) obsluhuje okno (DialogWindow.onCancel), tlačítko zkratku nepotřebuje.
         if showsCancel {
-            views.append(NSButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:))))
+            views.append(DialogButton(title: tr("Zrušit"), target: self, action: #selector(cancelClicked(_:))))
         }
         // Šířka podle titulku, nejméně 110 (jako tlačítko Zavřít u Informací o jednotce).
         let gap: CGFloat = 10
@@ -1477,8 +1471,10 @@ final class PromptDialog: NSWindowController {
         content.setFrameSize(NSSize(width: width, height: y))
         window?.setContentSize(NSSize(width: width, height: y))
         window?.contentView = content
-        // Fokus do pole; bez pole na výchozí tlačítko.
+        // Fokus do pole; bez pole na výchozí tlačítko. Pořadí Tabu podle polohy
+        // prvků (shora dolů, zleva doprava) včetně tlačítek a doplňků.
         window?.initialFirstResponder = input ?? views.first
+        window?.autorecalculatesKeyViewLoop = true
     }
 
     /// Zobrazí dialog jako sheet nad oknem a čeká na odpověď.
@@ -1518,6 +1514,7 @@ final class PromptDialog: NSWindowController {
     }
 
     @objc private func buttonClicked(_ sender: NSButton) {
+        if let shouldFinish, !shouldFinish(sender.tag) { return }
         finish(sender.tag)
     }
 

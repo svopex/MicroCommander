@@ -66,6 +66,23 @@ enum Localization {
         }
         return words
     }()
+
+    /// Nastaví jazyk rozhraní celému procesu: lokalizaci AppKitu (standardní
+    /// položky menu, kontextová menu polí) i systémovým dialogům mimo proces
+    /// (NSOpenPanel/NSSavePanel – Procházet…, export a import nastavení), které
+    /// jazyk berou z AppleLanguages.
+    /// Volá se jednou při startu před vytvořením NSApplication; Info.plist proto
+    /// uvádí CFBundleLocalizations cs a en.
+    /// Jen pro tento běh (volatilní doména argumentů, nic se neukládá); ostatní
+    /// argumenty z příkazové řádky zůstávají. `current` se vyhodnotí dřív, než
+    /// se AppleLanguages přepíše – volba „Podle systému“ čte skutečný jazyk macOS.
+    static func applyToProcess() {
+        let language = current
+        let defaults = UserDefaults.standard
+        var arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        arguments["AppleLanguages"] = [language]
+        defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+    }
 }
 
 /// Přeloží český text do jazyka rozhraní (bez překladu vrátí originál).

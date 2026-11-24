@@ -145,9 +145,23 @@ private final class UsagePieView: NSView {
 }
 
 /// Okno dialogu: Escape (i ⌘.) dialog zavře, i když nemá tlačítko Zrušit.
+/// Enter na tlačítku s fokusem (DialogButton, vybrané Tabem) stiskne to
+/// tlačítko, ne výchozí – jako ve Windows / Salamanderu.
 /// Sdílí ho Informace o jednotce i dialogy operací (PromptDialog).
 final class DialogWindow: NSWindow {
     var onCancel: (() -> Void)?
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // Return / Enter na numerické klávesnici bez modifikátorů – před výchozím
+        // tlačítkem (to Return zachytává jako svou klávesovou zkratku).
+        if event.type == .keyDown, event.keyCode == KeyCode.returnKey || event.keyCode == KeyCode.enter,
+           event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function]).isEmpty,
+           let button = firstResponder as? DialogButton, button.isEnabled {
+            button.performClick(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 
     override func cancelOperation(_ sender: Any?) {
         onCancel?()
@@ -213,7 +227,7 @@ class InfoDialog: NSWindowController {
     ///   - content: sestavený obsah dialogu
     ///   - y: svislá poloha pod posledním prvkem obsahu
     func finish(content: FlippedView, y: CGFloat) {
-        let closeButton = NSButton(title: tr("Zavřít"), target: self, action: #selector(close(_:)))
+        let closeButton = DialogButton(title: tr("Zavřít"), target: self, action: #selector(close(_:)))
         closeButton.keyEquivalent = "\r"
         content.place(closeButton, NSRect(x: (width - 110) / 2, y: y, width: 110, height: 28))
         let height = y + 28 + 16

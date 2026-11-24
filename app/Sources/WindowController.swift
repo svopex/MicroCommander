@@ -1831,74 +1831,130 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
     }
 
     /// Alt+F5 – zabalení položek do nového ZIP (výchozí cíl: protější panel).
+    /// Vlastní dialog ve stylu Salamandera (cesta, Procházet…, šifrování,
+    /// přesun) místo NSSavePanelu: ten běží mimo proces aplikace, takže jeho
+    /// tlačítka ani dotaz na přepsání nejdou ovládat Tabem a Enter z dalších
+    /// polí se k němu nedostane.
     private func commandPack() {
         let panel = activePanel
         let items = panel.operationItems
         guard !items.isEmpty, let window else { return }
-        let save = NSSavePanel()
-        save.allowedContentTypes = [.zip]
-        save.prompt = tr("Zabalit")
-        let baseName = items.count == 1 ? splitExtension(items[0].name).base : lastComponent(panel.location.path)
-        save.nameFieldStringValue = (baseName.isEmpty || baseName == "/" ? tr("archiv") : baseName) + ".zip"
-        if let targetDir = inactivePanel.location.vfs.realPath(inactivePanel.location.path) {
-            save.directoryURL = URL(fileURLWithPath: targetDir)
-        }
-        // Volby šifrování (AES-256 / ZipCrypto + heslo) a přesunu do archivu
-        // přímo v dialogu uložení; přesun jen ze zapisovatelného zdroje.
-        let canMove = panel.location.vfs.writable
-        let sourcePaths = canMove ? items.compactMap { panel.localPath(of: $0.name) }
-            .map { URL(fileURLWithPath: $0).standardizedFileURL.path } : []
-        let options = PackOptionsView(canMove: canMove, sourcePaths: sourcePaths, savePanel: save)
-        save.accessoryView = options
-        save.isExtensionHidden = false
-        save.delegate = options
         // Balení ze zaheslovaného archivu potřebuje heslo ke čtení.
         let src = panel.location.vfs
         if !ensurePassword(src) { return }
-        save.beginSheetModal(for: window) { [weak self] response in
-            guard response == .OK, let url = save.url, let self else { return }
-            let dir = panel.location.path
-            let names = items.map(\.name)
-            let encryption = options.encryption
-            let move = options.moveToArchive
-            // Sheet uložení se musí zavřít dřív, než se otevře progress sheet.
-            func pack() {
-                // Archiv je hotový (chyba pak nastala až při mazání originálů
-                // a archiv se nesmí smazat – originály už mohou chybět).
-                var packed = false
-                let title = move ? tr("Přesun %@ do archivu „%@“", self.describeItems(items), url.lastPathComponent)
-                                 : tr("Zabalování %@ do „%@“", self.describeItems(items), url.lastPathComponent)
-                self.beginProgress(title: title,
-                                   details: [tr("Z: %@", panel.displayPath), tr("Do: %@", url.path)]) { state in
-                    try corePackZip(src: src, srcDir: dir, names: names, dest: url.path,
-                                    encryption: encryption, state: state)
-                    // Přesun: originály se mažou trvale a až po úspěšném zabalení.
-                    if move {
-                        packed = true
-                        try coreDelete(vfs: src, dir: dir, names: names, state: state)
-                    }
-                } completion: { result in
-                    self.endProgress()
-                    if case .failure(let error) = result, !packed, self.askPasswordAfterError(error, vfs: src) {
-                        pack()
-                        return
-                    }
-                    if case .failure(let error) = result {
-                        // Nedokončený archiv po chybě/zrušení nenecháváme na disku;
-                        // hotový archiv (chyba při mazání originálů) zůstává.
-                        if !packed {
-                            try? FileManager.default.removeItem(at: url)
-                        }
-                        self.showErrorUnlessCancelled(title: tr("Zabalování"), error)
-                    } else {
-                        panel.markAll(false)
-                    }
-                    self.leftPanel.reload()
-                    self.rightPanel.reload()
-                }
+        let baseName = items.count == 1 ? splitExtension(items[0].name).base : lastComponent(panel.location.path)
+        let fileName = (baseName.isEmpty || baseName == "/" ? tr("archiv") : baseName) + ".zip"
+        // Výchozí adresář: protější panel, jinak aktivní, jinak domovský
+        // (archiv vzniká vždy na lokálním disku).
+        let defaultDir = inactivePanel.location.vfs.realPath(inactivePanel.location.path)
+            ?? src.realPath(panel.location.path) ?? NSHomeDirectory()
+        // Přesun jen ze zapisovatelného zdroje; cesty položek pro kontrolu, že
+        // archiv při přesunu neleží v přesouvaném adresáři.
+        let canMove = src.writable
+        let sourcePaths = canMove ? items.compactMap { panel.localPath(of: $0.name) }
+            .map { URL(fileURLWithPath: $0).standardizedFileURL.path } : []
+        let options = PackOptionsView(canMove: canMove, sourcePaths: sourcePaths)
+        let dialog = PromptDialog(title: tr("Zabalit do ZIP"), message: tr("Zabalit %@ do:", describeItems(items)),
+                                  value: (defaultDir as NSString).appendingPathComponent(fileName),
+                                  selectsBaseName: true, buttons: [tr("Zabalit")], accessory: options)
+        // Procházet…: výběr adresáře (jméno archivu zůstane); NSOpenPanel jen
+        // na adresáře se na přepsání neptá – to dělá až kontrola níže.
+        options.onBrowse = { [weak dialog] in
+            guard let dialog else { return }
+            let current = Self.packDestination(dialog.text, defaultDir: defaultDir)
+            let open = NSOpenPanel()
+            open.canChooseFiles = false
+            open.canChooseDirectories = true
+            open.canCreateDirectories = true
+            open.prompt = tr("Vybrat")
+            open.directoryURL = current.deletingLastPathComponent()
+            if open.runModal() == .OK, let dir = open.url {
+                dialog.text = dir.appendingPathComponent(current.lastPathComponent).path
             }
-            DispatchQueue.main.async { pack() }
         }
+        // Kontroly před zavřením: volby, cílový adresář, přepsání existujícího
+        // souboru (jádro by ho bez ptaní přepsalo). Při chybě dialog zůstane.
+        dialog.shouldFinish = { [weak dialog] _ in
+            guard let dialog else { return false }
+            let url = Self.packDestination(dialog.text, defaultDir: defaultDir)
+            let parent = url.deletingLastPathComponent().path
+            let disk = Vfs.localDisk
+            var message = options.validationMessage(for: url)
+            if message == nil, !disk.isDir(parent) {
+                message = tr("Adresář „%@“ neexistuje.", parent)
+            }
+            if message == nil, disk.isDir(url.path) {
+                message = tr("„%@“ je adresář.", url.lastPathComponent)
+            }
+            if let message {
+                PromptDialog.show(title: tr("Zabalit do ZIP"), message: message, over: dialog.window)
+                return false
+            }
+            if disk.exists(url.path) {
+                return PromptDialog.show(title: tr("Zabalit do ZIP"),
+                                         message: tr("„%@“ už existuje. Chcete ho nahradit?", url.lastPathComponent),
+                                         buttons: [tr("Nahradit")], showsCancel: true, over: dialog.window) == 0
+            }
+            return true
+        }
+        let response = dialog.run(over: window)
+        focusActivePanel()
+        guard response == 0 else { return }
+        // Text pole se po zavření nemění – stejný cíl, jaký prošel kontrolou.
+        let url = Self.packDestination(dialog.text, defaultDir: defaultDir)
+
+        let dir = panel.location.path
+        let names = items.map(\.name)
+        let encryption = options.encryption
+        let move = options.moveToArchive
+        func pack() {
+            // Archiv je hotový (chyba pak nastala až při mazání originálů
+            // a archiv se nesmí smazat – originály už mohou chybět).
+            var packed = false
+            let title = move ? tr("Přesun %@ do archivu „%@“", describeItems(items), url.lastPathComponent)
+                             : tr("Zabalování %@ do „%@“", describeItems(items), url.lastPathComponent)
+            beginProgress(title: title, details: [tr("Z: %@", panel.displayPath), tr("Do: %@", url.path)]) { state in
+                try corePackZip(src: src, srcDir: dir, names: names, dest: url.path,
+                                encryption: encryption, state: state)
+                // Přesun: originály se mažou trvale a až po úspěšném zabalení.
+                if move {
+                    packed = true
+                    try coreDelete(vfs: src, dir: dir, names: names, state: state)
+                }
+            } completion: { [weak self] result in
+                guard let self else { return }
+                self.endProgress()
+                if case .failure(let error) = result, !packed, self.askPasswordAfterError(error, vfs: src) {
+                    pack()
+                    return
+                }
+                if case .failure(let error) = result {
+                    // Nedokončený archiv po chybě/zrušení nenecháváme na disku;
+                    // hotový archiv (chyba při mazání originálů) zůstává.
+                    if !packed {
+                        try? FileManager.default.removeItem(at: url)
+                    }
+                    self.showErrorUnlessCancelled(title: tr("Zabalování"), error)
+                } else {
+                    panel.markAll(false)
+                }
+                self.leftPanel.reload()
+                self.rightPanel.reload()
+            }
+        }
+        pack()
+    }
+
+    /// Cílový archiv podle textu z dialogu ⌥F5: ~ = domovský adresář, relativní
+    /// cesta vůči výchozímu adresáři, bez přípony se doplní „.zip“.
+    /// - Parameters:
+    ///   - typed: text z pole dialogu
+    ///   - defaultDir: výchozí adresář (protější panel)
+    private static func packDestination(_ typed: String, defaultDir: String) -> URL {
+        let path = resolveTypedPath(typed.trimmingCharacters(in: .whitespaces),
+                                    in: Location(vfs: Vfs.localDisk, path: defaultDir))
+        let url = URL(fileURLWithPath: path)
+        return url.pathExtension.isEmpty ? url.appendingPathExtension("zip") : url
     }
 
     /// Alt+F6 – rozbalení archivu pod kurzorem do protějšího panelu.

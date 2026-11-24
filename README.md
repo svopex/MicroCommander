@@ -291,7 +291,10 @@ Aplikace je česky a anglicky. Jazyk se volí v Nastavení › Obecné (Podle sy
 Čeština / English) a projeví se po restartu; „Podle systému“ = čeština, když je
 preferovaným jazykem macOS, jinak angličtina. Přeložené je celé UI (menu, dialogy,
 nápověda F1, názvy příkazů klávesových zkratek) i chybové hlášky jádra (Swift předá
-jazyk jádru přes `sal_set_language`). Self-test a kontrola kláves běží vždy česky;
+jazyk jádru přes `sal_set_language`). Stejný jazyk má i AppKit a systémové
+dialogy (standardní položky menu, dialogy otevření a uložení): `Info.plist` uvádí `CFBundleLocalizations` cs/en a
+`Localization.applyToProcess()` nastaví při startu pro běh aplikace
+`AppleLanguages` na zvolený jazyk. Self-test a kontrola kláves běží vždy česky;
 proměnná prostředí `SAL_LANG=cs|en` volbu přebije (např. pro `SAL_SNAPSHOT`).
 
 Pro vývojáře: zdrojové texty jsou česky a slouží jako klíče slovníků. Ve Swiftu
@@ -684,15 +687,23 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **Zaheslované archivy:** šifrované položky mají v atributech „E“ (info řádek
   „šifrováno“). Při F3/Enter, F5/F6 nebo ⌥F6 ze zaheslovaného ZIP se aplikace
   zeptá na heslo (jednou pro otevřený archiv); při chybném hesle se zeptá
-  znovu a operaci zopakuje. ⌥F5 (Zabalit do ZIP) má v dialogu uložení volbu
-  šifrování – Bez šifrování / **AES-256** / ZipCrypto – s heslem a potvrzením
-  (prázdné nebo neshodné heslo dialog nepustí dál). Volba **Přesunout do archivu
-  (originály smazat)** po úspěšném zabalení originály trvale smaže (jen ze
-  zapisovatelného zdroje; archiv nejde uložit do přesouvaného adresáře, a když
-  selže až mazání, hotový archiv zůstane). Potvrzovací tlačítko se jmenuje
-  **Zabalit** a Enter dialog odešle i z polí hesla (existující archiv se před
-  přepsáním potvrdí). Tab / Shift+Tab prochází Šifrování → Heslo → Potvrzení →
-  Přesunout do archivu i při vypnuté Navigaci klávesnicí v systému.
+  znovu a operaci zopakuje.
+- **⌥F5 Zabalit do ZIP:** vlastní dialog ve stylu Salamandera (ne systémový
+  dialog uložení, který běží mimo aplikaci a z klávesnice se ovládat nedá).
+  Pole **Zabalit … do:** s cestou k archivu (výchozí protější panel; relativní
+  cesta vůči němu, `~` = domovský adresář, bez přípony se doplní `.zip`),
+  **Procházet…** vybere adresář, šifrování Bez šifrování / **AES-256** /
+  ZipCrypto s heslem a potvrzením (prázdné nebo neshodné heslo dialog nepustí
+  dál) a **Přesunout do archivu (originály smazat)** – po úspěšném zabalení
+  originály trvale smaže (jen ze zapisovatelného zdroje; archiv nejde uložit do
+  přesouvaného adresáře, a když selže až mazání, hotový archiv zůstane).
+  Existující archiv se před přepsáním potvrdí, neexistující cílový adresář
+  dialog ohlásí. Enter odešle dialog z kteréhokoli pole.
+- **Dialogy z klávesnice:** v dialozích operací a dotazů (kopírování, přesun,
+  mazání, hlášení, ⌥F5 Zabalit) prochází Tab / Shift+Tab
+  všechna pole, seznamy, zaškrtávátka i tlačítka (i při vypnuté Navigaci
+  klávesnicí v systému); Enter stiskne tlačítko, na kterém je fokus (jinak
+  výchozí), mezerník také, Escape dialog zavře.
 - **O aplikaci** (aplikační menu): tlačítka **Webová stránka**, **Zdrojový kód
   na GitHubu**, **Nahlásit chybu na GitHubu** (issues), **Web autora** (https://svopex.eu) a **Poslat e-mail** (otevře
   poštovního klienta s kontaktní adresou, která se v okně nezobrazuje; ve zdrojovém
@@ -768,6 +779,8 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
   a ověřuje kurzor, Space, Tab, rychlé hledání, F7/F5/F8 dialogy (žádné
   zamrznutí), ⌫ s návratem kurzoru, ⌘U, ⌃F (okno hledání: Enter najde položky, Hledat v archivech najde položky uvnitř ZIP a Ukázat zavede panel do archivu, Escape zavře) a F11 (správa serverů) se zavřením Escapem
   a zaheslovaný AES-256 ZIP (Enter do archivu, F5, chybné → správné heslo),
+  ⌥F5 Zabalit do ZIP (pořadí Tabu, přesun do archivu, odmítnutí přepsání
+  Tabem na Zrušit + Enterem),
   Home/End, ⌥↑/⌥↓, ⌃H (skryté soubory), ⌥1/⌥3/⌥6/⌥2 (režimy) se šipkami;
   test otevírá okno aplikace a posílá jí klávesy – při současné práci
   s počítačem může selhat kvůli ztrátě fokusu, pouštějte ho bez zásahů
