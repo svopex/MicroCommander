@@ -139,15 +139,16 @@ int32_t sal_vfs_exists(SalVfs *vfs, const char *path, int32_t *out, char *err, s
 int64_t sal_vfs_free_space(SalVfs *vfs, const char *path);
 
 /* Kopírování / přesun vybraných jmen z adresáře do adresáře (rekurzivně).
- * Existující adresáře se slučují, existující soubory řeší `overwrite`
- * (SAL_OVERWRITE_ASK = skončit kódem SAL_ERR_EXISTS). Přenos do téhož adresáře
- * nebo adresáře do sebe sama je chyba. Při přesunu zůstávají ve zdroji
- * položky přeskočené přes SAL_OVERWRITE_SKIP. */
+ * `dst_names` (NULL = původní jména) dává `count` jmen položek v cíli – přenos
+ * pod novým jménem. Existující adresáře se slučují, existující soubory řeší
+ * `overwrite` (SAL_OVERWRITE_ASK = skončit kódem SAL_ERR_EXISTS). Přenos do
+ * téhož adresáře pod stejným jménem nebo adresáře do sebe sama je chyba. Při
+ * přesunu zůstávají ve zdroji položky přeskočené přes SAL_OVERWRITE_SKIP. */
 int32_t sal_copy(SalVfs *src, const char *src_dir, const char *const *names, size_t count,
-                 SalVfs *dst, const char *dst_dir, int32_t overwrite,
+                 SalVfs *dst, const char *dst_dir, const char *const *dst_names, int32_t overwrite,
                  const SalProgress *progress, char *err, size_t err_len);
 int32_t sal_move(SalVfs *src, const char *src_dir, const char *const *names, size_t count,
-                 SalVfs *dst, const char *dst_dir, int32_t overwrite,
+                 SalVfs *dst, const char *dst_dir, const char *const *dst_names, int32_t overwrite,
                  const SalProgress *progress, char *err, size_t err_len);
 
 /* Mazání vybraných položek (adresáře rekurzivně). */

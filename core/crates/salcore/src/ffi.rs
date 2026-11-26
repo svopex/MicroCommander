@@ -22,7 +22,7 @@ use crate::error::{SalError, SalResult};
 use crate::find::{find_items, find_items_ex, find_mask_string, ContentMatcher, FindOptions};
 use crate::local::LocalFs;
 use crate::mask::MaskGroup;
-use crate::ops::{copy_items, delete_items, move_items, OverwriteMode, ProgressCallback};
+use crate::ops::{delete_items, transfer_items, OverwriteMode, ProgressCallback};
 use crate::pack::{pack_zip, PackEncryption};
 use crate::sftp::{SftpAuth, SftpFs};
 use crate::tarfs::TarFs;
@@ -491,10 +491,6 @@ pub unsafe extern "C" fn sal_vfs_free_space(vfs: *mut SalVfs, path: *const c_cha
     }
 }
 
-/// Signatura přenosové operace jádra (copy_items / move_items).
-type TransferFn = fn(&dyn Vfs, &str, &[&str], &dyn Vfs, &str, OverwriteMode, &mut dyn ProgressCallback)
-    -> SalResult<crate::ops::TransferStats>;
-
 /// Převod režimu přepsání z C konstanty (neznámá hodnota = Ask).
 fn overwrite_mode(overwrite: i32) -> OverwriteMode {
     match overwrite {
@@ -504,10 +500,12 @@ fn overwrite_mode(overwrite: i32) -> OverwriteMode {
     }
 }
 
-/// Společná implementace sal_copy / sal_move (liší se jen operací a jménem v chybě).
+/// Společná implementace sal_copy / sal_move (liší se jen `remove_source`
+/// a jménem v chybě). `dst_names` (NULL = původní jména) má `count` jmen
+/// položek v cíli.
 #[allow(clippy::too_many_arguments)]
 unsafe fn transfer_ffi(
-    operation: TransferFn,
+    remove_source: bool,
     function_name: &str,
     src: *mut SalVfs,
     src_dir: *const c_char,
@@ -515,6 +513,7 @@ unsafe fn transfer_ffi(
     count: usize,
     dst: *mut SalVfs,
     dst_dir: *const c_char,
+    dst_names: *const *const c_char,
     overwrite: i32,
     progress: *const SalProgress,
     err: *mut c_char,
@@ -528,17 +527,25 @@ unsafe fn transfer_ffi(
     let dst_dir_str = CStr::from_ptr(dst_dir).to_string_lossy().into_owned();
     let name_list = names_from_c(names, count);
     let name_refs: Vec<&str> = name_list.iter().map(String::as_str).collect();
+    // Cílová jména: zadaná (přenos pod novým jménem), jinak původní.
+    let dst_name_list = if dst_names.is_null() { None } else { Some(names_from_c(dst_names, count)) };
+    let dst_name_refs: Vec<&str> = match &dst_name_list {
+        Some(list) => list.iter().map(String::as_str).collect(),
+        None => name_refs.clone(),
+    };
     let mut progress_cb = progress_from_c(progress);
     let src_handle = &*(src as *const VfsHandle);
     let dst_handle = &*(dst as *const VfsHandle);
     let result = catch(|| {
-        operation(
+        transfer_items(
             src_handle.vfs.as_ref(),
             &src_dir_str,
             &name_refs,
             dst_handle.vfs.as_ref(),
             &dst_dir_str,
+            &dst_name_refs,
             overwrite_mode(overwrite),
+            remove_source,
             &mut progress_cb,
         )
     });
@@ -555,12 +562,13 @@ pub unsafe extern "C" fn sal_copy(
     count: usize,
     dst: *mut SalVfs,
     dst_dir: *const c_char,
+    dst_names: *const *const c_char,
     overwrite: i32,
     progress: *const SalProgress,
     err: *mut c_char,
     err_len: usize,
 ) -> i32 {
-    transfer_ffi(copy_items, "sal_copy", src, src_dir, names, count, dst, dst_dir, overwrite, progress, err, err_len)
+    transfer_ffi(false, "sal_copy", src, src_dir, names, count, dst, dst_dir, dst_names, overwrite, progress, err, err_len)
 }
 
 /// # Safety
@@ -573,12 +581,13 @@ pub unsafe extern "C" fn sal_move(
     count: usize,
     dst: *mut SalVfs,
     dst_dir: *const c_char,
+    dst_names: *const *const c_char,
     overwrite: i32,
     progress: *const SalProgress,
     err: *mut c_char,
     err_len: usize,
 ) -> i32 {
-    transfer_ffi(move_items, "sal_move", src, src_dir, names, count, dst, dst_dir, overwrite, progress, err, err_len)
+    transfer_ffi(true, "sal_move", src, src_dir, names, count, dst, dst_dir, dst_names, overwrite, progress, err, err_len)
 }
 
 /// # Safety

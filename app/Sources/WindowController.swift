@@ -1326,15 +1326,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
                                      message: move ? tr("Přesunout %@ do:", what) : tr("Kopírovat %@ do:", what),
                                      value: target.location.path, okTitle: actionTitle) else { return }
         let dst = target.location.vfs
-        let dstDir = resolveTypedPath(typed, in: target.location)
-        // Neexistující cíl: nabídnout vytvoření adresáře.
-        if !dst.isDir(dstDir) {
-            guard confirm(title: verb, text: tr("Cílový adresář %@ neexistuje. Vytvořit?", dstDir), okTitle: tr("Vytvořit")) else { return }
-            do {
-                try createDirectories(dst, dstDir)
-            } catch {
-                showAlert(title: verb, text: error.localizedDescription)
-                return
+        let dstPath = resolveTypedPath(typed, in: target.location)
+        var dstDir = dstPath
+        // Jméno položky v cíli, když se přenáší pod novým jménem (nil = původní jméno).
+        var dstName: String?
+        if !dst.isDir(dstPath) {
+            // Jediná položka a cíl, který není adresářem (neexistuje, nebo je to
+            // soubor) v existujícím adresáři: přenos pod novým jménem jako
+            // v Salamanderu. Koncové lomítko si výslovně žádá adresář. Adresář
+            // panelu existuje (právě je vypsaný) – u serveru se tak ušetří dotaz.
+            let parent = parentPath(dstPath)
+            if items.count == 1, !typed.hasSuffix("/"),
+               parent == target.location.path || dst.isDir(parent) {
+                dstDir = parent
+                dstName = lastComponent(dstPath)
+            } else {
+                // Jinak se nabídne vytvoření cílového adresáře.
+                guard confirm(title: verb, text: tr("Cílový adresář %@ neexistuje. Vytvořit?", dstPath), okTitle: tr("Vytvořit")) else { return }
+                do {
+                    try createDirectories(dst, dstPath)
+                } catch {
+                    showAlert(title: verb, text: error.localizedDescription)
+                    return
+                }
             }
         }
 
@@ -1347,12 +1361,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, PanelDel
         // Při konfliktu (Ask) se zeptá a operaci spustí znovu s režimem přepsání/přeskočení.
         func transfer(_ mode: OverwriteMode) {
             beginProgress(title: move ? tr("Přesun %@", what) : tr("Kopírování %@", what),
-                          details: [tr("Z: %@", source.displayPath), tr("Do: %@", target.displayPath(for: dstDir))]) { state in
-                if move {
-                    try coreMove(src: src, srcDir: srcDir, names: names, dst: dst, dstDir: dstDir, overwrite: mode, state: state)
-                } else {
-                    try coreCopy(src: src, srcDir: srcDir, names: names, dst: dst, dstDir: dstDir, overwrite: mode, state: state)
-                }
+                          details: [tr("Z: %@", source.displayPath), tr("Do: %@", target.displayPath(for: dstPath))]) { state in
+                try coreTransfer(move: move, src: src, srcDir: srcDir, names: names, dst: dst, dstDir: dstDir,
+                                 dstNames: dstName.map { [$0] }, overwrite: mode, state: state)
             } completion: { [weak self] result in
                 guard let self else { return }
                 self.endProgress()

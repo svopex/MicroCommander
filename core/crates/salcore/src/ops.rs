@@ -335,7 +335,14 @@ impl Transfer<'_> {
 /// Adresáře se porovnávají podle identity úložiště (`Vfs::dir_identity` –
 /// pozná tentýž adresář i přes dva lokální VFS nebo dvě připojení k jednomu
 /// serveru); VFS bez identity jen tehdy, jde-li o tutéž instanci.
-fn check_destination(src: &dyn Vfs, src_dir: &str, names: &[&str], dst: &dyn Vfs, dst_dir: &str) -> SalResult<()> {
+fn check_destination(
+    src: &dyn Vfs,
+    src_dir: &str,
+    names: &[&str],
+    dst: &dyn Vfs,
+    dst_dir: &str,
+    dst_names: &[&str],
+) -> SalResult<()> {
     let (source_dir, target_dir) = match (src.dir_identity(src_dir), dst.dir_identity(dst_dir)) {
         (Some(source), Some(target)) => (source, target),
         _ if std::ptr::addr_eq(src as *const dyn Vfs, dst as *const dyn Vfs) => {
@@ -344,7 +351,8 @@ fn check_destination(src: &dyn Vfs, src_dir: &str, names: &[&str], dst: &dyn Vfs
         // Různá úložiště se překrývat nemohou.
         _ => return Ok(()),
     };
-    if source_dir == target_dir {
+    // Do téhož adresáře lze položku přenést jen pod jiným jménem.
+    if source_dir == target_dir && names.iter().zip(dst_names).any(|(name, dst_name)| name == dst_name) {
         return Err(SalError::Io(crate::i18n::tr("Zdrojový a cílový adresář jsou stejné.")));
     }
     for name in names {
@@ -358,19 +366,26 @@ fn check_destination(src: &dyn Vfs, src_dir: &str, names: &[&str], dst: &dyn Vfs
 }
 
 /// Společná implementace kopírování a přesunu sady položek
-/// (`remove_source` = přesun).
+/// (`remove_source` = přesun). `dst_names` jsou jména položek v cíli ve
+/// stejném pořadí jako `names` (F5/F6 s cílem „adresář/nové-jméno“); shodná
+/// s `names` = přenos pod původními jmény.
 #[allow(clippy::too_many_arguments)]
-fn transfer_items(
+pub(crate) fn transfer_items(
     src: &dyn Vfs,
     src_dir: &str,
     names: &[&str],
     dst: &dyn Vfs,
     dst_dir: &str,
+    dst_names: &[&str],
     overwrite: OverwriteMode,
     remove_source: bool,
     progress: &mut dyn ProgressCallback,
 ) -> SalResult<TransferStats> {
-    check_destination(src, src_dir, names, dst, dst_dir)?;
+    // Každé zdrojové jméno musí mít své cílové (jinak by se párování posunulo).
+    if names.len() != dst_names.len() {
+        return Err(SalError::Io(crate::i18n::trf("Neplatné argumenty {}.", &[&"transfer_items"])));
+    }
+    check_destination(src, src_dir, names, dst, dst_dir, dst_names)?;
     // Výpis zdrojového adresáře jednou: druhy a velikosti vybraných položek.
     // Adresář, který systém nedovolí vypsat (Koš na macOS), může jednotlivé
     // položky přesto zpřístupnit (soubor přetažený z Finderu) – zjistí se po jedné.
@@ -414,9 +429,11 @@ fn transfer_items(
         buffer: vec![0u8; COPY_BUFFER_SIZE],
         followed_links: 0,
     };
-    for item in items {
+    // Položky jsou v pořadí `names` (chybějící jméno skončilo chybou výše),
+    // cílová jména se tedy párují podle pořadí.
+    for (item, dst_name) in items.into_iter().zip(dst_names) {
         let src_path = join_path(src_dir, &item.name);
-        let dst_path = join_path(dst_dir, &item.name);
+        let dst_path = join_path(dst_dir, dst_name);
         transfer.transfer_item(item, &src_path, &dst_path, true)?;
     }
     let done = transfer.transferred.max(total_bytes);
@@ -436,7 +453,7 @@ pub fn copy_items(
     overwrite: OverwriteMode,
     progress: &mut dyn ProgressCallback,
 ) -> SalResult<TransferStats> {
-    transfer_items(src, src_dir, names, dst, dst_dir, overwrite, false, progress)
+    transfer_items(src, src_dir, names, dst, dst_dir, names, overwrite, false, progress)
 }
 
 /// Přesune sadu položek. Na jednom lokálním svazku se položky přejmenují,
@@ -452,8 +469,9 @@ pub fn move_items(
     overwrite: OverwriteMode,
     progress: &mut dyn ProgressCallback,
 ) -> SalResult<TransferStats> {
-    transfer_items(src, src_dir, names, dst, dst_dir, overwrite, true, progress)
+    transfer_items(src, src_dir, names, dst, dst_dir, names, overwrite, true, progress)
 }
+
 
 /// Smaže sadu položek v adresáři `dir` daného VFS (rekurzivně).
 pub fn delete_items(
@@ -595,6 +613,45 @@ mod tests {
         assert!(vfs.list("/src").unwrap().is_empty());
         assert_eq!(fs::read(base.join("dst/a.txt")).unwrap(), b"aaa");
         assert_eq!(fs::read(base.join("dst/pod/b.txt")).unwrap(), b"bbb");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    /// Kopírování a přesun pod novým jménem: soubor i adresář v jiném
+    /// adresáři, kopie do téhož adresáře pod jiným jménem, existující cíl
+    /// řeší režim přepsání a stejné jméno v témže adresáři je chyba.
+    #[test]
+    fn test_transfer_item_as() {
+        let (_src, _dst, src_path, _dst_path) = prepare("item-as");
+        let base = src_path.parent().unwrap();
+        let vfs = LocalFs::new(base.to_str()).unwrap();
+
+        transfer_items(&vfs, "/src", &["a.txt"], &vfs, "/dst", &["kopie.txt"], OverwriteMode::Ask, false, &mut NoProgress).unwrap();
+        assert_eq!(fs::read(base.join("dst/kopie.txt")).unwrap(), b"aaa");
+        assert!(!base.join("dst/a.txt").exists());
+
+        transfer_items(&vfs, "/src", &["pod"], &vfs, "/dst", &["jiny"], OverwriteMode::Ask, false, &mut NoProgress).unwrap();
+        assert_eq!(fs::read(base.join("dst/jiny/b.txt")).unwrap(), b"bbb");
+
+        transfer_items(&vfs, "/src", &["a.txt"], &vfs, "/src", &["a2.txt"], OverwriteMode::Ask, false, &mut NoProgress).unwrap();
+        assert_eq!(fs::read(base.join("src/a2.txt")).unwrap(), b"aaa");
+
+        let same = transfer_items(&vfs, "/src", &["a.txt"], &vfs, "/src", &["a.txt"], OverwriteMode::Ask, false, &mut NoProgress);
+        assert!(same.is_err());
+
+        let conflict =
+            transfer_items(&vfs, "/src", &["a2.txt"], &vfs, "/dst", &["kopie.txt"], OverwriteMode::Ask, false, &mut NoProgress);
+        assert_eq!(conflict.unwrap_err(), SalError::AlreadyExists);
+
+        transfer_items(&vfs, "/src", &["a2.txt"], &vfs, "/dst", &["presun.txt"], OverwriteMode::Ask, true, &mut NoProgress).unwrap();
+        assert!(!base.join("src/a2.txt").exists());
+        assert_eq!(fs::read(base.join("dst/presun.txt")).unwrap(), b"aaa");
+
+        // Přesun kopírováním a mazáním (VFS bez lokálního přejmenování).
+        let src = NotLocal(LocalFs::new(src_path.to_str()).unwrap());
+        let dst = NotLocal(LocalFs::new(base.join("dst").to_str()).unwrap());
+        transfer_items(&src, "/", &["pod"], &dst, "/", &["pod2"], OverwriteMode::Ask, true, &mut NoProgress).unwrap();
+        assert!(!src_path.join("pod").exists());
+        assert_eq!(fs::read(base.join("dst/pod2/b.txt")).unwrap(), b"bbb");
         fs::remove_dir_all(base).unwrap();
     }
 

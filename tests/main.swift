@@ -73,6 +73,16 @@ func run() throws {
                  overwrite: .ask, state: state)
     expect(dst.exists("/a.txt") && dst.exists("/pod/b.txt"), "přesun zpět proběhl")
 
+    // Kopie a přesun pod novým jménem (F5/F6 s cílem „adresář/nové-jméno“):
+    // vznikne soubor, ne adresář.
+    try coreTransfer(move: false, src: disk, srcDir: dstDir, names: ["a.txt"], dst: disk, dstDir: moveDir,
+                     dstNames: ["kopie.txt"], overwrite: .ask, state: state)
+    expect(!disk.isDir(moveDir + "/kopie.txt") && disk.exists(moveDir + "/kopie.txt"), "kopie pod novým jménem je soubor")
+    try coreTransfer(move: true, src: disk, srcDir: moveDir, names: ["kopie.txt"], dst: disk, dstDir: moveDir,
+                     dstNames: ["presunuto.txt"], overwrite: .ask, state: state)
+    expect(!disk.exists(moveDir + "/kopie.txt") && disk.exists(moveDir + "/presunuto.txt"),
+           "přesun pod novým jménem v témže adresáři položku přejmenoval")
+
     // Mkdir přes FFI.
     try dst.mkdir("/novy")
     expect(dst.isDir("/novy"), "mkdir vytvořil adresář")

@@ -474,39 +474,49 @@ enum OverwriteMode {
 /// C signatura přenosu (sal_copy / sal_move mají stejné parametry).
 private typealias CoreTransferFunction = (
     UnsafeMutablePointer<SalVfs>?, UnsafePointer<CChar>?, UnsafePointer<UnsafePointer<CChar>?>?, Int,
-    UnsafeMutablePointer<SalVfs>?, UnsafePointer<CChar>?, Int32, UnsafePointer<SalProgress>?,
-    UnsafeMutablePointer<CChar>?, Int
+    UnsafeMutablePointer<SalVfs>?, UnsafePointer<CChar>?, UnsafePointer<UnsafePointer<CChar>?>?, Int32,
+    UnsafePointer<SalProgress>?, UnsafeMutablePointer<CChar>?, Int
 ) -> Int32
 
-/// Společné volání přenosu položek mezi dvěma VFS (kopírování/přesun).
-private func coreTransfer(_ function: CoreTransferFunction, src: Vfs, srcDir: String, names: [String],
-                          dst: Vfs, dstDir: String, overwrite: OverwriteMode, state: ProgressState) throws {
+/// Přenos položek mezi dvěma VFS (kopírování/přesun).
+/// - Parameters:
+///   - move: přesunout místo kopírování
+///   - names: jména položek ve zdrojovém adresáři `srcDir`
+///   - dstNames: jména položek v cílovém adresáři `dstDir` ve stejném pořadí
+///     (F5/F6 s cílem „adresář/nové-jméno“); nil = původní jména
+func coreTransfer(move: Bool, src: Vfs, srcDir: String, names: [String], dst: Vfs, dstDir: String,
+                  dstNames: [String]? = nil, overwrite: OverwriteMode, state: ProgressState) throws {
+    let function: CoreTransferFunction = move ? sal_move : sal_copy
     var err = [CChar](repeating: 0, count: 1024)
     var progress = makeProgress(state)
-    let code = srcDir.withCString { srcDirC in
-        dstDir.withCString { dstDirC in
-            withNameArray(names) { namesPtr, count in
-                withUnsafePointer(to: &progress) { progressPtr in
-                    function(src.ptr, srcDirC, namesPtr, count, dst.ptr, dstDirC,
-                             overwrite.raw, progressPtr, &err, 1024)
+    // Volání jádra s polem cílových jmen (nil = NULL, tedy původní jména).
+    func call(_ dstNamesPtr: UnsafePointer<UnsafePointer<CChar>?>?) -> Int32 {
+        srcDir.withCString { srcDirC in
+            dstDir.withCString { dstDirC in
+                withNameArray(names) { namesPtr, count in
+                    withUnsafePointer(to: &progress) { progressPtr in
+                        function(src.ptr, srcDirC, namesPtr, count, dst.ptr, dstDirC, dstNamesPtr,
+                                 overwrite.raw, progressPtr, &err, 1024)
+                    }
                 }
             }
         }
     }
+    let code = dstNames.map { withNameArray($0) { dstNamesPtr, _ in call(dstNamesPtr) } } ?? call(nil)
     guard code == SAL_OK else { throw CoreError.code(code, String(cString: err)) }
 }
 
 /// Kopírování položek mezi dvěma VFS.
 func coreCopy(src: Vfs, srcDir: String, names: [String], dst: Vfs, dstDir: String,
               overwrite: OverwriteMode, state: ProgressState) throws {
-    try coreTransfer(sal_copy, src: src, srcDir: srcDir, names: names, dst: dst, dstDir: dstDir,
+    try coreTransfer(move: false, src: src, srcDir: srcDir, names: names, dst: dst, dstDir: dstDir,
                      overwrite: overwrite, state: state)
 }
 
 /// Přesun položek mezi dvěma VFS.
 func coreMove(src: Vfs, srcDir: String, names: [String], dst: Vfs, dstDir: String,
               overwrite: OverwriteMode, state: ProgressState) throws {
-    try coreTransfer(sal_move, src: src, srcDir: srcDir, names: names, dst: dst, dstDir: dstDir,
+    try coreTransfer(move: true, src: src, srcDir: srcDir, names: names, dst: dst, dstDir: dstDir,
                      overwrite: overwrite, state: state)
 }
 

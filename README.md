@@ -358,7 +358,10 @@ jako standardní funkční klávesy“). Přehled zobrazí F1.
 - **F-klávesy:** F1 nápověda, F2 přejmenovat (přímo v panelu bez dialogu:
   předvybrané jméno bez přípony, Enter potvrdí, Escape zruší, klik jinam
   potvrdí; jméno jiné existující položky se odmítne), F3 prohlížeč, F4 editor, F5
-  kopírovat, F6 přesunout (oba s dialogem cíle), F7 nový adresář, F8 / Delete
+  kopírovat, F6 přesunout (oba s dialogem cíle; u jediné položky cíl, který
+  není existujícím adresářem, znamená nové jméno v existujícím adresáři – jako
+  v Salamanderu; cíl s koncovým „/“ nebo cíl pro více položek se nabídne
+  vytvořit jako adresář), F7 nový adresář, F8 / Delete
   (i ⌘⌫) smazat do koše, ⇧F8 / ⌘F8 / ⇧Delete smazat trvale bez koše (v archivu,
   na FTP/SFTP a na discích bez koše – např. pCloud Drive nebo svazek Time
   Machine – koš není, maže se vždy trvale a potvrzení to uvede; v okně Hledat
